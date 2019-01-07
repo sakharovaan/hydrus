@@ -15,46 +15,28 @@
 			</ul></p>
 			<p>But that by simply deleting the <i>libX11.so.6</i> file in the hydrus install directory, he was able to boot. I presume this meant my hydrus build was then relying on his local libX11.so, which happened to have better API compatibility. If you receive a similar error, you might like to try the same sort of thing. Let me know if you discover anything!</p>
 			<h3>what you will need</h3>
-			<p>You will need basic python experience, python 2.7 and a number of python modules. Most of it you can get through pip.</p>
-			<p>If you are on Linux or OS X, or if you are on Windows and have an existing python you do not want to stomp all over with new modules, I recommend you create a virtual environment:</p>
+			<p>First, install some packages in a way specified by your distribution that <i>may</i> be required for wxPython and whole app to operate (example from xUbuntu 18.04):</p>
 			<ul>
-				<li>(navigate to your hydrus extract folder)</li>
-				<li>pip install virtualenv (if you need it)</li>
-				<li>mkdir venv</li>
-				<li>virtualenv venv</li>
-				<li>. venv/bin/activate</li>
+				<li>sudo apt install make gcc libgtk-3-dev libwebkitgtk-dev libwebkitgtk-3.0-dev libgstreamer-gl1.0-0 freeglut3 freeglut3-dev python-gst-1.0 python3-gst-1.0 libglib2.0-dev ubuntu-restricted-extras libgstreamer-plugins-base1.0-dev</li>
+				<li>sudo apt install libsdl1.2-dev gstreamer-1.0 libgstreamer-plugins-base1.0-dev v4l-utils freeglut3-dev libgtk-3-dev libglw1-mesa libglw1-mesa-dev python-dev</li>
 			</ul>
-			<p>That '. venv/bin/activate' line turns your venv on, and will be needed every time you run the client.pyw/server.py files. You can easily tuck it into a launch script.</p>
-			<p>After that, you can go nuts with pip. I think this will do for most systems:</p>
+			<p>Then, open shell, cd to project root and install required pip packages (note that you may have to change path to your pre-compiled wheel wxPython distribution in Pipfile (also running pipfile lock and adding missing hash which will be provided in error message to Pipfile.lock), as building wxPython from source takes much time):</p>
 			<ul>
-				<li>pip install beautifulsoup4 html5lib lxml nose numpy opencv-python six Pillow psutil pycrypto pylzma PyOpenSSL PyYAML requests Send2Trash service_identity twisted</li>
+				<li>sudo apt install python-pip</li>
+				<li>sudo pip install pipenv</li>
+				<li>pipenv install</li>
+				<li>pipenv shell</li>
 			</ul>
-			<p>You may want to do all that in smaller batches.</p>
-			<p>And optionally, you can add these packages:</p>
+			<p>Now, you should be able to launch hydrus with command like:</p>
 			<ul>
-				<li>lz4 - for some memory compression in the client</li>
-				<li>pysocks - for socks4/socks5 proxy support (although you may want to try "requests[socks]" instead)</li>
-				<li>matplotlib - for some bandwidth graph drawing</li>
+				<li>python ./client.py</li>
 			</ul>
-			<p>Depending on your OS, you might need something else. Ultimately, the best way to figure out if you have enough for hydrus is to just keep running client.pyw and see what it complains about missing. If you are not familiar with pip and get an error about a library already existing, know that you update an existing library with the --upgrade switch, like so:</p>
-			<ul>
-				<li>pip install --upgrade libraryname</li>
-			</ul>
+
 			<p>For Windows, depending on which compiler you are using, pip can have problems building some modules like lz4 and lxml. <a href="http://www.lfd.uci.edu/~gohlke/pythonlibs/">This page</a> has a lot of prebuilt binaries--I have found it very helpful many times. You may want to update python's sqlite3.dll as well--you can get it <a href="https://www.sqlite.org/download.html">here</a>, and just drop it in C:\Python27\DLLs or wherever you have python installed. I have a fair bit of experience with Windows python, so send me a mail if you need help.</a>
 			<p>You will also need wxPython 4.0. This can be simple or complicated. For Windows and OS X, just get it with pip like the rest:</p>
 			<ul>
 				<li>pip install wxPython</li>
 			</ul>
-			<p>If you run Linux, getting wxPython from pip needs a build, which in my experience is a time-consuming and frequently failing pain. <a href="https://wxpython.org/pages/downloads/index.html">Here</a> is their page on it.</p>
-			<p>They have some wheels for common distros <a href="https://extras.wxpython.org/wxPython4/extras/linux/">here</a>, which I highly recommend trying before you attempt to build. Even if your distro is not listed, try one that looks similar. On Ubuntu 16.04, I had more luck with the gtk2 build. You'll be running a command like:</p>
-			<ul>
-				<li>pip install -f https://extras.wxpython.org/wxPython4/extras/linux/gtk2/ubuntu-16.04 wxPython</li>
-			</ul>
-			<p>Even with a wheel, you might need some additional dependencies. In my different attempts to build or just get the wheel going, I needed one or more of these:</p>
-			<ul>
-				<li>sudo apt-get install libsdl1.2-dev libwebkitgtk3.0 libwebkitgtk3.0-dev gstreamer-1.0 libgstreamer-plugins-base1.0-dev v4l-utils freeglut3-dev libgtk-3-dev libglw1-mesa libglw1-mesa-dev python-dev</li>
-			</ul>
-			<p>I think the wheel might only need libsdl1.2-dev on Ubuntu 16.04, but your situation may be different. Again, this was a pain to figure out, so good luck!</p>
 			<p>YMMV. Feel free to email me if you run into trouble or discover any neat tricks.</p>
 			<p>OS X 10.9 is easier these days. If you can't get opencv working from pip, this should do it:</p>
 			<p><ul>
