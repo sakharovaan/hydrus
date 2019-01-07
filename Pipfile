@@ -1,0 +1,32 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+pyyaml = "*"
+beautifulsoup4 = "*"
+html5lib = "*"
+lxml = "*"
+nose = "*"
+numpy = "*"
+opencv-python = "*"
+six = "*"
+pillow = "*"
+psutil = "*"
+pycrypto = "*"
+pylzma = "*"
+pyopenssl = "*"
+requests = "*"
+send2trash = "*"
+service-identity = "*"
+twisted = "*"
+lz4 = "*"
+pysocks = "*"
+matplotlib = "*"
+wxpython = {file = "https://extras.wxpython.org/wxPython4/extras/linux/gtk3/ubuntu-18.04/wxPython-4.0.4-cp27-cp27mu-linux_x86_64.whl"}
+
+[requires]
+python_version = "2.7"
