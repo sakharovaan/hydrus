@@ -1,0 +1,19 @@
+---
+
+version: '3'
+
+services:
+  hydrus-client:
+    container_name: hydrus-client
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./db:/hydrus/db
+      - /tmp/.X11-unix:/tmp/.X11-unix
+      - /dev/snd:/dev/snd
+      - /dev/dri:/dev/dri
+    environment:
+      - DISPLAY=unix:0
+    restart: on-failure:3
