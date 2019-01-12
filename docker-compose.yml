@@ -3,17 +3,34 @@
 version: '3'
 
 services:
+  postgresql:
+    container_name: postgresql
+    image: postgres:11-alpine
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: user
+      POSTGRES_DB: hydrus
+    volumes:
+      - ./postgres_db:/var/lib/postgresql/data
+    user: 1000:1000
+
   hydrus-client:
     container_name: hydrus-client
     build:
       context: .
       dockerfile: ./Dockerfile
+      args:
+        - RUN_ENV=test
     volumes:
       - /etc/localtime:/etc/localtime:ro
       - ./db:/hydrus/db
       - /tmp/.X11-unix:/tmp/.X11-unix
       - /dev/snd:/dev/snd
       - /dev/dri:/dev/dri
+      - /sys/fs/cgroup:/sys/fs/cgroup
     environment:
       - DISPLAY=unix:0
+    cap_add:
+      - SYS_ADMIN
     restart: on-failure:3
+    user: 1000:1000

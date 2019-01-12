@@ -8,7 +8,7 @@ opencv-python
 six
 pillow
 psutil
-pycrypto
+pycryptodome
 pylzma
 pyopenssl
 requests
