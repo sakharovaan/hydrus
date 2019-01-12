@@ -32,5 +32,5 @@ services:
       - DISPLAY=unix:0
     cap_add:
       - SYS_ADMIN
-    restart: on-failure:3
+    restart: "no"
     user: 1000:1000

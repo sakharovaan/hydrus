@@ -1497,8 +1497,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._network_timeout = wx.SpinCtrl( self, min = 3, max = 300 )
             self._network_timeout.SetToolTip( 'If a network connection cannot be made in this duration or, if once started, it experiences uninterrupted inactivity for six times this duration, it will be abandoned.' )
             
-            self._max_network_jobs = wx.SpinCtrl( self, min = 1, max = 30 )
-            self._max_network_jobs_per_domain = wx.SpinCtrl( self, min = 1, max = 5 )
+            self._max_network_jobs = wx.SpinCtrl( self, min = 1, max = 1000 )
+            self._max_network_jobs_per_domain = wx.SpinCtrl( self, min = 1, max = 500 )
             
             proxy_panel = ClientGUICommon.StaticBox( self, 'proxy settings' )
             
