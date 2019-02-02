@@ -4,6 +4,7 @@ from . import HydrusData
 from . import HydrusExceptions
 from . import HydrusGlobals as HG
 from . import HydrusPaths
+from . import HydrusText
 import os
 import queue
 import sqlite3
@@ -734,6 +735,14 @@ class HydrusDB( object ):
         
     
     def pub_after_job( self, topic, *args, **kwargs ):
+        
+        if len( args ) == 0 and len( kwargs ) == 0:
+            
+            if ( topic, args, kwargs ) in self._pubsubs:
+                
+                return
+                
+            
         
         self._pubsubs.append( ( topic, args, kwargs ) )
         

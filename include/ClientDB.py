@@ -1,3 +1,4 @@
+from . import ClientAPI
 from . import ClientCaches
 from . import ClientData
 from . import ClientDefaults
@@ -378,6 +379,8 @@ class DB( HydrusDB.HydrusDB ):
                     
                     self._controller.pub( 'splash_set_status_text', 'analyzing ' + name )
                     job_key.SetVariable( 'popup_text_1', 'analyzing ' + name )
+                    
+                    time.sleep( 0.25 )
                     
                     started = HydrusData.GetNowPrecise()
                     
@@ -2635,7 +2638,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 if create_urls_txt:
                     
-                    with open( os.path.join( self._db_dir, 'missing filename urls.txt' ), 'w' ) as f:
+                    with open( os.path.join( self._db_dir, 'missing filename urls.txt' ), 'w', encoding = 'utf-8' ) as f:
                         
                         for hash_id in deletee_hash_ids:
                             
@@ -2948,6 +2951,7 @@ class DB( HydrusDB.HydrusDB ):
         init_service_info.append( ( CC.COMBINED_TAG_SERVICE_KEY, HC.COMBINED_TAG, 'all known tags' ) )
         init_service_info.append( ( CC.LOCAL_BOORU_SERVICE_KEY, HC.LOCAL_BOORU, 'local booru' ) )
         init_service_info.append( ( CC.LOCAL_NOTES_SERVICE_KEY, HC.LOCAL_NOTES, 'local notes' ) )
+        init_service_info.append( ( CC.CLIENT_API_SERVICE_KEY, HC.CLIENT_API_SERVICE, 'client api' ) )
         
         for ( service_key, service_type, name ) in init_service_info:
             
@@ -2970,6 +2974,10 @@ class DB( HydrusDB.HydrusDB ):
             
             self._SetJSONDump( shortcuts )
             
+        
+        client_api_manager = ClientAPI.APIManager()
+        
+        self._SetJSONDump( client_api_manager )
         
         bandwidth_manager = ClientNetworkingBandwidth.NetworkBandwidthManager()
         
@@ -3806,9 +3814,14 @@ class DB( HydrusDB.HydrusDB ):
         return tag_ids
         
     
-    def _GetAutocompletePredicates( self, tag_service_key = CC.COMBINED_TAG_SERVICE_KEY, file_service_key = CC.COMBINED_FILE_SERVICE_KEY, search_text = '', exact_match = False, inclusive = True, include_current = True, include_pending = True, add_namespaceless = False, collapse_siblings = False ):
+    def _GetAutocompletePredicates( self, tag_service_key = CC.COMBINED_TAG_SERVICE_KEY, file_service_key = CC.COMBINED_FILE_SERVICE_KEY, search_text = '', exact_match = False, inclusive = True, include_current = True, include_pending = True, add_namespaceless = False, collapse_siblings = False, job_key = None ):
         
         tag_ids = self._GetAutocompleteTagIds( tag_service_key, search_text, exact_match )
+        
+        if job_key is not None and job_key.IsCancelled():
+            
+            return []
+            
         
         tag_service_id = self._GetServiceId( tag_service_key )
         file_service_id = self._GetServiceId( file_service_key )
@@ -3830,6 +3843,11 @@ class DB( HydrusDB.HydrusDB ):
         
         for search_tag_service_id in search_tag_service_ids:
             
+            if job_key is not None and job_key.IsCancelled():
+                
+                return []
+                
+            
             search_tag_service_key = self._GetService( search_tag_service_id ).GetServiceKey()
             
             ids_to_count = self._GetAutocompleteCounts( search_tag_service_id, file_service_id, tag_ids, include_current, include_pending )
@@ -3850,6 +3868,11 @@ class DB( HydrusDB.HydrusDB ):
             predicates = tag_censorship_manager.FilterPredicates( search_tag_service_key, predicates )
             
             all_predicates.extend( predicates )
+            
+        
+        if job_key is not None and job_key.IsCancelled():
+            
+            return []
             
         
         predicates = ClientData.MergePredicates( all_predicates, add_namespaceless = add_namespaceless )
@@ -5777,7 +5800,12 @@ class DB( HydrusDB.HydrusDB ):
             
             ( version, dump ) = result
             
-            serialisable_info = json.loads( str( dump, 'utf-8' ) )
+            if isinstance( dump, bytes ):
+                
+                dump = str( dump, 'utf-8' )
+                
+            
+            serialisable_info = json.loads( dump )
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, version, serialisable_info ) )
             
@@ -5793,7 +5821,12 @@ class DB( HydrusDB.HydrusDB ):
             
             for ( dump_name, version, dump ) in results:
                 
-                serialisable_info = json.loads( str( dump, 'utf-8' ) )
+                if isinstance( dump, bytes ):
+                    
+                    dump = str( dump, 'utf-8' )
+                    
+                
+                serialisable_info = json.loads( dump )
                 
                 objs.append( HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) ) )
                 
@@ -5811,7 +5844,12 @@ class DB( HydrusDB.HydrusDB ):
                 ( version, dump ) = self._c.execute( 'SELECT version, dump FROM json_dumps_named WHERE dump_type = ? AND dump_name = ? AND timestamp = ?;', ( dump_type, dump_name, timestamp ) ).fetchone()
                 
             
-            serialisable_info = json.loads( str( dump, 'utf-8' ) )
+            if isinstance( dump, bytes ):
+                
+                dump = str( dump, 'utf-8' )
+                
+            
+            serialisable_info = json.loads( dump )
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) )
             
@@ -5850,9 +5888,14 @@ class DB( HydrusDB.HydrusDB ):
             return None
             
         
-        ( json_dump, ) = result
+        ( dump, ) = result
         
-        value = json.loads( str( json_dump, 'utf-8' ) )
+        if isinstance( dump, bytes ):
+            
+            dump = str( dump, 'utf-8' )
+            
+        
+        value = json.loads( dump )
         
         return value
         
@@ -6691,10 +6734,19 @@ class DB( HydrusDB.HydrusDB ):
                     if info_type == HC.SERVICE_INFO_NUM_SHARES: result = self._c.execute( 'SELECT COUNT( * ) FROM yaml_dumps WHERE dump_type = ?;', ( YAML_DUMP_ID_LOCAL_BOORU, ) ).fetchone()
                     
                 
-                if result is None: info = 0
-                else: ( info, ) = result
+                if result is None:
+                    
+                    info = 0
+                    
+                else:
+                    
+                    ( info, ) = result
+                    
                 
-                if info is None: info = 0
+                if info is None:
+                    
+                    info = 0
+                    
                 
                 if save_it:
                     
@@ -7468,6 +7520,7 @@ class DB( HydrusDB.HydrusDB ):
         try:
             
             next_stop_time_presentation = 0
+            next_gc_collect = 0
             
             paths = [ os.path.join( self._db_dir, filename ) for filename in list(self._db_filenames.values()) ]
             
@@ -7483,12 +7536,12 @@ class DB( HydrusDB.HydrusDB ):
                             
                             if HydrusData.TimeHasPassed( next_stop_time_presentation ):
                                 
-                                HG.client_controller.pub( 'splash_set_status_subtext', 'cached ' + HydrusData.TimestampToPrettyTimeDelta( stop_time, just_now_string = 'ok', just_now_threshold = 1 ) )
-                                
                                 if HydrusData.TimeHasPassed( stop_time ):
                                     
                                     return False
                                     
+                                
+                                HG.client_controller.pub( 'splash_set_status_subtext', 'cached ' + HydrusData.TimestampToPrettyTimeDelta( stop_time, just_now_string = 'ok', just_now_threshold = 1 ) )
                                 
                                 next_stop_time_presentation = HydrusData.GetNow() + 1
                                 
@@ -7506,10 +7559,21 @@ class DB( HydrusDB.HydrusDB ):
                             return False
                             
                         
+                        if HydrusData.TimeHasPassed( next_gc_collect ):
+                            
+                            gc.collect()
+                            
+                            next_gc_collect = HydrusData.GetNow() + 1
+                            
+                            time.sleep( 0.00001 )
+                            
+                        
                     
                 
             
         finally:
+            
+            gc.collect()
             
             self._InitDBCursor()
             
@@ -7942,25 +8006,25 @@ class DB( HydrusDB.HydrusDB ):
                                     
                                     ( tag, hashes, service_key_target ) = sub_row
                                     
-                                    source_table_name = current_mappings_table_name
+                                    source_table_names = [ current_mappings_table_name, pending_mappings_table_name ]
                                     
                                 elif sub_action == 'delete':
                                     
                                     ( tag, hashes ) = sub_row
                                     
-                                    source_table_name = current_mappings_table_name
+                                    source_table_names = [ current_mappings_table_name ]
                                     
                                 elif sub_action == 'delete_deleted':
                                     
                                     ( tag, hashes ) = sub_row
                                     
-                                    source_table_name = deleted_mappings_table_name
+                                    source_table_names = [ deleted_mappings_table_name ]
                                     
                                 elif sub_action == 'delete_for_deleted_files':
                                     
                                     ( tag, hashes ) = sub_row
                                     
-                                    source_table_name = current_mappings_table_name + ' NATURAL JOIN deleted_files'
+                                    source_table_names = [ current_mappings_table_name + ' NATURAL JOIN deleted_files' ]
                                     
                                     predicates.append( 'deleted_files.service_id = ' + str( self._combined_local_file_service_id ) )
                                     
@@ -8001,28 +8065,33 @@ class DB( HydrusDB.HydrusDB ):
                                         
                                     
                                 
-                                if do_namespace_join:
+                                num_to_do = 0
+                                
+                                for source_table_name in source_table_names:
                                     
-                                    source_table_name = source_table_name + ' NATURAL JOIN tags NATURAL JOIN namespaces'
+                                    if do_namespace_join:
+                                        
+                                        source_table_name = source_table_name + ' NATURAL JOIN tags NATURAL JOIN namespaces'
+                                        
+                                    
+                                    if hashes is not None:
+                                        
+                                        hash_ids = self._GetHashIds( hashes )
+                                        
+                                        predicates.append( 'hash_id IN ' + HydrusData.SplayListForDB( hash_ids ) )
+                                        
+                                    
+                                    if len( predicates ) == 0:
+                                        
+                                        self._c.execute( 'INSERT INTO temp_operation ( tag_id, hash_id ) SELECT tag_id, hash_id FROM ' + source_table_name + ';' )
+                                        
+                                    else:
+                                        
+                                        self._c.execute( 'INSERT INTO temp_operation ( tag_id, hash_id ) SELECT tag_id, hash_id FROM ' + source_table_name + ' WHERE ' + ' AND '.join( predicates ) + ';' )
+                                        
                                     
                                 
-                                if hashes is not None:
-                                    
-                                    hash_ids = self._GetHashIds( hashes )
-                                    
-                                    predicates.append( 'hash_id IN ' + HydrusData.SplayListForDB( hash_ids ) )
-                                    
-                                
-                                if len( predicates ) == 0:
-                                    
-                                    self._c.execute( 'INSERT INTO temp_operation ( tag_id, hash_id ) SELECT tag_id, hash_id FROM ' + source_table_name + ';' )
-                                    
-                                else:
-                                    
-                                    self._c.execute( 'INSERT INTO temp_operation ( tag_id, hash_id ) SELECT tag_id, hash_id FROM ' + source_table_name + ' WHERE ' + ' AND '.join( predicates ) + ';' )
-                                    
-                                
-                                num_to_do = self._GetRowCount()
+                                num_to_do += self._GetRowCount()
                                 
                                 i = 0
                                 
@@ -8915,6 +8984,8 @@ class DB( HydrusDB.HydrusDB ):
                 
             finally:
                 
+                HG.client_controller.pub( 'splash_set_status_text', 'committing' )
+                
                 self._AnalyzeStaleBigTables()
                 
                 job_key.SetVariable( 'popup_text_1', 'finished' )
@@ -9360,7 +9431,7 @@ class DB( HydrusDB.HydrusDB ):
             wx.MessageBox( 'This client\'s database is version ' + HydrusData.ToHumanInt( version ) + ', but the software is version ' + HydrusData.ToHumanInt( HC.SOFTWARE_VERSION ) + '! This situation only sometimes works, and when it does not, it can break things! If you are not sure what is going on, or if you accidentally installed an older version of the software to a newer database, force-kill this client in Task Manager right now. Otherwise, ok this dialog box to continue.' )
             
         
-        self._controller.CallBlockingToWx( wx_code )
+        self._controller.CallBlockingToWX( None, wx_code )
         
     
     def _ResetRepository( self, service ):
@@ -11515,6 +11586,54 @@ class DB( HydrusDB.HydrusDB ):
             self._CreateIndex( 'file_viewing_stats', [ 'media_viewtime' ] )
             
         
+        if version == 337:
+            
+            try:
+                
+                domain_manager = self._GetJSONDump( HydrusSerialisable.SERIALISABLE_TYPE_NETWORK_DOMAIN_MANAGER )
+                
+                domain_manager.Initialise()
+                
+                #
+                
+                domain_manager.OverwriteDefaultURLMatches( [ 'gelbooru gallery favorites page', 'gelbooru gallery pool page' ] )
+                
+                #
+                
+                domain_manager.OverwriteDefaultGUGs( [ 'gelbooru pools (folders) by id', 'gelbooru favorites by user id' ] )
+                
+                #
+                
+                domain_manager.OverwriteDefaultParsers( [ 'gelbooru 0.2.5 file page parser', 'gelbooru 0.2.x gallery page parser' ] )
+                
+                #
+                
+                domain_manager.TryToLinkURLMatchesAndParsers()
+                
+                #
+                
+                self._SetJSONDump( domain_manager )
+                
+            except Exception as e:
+                
+                HydrusData.PrintException( e )
+                
+                message = 'Trying to update some url classes and parsers failed! Please let hydrus dev know!'
+                
+                self.pub_initial_message( message )
+                
+            
+            #
+            
+            dictionary = ClientServices.GenerateDefaultServiceDictionary( HC.CLIENT_API_SERVICE )
+            
+            self._AddService( CC.CLIENT_API_SERVICE_KEY, HC.CLIENT_API_SERVICE, 'client api', dictionary )
+            
+            client_api_manager = ClientAPI.APIManager()
+            
+            self._SetJSONDump( client_api_manager )
+            
+        
         self._controller.pub( 'splash_set_title_text', 'updated db to v' + str( version + 1 ) )
         
         self._c.execute( 'UPDATE version SET version = ?;', ( version + 1, ) )
@@ -11694,7 +11813,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._CacheCombinedFilesMappingsUpdate( tag_service_id, combined_files_counts )
         
-        # 
+        #
         
         post_existing_tag_ids = self._STS( self._c.execute( 'SELECT tag_id as t FROM temp_tag_ids WHERE EXISTS ( SELECT 1 FROM ' + current_mappings_table_name + ' WHERE tag_id = t );' ) )
         post_existing_hash_ids = self._STS( self._c.execute( 'SELECT hash_id as h FROM temp_hash_ids WHERE EXISTS ( SELECT 1 FROM ' + current_mappings_table_name + ' WHERE hash_id = h );' ) )
@@ -11879,27 +11998,10 @@ class DB( HydrusDB.HydrusDB ):
                 
             
         
-        if service_type == HC.LOCAL_BOORU:
+        if service_type in ( HC.LOCAL_BOORU, HC.CLIENT_API_SERVICE ):
             
-            old_port = old_dictionary[ 'port' ]
-            new_port = dictionary[ 'port' ]
-            
-            if old_port != new_port:
-                
-                self.pub_after_job( 'restart_booru' )
-                self.pub_after_job( 'notify_new_upnp_mappings' )
-                
-            else:
-                
-                old_upnp = old_dictionary[ 'upnp_port' ]
-                new_upnp = dictionary[ 'upnp_port' ]
-                
-                if old_upnp != new_upnp:
-                    
-                    self.pub_after_job( 'notify_new_upnp_mappings' )
-                    
-                
-            
+            self.pub_after_job( 'restart_client_server_service', service_key )
+            self.pub_after_job( 'notify_new_upnp_mappings' )
             
         
         dictionary_string = dictionary.DumpToString()

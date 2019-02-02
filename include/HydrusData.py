@@ -507,7 +507,7 @@ def GetSiblingProcessPorts( db_path, instance ):
     
     if os.path.exists( path ):
         
-        with open( path, 'r' ) as f:
+        with open( path, 'r', encoding = 'utf-8' ) as f:
             
             file_text = f.read()
             
@@ -573,19 +573,23 @@ def GetSubprocessEnv():
         
         if ( HC.PLATFORM_LINUX or HC.PLATFORM_OSX ) and 'PATH' in env:
             
-            # fix for pyinstaller on os x, which drops this for some reason and hence breaks ffmpeg
+            # fix for pyinstaller, which drops this stuff for some reason and hence breaks ffmpeg
             
             path = env[ 'PATH' ]
             
-            missing_path_location = '/usr/local/bin'
+            path_locations = set( path.split( ':' ) )
+            desired_path_locations = [ '/usr/bin', '/usr/local/bin' ]
             
-            if missing_path_location not in path:
+            for desired_path_location in desired_path_locations:
                 
-                path = missing_path_location + ':' + path
-                
-                env[ 'PATH' ] = path
-                
-                changes_made = True
+                if desired_path_location not in path_locations:
+                    
+                    path = desired_path_location + ':' + path
+                    
+                    env[ 'PATH' ] = path
+                    
+                    changes_made = True
+                    
                 
             
         
@@ -618,11 +622,30 @@ def GetSubprocessHideTerminalStartupInfo():
     
     return startupinfo
     
-def GetSubprocessKWArgs( hide_terminal = True ):
+def GetSubprocessKWArgs( hide_terminal = True, text = False ):
     
     sbp_kwargs = {}
     
     sbp_kwargs[ 'env' ] = GetSubprocessEnv()
+    
+    if text:
+        
+        # probably need to override the stdXXX pipes with i/o encoding wrappers in the case of 3.5 here
+        
+        if sys.version_info.minor >= 6:
+            
+            sbp_kwargs[ 'encoding' ] = 'utf-8'
+            
+        
+        if sys.version_info.minor >= 7:
+            
+            sbp_kwargs[ 'text' ] = True
+            
+        else:
+            
+            sbp_kwargs[ 'universal_newlines' ] = True
+            
+        
     
     if hide_terminal:
         
@@ -732,7 +755,7 @@ def IsAlreadyRunning( db_path, instance ):
     
     if os.path.exists( path ):
         
-        with open( path, 'r' ) as f:
+        with open( path, 'r', encoding = 'utf-8' ) as f:
             
             file_text = f.read()
             
@@ -955,7 +978,7 @@ def RecordRunningStart( db_path, instance ):
         return
         
     
-    with open( path, 'w' ) as f:
+    with open( path, 'w', encoding = 'utf-8' ) as f:
         
         f.write( record_string )
         

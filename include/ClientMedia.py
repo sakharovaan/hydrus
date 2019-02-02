@@ -142,8 +142,8 @@ def GetDuplicateComparisonStatements( shown_media, comparison_media ):
     
     # more tags
     
-    s_num_tags = len( shown_media.GetTagsManager().GetCurrent() )
-    c_num_tags = len( comparison_media.GetTagsManager().GetCurrent() )
+    s_num_tags = len( shown_media.GetTagsManager().GetCurrentAndPending() )
+    c_num_tags = len( comparison_media.GetTagsManager().GetCurrentAndPending() )
     
     if s_num_tags > 0 and c_num_tags > 0:
         
@@ -2062,6 +2062,31 @@ class MediaSort( HydrusSerialisable.SerialisableBase ):
                     return random.random()
                     
                 
+            elif sort_data == CC.SORT_FILES_BY_APPROX_BITRATE:
+                
+                def sort_key( x ):
+                    
+                    duration = x.GetDuration()
+                    
+                    if duration is None:
+                        
+                        return 0
+                        
+                    else:
+                        
+                        size = x.GetSize()
+                        
+                        if size is None:
+                            
+                            return -1
+                            
+                        else:
+                            
+                            return size / duration
+                            
+                        
+                    
+                
             elif sort_data == CC.SORT_FILES_BY_FILESIZE:
                 
                 def sort_key( x ):
@@ -2211,6 +2236,7 @@ class MediaSort( HydrusSerialisable.SerialisableBase ):
             
             sort_string_lookup = {}
             
+            sort_string_lookup[ CC.SORT_FILES_BY_APPROX_BITRATE ] = 'approximate bitrate'
             sort_string_lookup[ CC.SORT_FILES_BY_FILESIZE ] = 'filesize'
             sort_string_lookup[ CC.SORT_FILES_BY_DURATION ] = 'duration'
             sort_string_lookup[ CC.SORT_FILES_BY_IMPORT_TIME ] = 'time imported'
@@ -2252,18 +2278,19 @@ class MediaSort( HydrusSerialisable.SerialisableBase ):
             
             sort_string_lookup = {}
             
-            sort_string_lookup[ CC.SORT_FILES_BY_FILESIZE ] = ( 'smallest first', 'largest first' )
-            sort_string_lookup[ CC.SORT_FILES_BY_DURATION ] = ( 'shortest first', 'longest first' )
-            sort_string_lookup[ CC.SORT_FILES_BY_IMPORT_TIME ] = ( 'oldest first', 'newest first' )
-            sort_string_lookup[ CC.SORT_FILES_BY_MIME ] = ( 'mime', 'mime' )
-            sort_string_lookup[ CC.SORT_FILES_BY_RANDOM ] = ( 'random', 'random' )
-            sort_string_lookup[ CC.SORT_FILES_BY_WIDTH ] = ( 'slimmest first', 'widest first' )
-            sort_string_lookup[ CC.SORT_FILES_BY_HEIGHT ] = ( 'shortest first', 'tallest first' )
-            sort_string_lookup[ CC.SORT_FILES_BY_RATIO ] = ( 'tallest first', 'widest first' )
-            sort_string_lookup[ CC.SORT_FILES_BY_NUM_PIXELS ] = ( 'ascending', 'descending' )
-            sort_string_lookup[ CC.SORT_FILES_BY_NUM_TAGS ] = ( 'ascending', 'descending' )
-            sort_string_lookup[ CC.SORT_FILES_BY_MEDIA_VIEWS ] = ( 'ascending', 'descending' )
-            sort_string_lookup[ CC.SORT_FILES_BY_MEDIA_VIEWTIME ] = ( 'ascending', 'descending' )
+            sort_string_lookup[ CC.SORT_FILES_BY_APPROX_BITRATE ] = ( 'smallest first', 'largest first', CC.SORT_DESC )
+            sort_string_lookup[ CC.SORT_FILES_BY_FILESIZE ] = ( 'smallest first', 'largest first', CC.SORT_DESC )
+            sort_string_lookup[ CC.SORT_FILES_BY_DURATION ] = ( 'shortest first', 'longest first', CC.SORT_DESC )
+            sort_string_lookup[ CC.SORT_FILES_BY_IMPORT_TIME ] = ( 'oldest first', 'newest first', CC.SORT_DESC )
+            sort_string_lookup[ CC.SORT_FILES_BY_MIME ] = ( 'mime', 'mime', CC.SORT_ASC )
+            sort_string_lookup[ CC.SORT_FILES_BY_RANDOM ] = ( 'random', 'random', CC.SORT_ASC )
+            sort_string_lookup[ CC.SORT_FILES_BY_WIDTH ] = ( 'slimmest first', 'widest first', CC.SORT_ASC )
+            sort_string_lookup[ CC.SORT_FILES_BY_HEIGHT ] = ( 'shortest first', 'tallest first', CC.SORT_ASC )
+            sort_string_lookup[ CC.SORT_FILES_BY_RATIO ] = ( 'tallest first', 'widest first', CC.SORT_ASC )
+            sort_string_lookup[ CC.SORT_FILES_BY_NUM_PIXELS ] = ( 'ascending', 'descending', CC.SORT_DESC )
+            sort_string_lookup[ CC.SORT_FILES_BY_NUM_TAGS ] = ( 'ascending', 'descending', CC.SORT_ASC )
+            sort_string_lookup[ CC.SORT_FILES_BY_MEDIA_VIEWS ] = ( 'ascending', 'descending', CC.SORT_DESC )
+            sort_string_lookup[ CC.SORT_FILES_BY_MEDIA_VIEWTIME ] = ( 'ascending', 'descending', CC.SORT_DESC )
             
             return sort_string_lookup[ sort_data ]
             
@@ -2494,6 +2521,11 @@ class TagsManagerSimple( object ):
         statuses_to_tags = self._service_keys_to_statuses_to_tags[ service_key ]
         
         return statuses_to_tags[ HC.CONTENT_STATUS_CURRENT ]
+        
+    
+    def GetCurrentAndPending( self, service_key = CC.COMBINED_TAG_SERVICE_KEY ):
+        
+        return self.GetCurrent( service_key = service_key ).union( self.GetPending( service_key = service_key ) )
         
     
     def GetDeleted( self, service_key = CC.COMBINED_TAG_SERVICE_KEY ):

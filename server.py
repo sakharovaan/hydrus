@@ -94,7 +94,7 @@ try:
                 
                 HydrusData.Print( 'Initialising controller\u2026' )
                 
-                threading.Thread( target = reactor.run, kwargs = { 'installSignalHandlers' : 0 } ).start()
+                threading.Thread( target = reactor.run, name = 'twisted', kwargs = { 'installSignalHandlers' : 0 } ).start()
                 
                 controller = ServerController.Controller( db_dir, no_daemons, no_wal )
                 
@@ -142,7 +142,7 @@ except Exception as e:
         
         dest_path = os.path.join( db_dir, 'crash.log' )
         
-        with open( dest_path, 'w' ) as f:
+        with open( dest_path, 'w', encoding = 'utf-8' ) as f:
             
             f.write( traceback.format_exc() )
             

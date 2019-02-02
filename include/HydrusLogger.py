@@ -7,9 +7,12 @@ import time
 
 class HydrusLogger( object ):
     
-    def __init__( self, base_dir, prefix ):
+    def __init__( self, db_dir, prefix ):
         
-        self._log_path_base = os.path.join( base_dir, prefix )
+        self._db_dir = db_dir
+        self._prefix = prefix
+        
+        self._log_path_base = self._GetLogPathBase()
         self._lock = threading.Lock()
         
     
@@ -54,11 +57,23 @@ class HydrusLogger( object ):
         return log_path
         
     
+    def _GetLogPathBase( self ):
+        
+        return os.path.join( self._db_dir, self._prefix )
+        
+    
     def _OpenLog( self ):
         
         self._log_path = self._GetLogPath()
         
-        self._log_file = open( self._log_path, 'a' )
+        is_new_file = not os.path.exists( self._log_path )
+        
+        self._log_file = open( self._log_path, 'a', encoding = 'utf-8' )
+        
+        if is_new_file:
+            
+            self._log_file.write( u'\uFEFF' ) # Byte Order Mark, BOM, to help reader software interpret this as utf-8
+            
         
     
     def _SwitchToANewLogFileIfDue( self ):

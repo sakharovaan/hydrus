@@ -233,7 +233,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         aboutinfo.SetDescription( description )
         
-        with open( HC.LICENSE_PATH, 'r' ) as f:
+        with open( HC.LICENSE_PATH, 'r', encoding = 'utf-8' ) as f:
             
             license = f.read()
             
@@ -1068,7 +1068,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         to_print.sort( key = lambda pair: -pair[1] )
         
-        for ( k, v ) in list( count.items() ):
+        for ( k, v ) in to_print:
             
             if v > 100:
                 
@@ -2038,6 +2038,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             ClientGUIMenus.AppendMenuCheckItem( self, profile_modes, 'db profile mode', 'Run detailed \'profiles\' on every database query and dump this information to the log (this is very useful for hydrus dev to have, if something is running slow for you!).', HG.db_profile_mode, self._SwitchBoolean, 'db_profile_mode' )
             ClientGUIMenus.AppendMenuCheckItem( self, profile_modes, 'menu profile mode', 'Run detailed \'profiles\' on menu actions.', HG.menu_profile_mode, self._SwitchBoolean, 'menu_profile_mode' )
+            ClientGUIMenus.AppendMenuCheckItem( self, profile_modes, 'pubsub report mode', 'Report info about every pubsub processed.', HG.pubsub_report_mode, self._SwitchBoolean, 'pubsub_report_mode' )
             ClientGUIMenus.AppendMenuCheckItem( self, profile_modes, 'pubsub profile mode', 'Run detailed \'profiles\' on every internal publisher/subscriber message and dump this information to the log. This can hammer your log with dozens of large dumps every second. Don\'t run it unless you know you need to.', HG.pubsub_profile_mode, self._SwitchBoolean, 'pubsub_profile_mode' )
             ClientGUIMenus.AppendMenuCheckItem( self, profile_modes, 'ui timer profile mode', 'Run detailed \'profiles\' on every ui timer update. This will likely spam you!', HG.ui_timer_profile_mode, self._SwitchBoolean, 'ui_timer_profile_mode' )
             
@@ -2412,11 +2413,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         def wx_do_it():
             
-            if not self:
-                
-                return
-                
-            
             export_folders = self._controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_EXPORT_FOLDER )
             
             with ClientGUITopLevelWindows.DialogEdit( self, 'edit export folders' ) as dlg:
@@ -2488,7 +2484,14 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                             
                         
                     
-                    controller.CallBlockingToWx( wx_do_it )
+                    try:
+                        
+                        controller.CallBlockingToWX( self, wx_do_it )
+                        
+                    except HydrusExceptions.WXDeadWindowException:
+                        
+                        pass
+                        
                     
                 finally:
                     
@@ -2528,11 +2531,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
     def _ManageImportFolders( self ):
         
         def wx_do_it():
-            
-            if not self:
-                
-                return
-                
             
             import_folders = self._controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_IMPORT_FOLDER )
             
@@ -2605,7 +2603,14 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                             
                         
                     
-                    controller.CallBlockingToWx( wx_do_it )
+                    try:
+                        
+                        controller.CallBlockingToWX( wx_do_it )
+                        
+                    except HydrusExceptions.WXDeadWindowException:
+                        
+                        pass
+                        
                     
                 finally:
                     
@@ -2809,11 +2814,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         def wx_do_it( subscriptions, original_pause_status ):
             
-            if not self:
-                
-                return
-                
-            
             title = 'manage subscriptions'
             frame_key = 'manage_subscriptions_dialog'
             
@@ -2899,7 +2899,14 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                     
                     job_key.Delete()
                     
-                    controller.CallBlockingToWx( wx_do_it, subscriptions, original_pause_status )
+                    try:
+                        
+                        controller.CallBlockingToWX( self, wx_do_it, subscriptions, original_pause_status )
+                        
+                    except HydrusExceptions.WXDeadWindowException:
+                        
+                        pass
+                        
                     
                 finally:
                     
@@ -3526,6 +3533,10 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             HG.network_report_mode = not HG.network_report_mode
             
+        elif name == 'pubsub_report_mode':
+            
+            HG.pubsub_report_mode = not HG.pubsub_report_mode
+            
         elif name == 'pubsub_profile_mode':
             
             HG.pubsub_profile_mode = not HG.pubsub_profile_mode
@@ -3935,7 +3946,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             hide_close_button = not job_key.IsCancellable()
             
-            with ClientGUITopLevelWindows.DialogNullipotentVetoable( self, title, hide_close_button = hide_close_button ) as dlg:
+            with ClientGUITopLevelWindows.DialogNullipotent( self, title, hide_buttons = hide_close_button ) as dlg:
                 
                 panel = ClientGUIPopupMessages.PopupMessageDialogPanel( dlg, job_key )
                 
@@ -4627,7 +4638,9 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             return
             
         
-        for name in self._dirty_menus:
+        if len( self._dirty_menus ) > 0:
+            
+            name = self._dirty_menus.pop()
             
             ( menu, label, show ) = self._GenerateMenuInfo( name )
             
@@ -4681,7 +4694,10 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             ClientGUIMenus.DestroyMenu( self, old_menu )
             
         
-        self._dirty_menus = set()
+        if len( self._dirty_menus ) > 0:
+            
+            self._controller.CallLaterWXSafe( self, 0.5, self.RefreshMenu )
+            
         
     
     def RefreshStatusBar( self ):
@@ -4888,7 +4904,7 @@ class FrameSplashStatus( object ):
     
     def SetText( self, text, print_to_log = True ):
         
-        if print_to_log:
+        if print_to_log and len( text ) > 0:
             
             HydrusData.Print( text )
             
@@ -4916,7 +4932,7 @@ class FrameSplashStatus( object ):
         
         if print_to_log:
             
-            HydrusData.Print( text )
+            HydrusData.DebugPrint( text )
             
         
         with self._lock:

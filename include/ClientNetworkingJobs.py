@@ -7,11 +7,13 @@ from . import HydrusData
 from . import HydrusExceptions
 from . import HydrusGlobals as HG
 from . import HydrusNetworking
+from . import HydrusThreading
 import os
 import requests
 import threading
 import traceback
 import time
+import urllib
 
 def ConvertStatusCodeAndDataIntoExceptionInfo( status_code, data, is_hydrus_service = False ):
     
@@ -24,20 +26,11 @@ def ConvertStatusCodeAndDataIntoExceptionInfo( status_code, data, is_hydrus_serv
         error_text = repr( data )
         
     
-    if len( error_text ) > 1024:
-        
-        large_chunk = error_text[ : 512 * 1024 ]
-        
-        smaller_chunk = large_chunk[:256]
-        
-        HydrusData.DebugPrint( large_chunk )
-        
-        error_text = 'The server\'s error text was too long to display. The first part follows, while a larger chunk has been written to the log.'
-        error_text += os.linesep
-        error_text += smaller_chunk
-        
+    print_long_error_text = True
     
     if status_code == 304:
+        
+        print_long_error_text = False
         
         eclass = HydrusExceptions.NotModifiedException
         
@@ -50,6 +43,8 @@ def ConvertStatusCodeAndDataIntoExceptionInfo( status_code, data, is_hydrus_serv
         eclass = HydrusExceptions.ForbiddenException
         
     elif status_code == 404:
+        
+        print_long_error_text = False
         
         eclass = HydrusExceptions.NotFoundException
         
@@ -81,6 +76,19 @@ def ConvertStatusCodeAndDataIntoExceptionInfo( status_code, data, is_hydrus_serv
         eclass = HydrusExceptions.NetworkException
         
     
+    if len( error_text ) > 1024 and print_long_error_text:
+        
+        large_chunk = error_text[ : 512 * 1024 ]
+        
+        smaller_chunk = large_chunk[:256]
+        
+        HydrusData.DebugPrint( large_chunk )
+        
+        error_text = 'The server\'s error text was too long to display. The first part follows, while a larger chunk has been written to the log.'
+        error_text += os.linesep
+        error_text += smaller_chunk
+        
+    
     e = eclass( error_text )
     
     return ( e, error_text )
@@ -91,6 +99,11 @@ class NetworkJob( object ):
     IS_HYDRUS_SERVICE = False
     
     def __init__( self, method, url, body = None, referral_url = None, temp_path = None ):
+        
+        if body is not None and isinstance( body, str ):
+            
+            body = bytes( body, 'utf-8' )
+            
         
         self.engine = None
         
@@ -223,7 +236,7 @@ class NetworkJob( object ):
             
             if self._referral_url is not None:
                 
-                headers[ 'referer' ] = self._referral_url
+                headers[ 'referer' ] = urllib.parse.quote( self._referral_url, "!#$%&'()*+,/:;=?@[]~" ) # quick and dirty way to quote this url when it comes here with full unicode chars. not perfect, but does the job
                 
             
             for ( key, value ) in list(self._additional_headers.items()):
@@ -269,7 +282,7 @@ class NetworkJob( object ):
             return True
             
         
-        if self.engine.controller.ModelIsShutdown():
+        if self.engine.controller.ModelIsShutdown() or HydrusThreading.IsThreadShuttingDown():
             
             return True
             
@@ -347,9 +360,9 @@ class NetworkJob( object ):
                 
                 if self._file_import_options is not None:
                     
-                    certain = True
+                    is_complete_file_size = True
                     
-                    self._file_import_options.CheckNetworkDownload( mime, self._num_bytes_to_read, certain )
+                    self._file_import_options.CheckNetworkDownload( mime, self._num_bytes_to_read, is_complete_file_size )
                     
                 
             else:
@@ -380,9 +393,9 @@ class NetworkJob( object ):
                 
                 if self._file_import_options is not None:
                     
-                    certain = False
+                    is_complete_file_size = False
                     
-                    self._file_import_options.CheckNetworkDownload( mime, self._num_bytes_to_read, certain )
+                    self._file_import_options.CheckNetworkDownload( mime, self._num_bytes_read, is_complete_file_size )
                     
                 
             
@@ -472,7 +485,7 @@ class NetworkJob( object ):
                     
                 else:
                     
-                    bandwidth_waiting_duration = self.engine.bandwidth_manager.GetWaitingEstimate( self._network_contexts )
+                    ( bandwidth_waiting_duration, bandwidth_network_context ) = self.engine.bandwidth_manager.GetWaitingEstimateAndContext( self._network_contexts )
                     
                     will_override = self._bandwidth_manual_override_delayed_timestamp is not None
                     
@@ -485,24 +498,24 @@ class NetworkJob( object ):
                         override_coming_first = override_waiting_duration < bandwidth_waiting_duration
                         
                     
+                    just_now_threshold = 2
+                    
                     if override_coming_first:
                         
                         waiting_duration = override_waiting_duration
                         
-                        prefix = 'overriding bandwidth '
-                        
-                        waiting_str = HydrusData.TimestampToPrettyTimeDelta( self._bandwidth_manual_override_delayed_timestamp, just_now_string = 'imminently', just_now_threshold = 2 )
+                        waiting_str = 'overriding bandwidth ' + HydrusData.TimestampToPrettyTimeDelta( self._bandwidth_manual_override_delayed_timestamp, just_now_string = 'imminently', just_now_threshold = just_now_threshold )
                         
                     else:
                         
                         waiting_duration = bandwidth_waiting_duration
                         
-                        prefix = 'bandwidth free '
-                        
-                        waiting_str = HydrusData.TimestampToPrettyTimeDelta( HydrusData.GetNow() + waiting_duration, just_now_string = 'imminently', just_now_threshold = 2 )
+                        waiting_str = 'bandwidth free ' + HydrusData.TimestampToPrettyTimeDelta( HydrusData.GetNow() + waiting_duration, just_now_string = 'imminently', just_now_threshold = just_now_threshold )
                         
                     
-                    self._status_text = prefix + waiting_str + '\u2026'
+                    waiting_str += '\u2026 (' + bandwidth_network_context.ToHumanString() + ')'
+                    
+                    self._status_text = waiting_str
                     
                     if waiting_duration > 1200:
                         
@@ -1113,7 +1126,7 @@ class NetworkJob( object ):
         
         with self._lock:
             
-            if self.engine.controller.ModelIsShutdown():
+            if self.engine.controller.ModelIsShutdown() or HydrusThreading.IsThreadShuttingDown():
                 
                 raise HydrusExceptions.ShutdownException()
                 
