@@ -39,19 +39,6 @@ class NetworkBandwidthManager( HydrusSerialisable.SerialisableBase ):
         
     
     def _CanStartRequest( self, network_contexts ):
-        
-        for network_context in network_contexts:
-            
-            bandwidth_rules = self._GetRules( network_context )
-            
-            bandwidth_tracker = self._network_contexts_to_bandwidth_trackers[ network_context ]
-            
-            if not bandwidth_rules.CanStartRequest( bandwidth_tracker ):
-                
-                return False
-                
-            
-        
         return True
         
     
@@ -154,41 +141,11 @@ class NetworkBandwidthManager( HydrusSerialisable.SerialisableBase ):
         
     
     def CanContinueDownload( self, network_contexts ):
-        
-        with self._lock:
-            
-            for network_context in network_contexts:
-                
-                bandwidth_rules = self._GetRules( network_context )
-                
-                bandwidth_tracker = self._network_contexts_to_bandwidth_trackers[ network_context ]
-                
-                if not bandwidth_rules.CanContinueDownload( bandwidth_tracker ):
-                    
-                    return False
-                    
-                
-            
             return True
             
         
     
     def CanDoWork( self, network_contexts, expected_requests = 1, expected_bytes = 1048576, threshold = 30 ):
-        
-        with self._lock:
-            
-            for network_context in network_contexts:
-                
-                bandwidth_rules = self._GetRules( network_context )
-                
-                bandwidth_tracker = self._network_contexts_to_bandwidth_trackers[ network_context ]
-                
-                if not bandwidth_rules.CanDoWork( bandwidth_tracker, expected_requests = expected_requests, expected_bytes = expected_bytes, threshold = threshold ):
-                    
-                    return False
-                    
-                
-            
             return True
             
         

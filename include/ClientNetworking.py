@@ -466,7 +466,7 @@ class NetworkEngine( object ):
             
             time_until_next_second = 1.0 - subsecond_part
             
-            self._new_work_to_do.wait( time_until_next_second )
+            self._new_work_to_do.wait( 0.0001 )
             
             self._new_work_to_do.clear()
             

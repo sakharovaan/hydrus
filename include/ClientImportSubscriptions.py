@@ -183,7 +183,7 @@ class Subscription( HydrusSerialisable.SerialisableBaseNamed ):
     
     def _NoDelays( self ):
         
-        return HydrusData.TimeHasPassed( self._no_work_until )
+        return True
         
     
     def _QueryBandwidthIsOK( self, query ):
@@ -1022,7 +1022,7 @@ class Subscription( HydrusSerialisable.SerialisableBaseNamed ):
     
     def _SyncQueryCanDoWork( self ):
         
-        return True in ( query.CanSync() for query in self._queries )
+        return True
         
     
     def CanCheckNow( self ):
@@ -1491,7 +1491,7 @@ class SubscriptionQuery( HydrusSerialisable.SerialisableBase ):
             return False
             
         
-        return HydrusData.TimeHasPassed( self._next_check_time ) or self._check_now
+        return True
         
     
     def CheckNow( self ):
