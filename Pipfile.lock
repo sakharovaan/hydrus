@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "2ac5c0f747f21f2b479f8d322e863d27c4597bf03c67f0d95a683b429766da35"
+            "sha256": "784f21681e334a688b9f2009b9418f3b00d92600d342715a993ee2a148c45e66"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -579,6 +579,28 @@
                 "sha256:b36a1c245f2d304965eb4e0a82848379241dc04b865afcc4aab16748587e1923"
             ],
             "version": "==0.5.1"
+        },
+        "wxpython": {
+            "hashes": [
+                "sha256:0159a544598a910d0b4f900a97e675a28d1ad6bcf4ad45ad626509681e38f29d",
+                "sha256:0d9ef4260cb2f3e23ed9dcf6baa905ba585ac7d631613cddc299c4c83463ae29",
+                "sha256:13f0de56ff851eb8ecccf5f65e5c7b0c892510b5bae766238e9cf5ae5991e081",
+                "sha256:5e1b75c3d6350ef1dba0cab8952815e4149e0f769b1ebd1633aa8678a7a5e07a",
+                "sha256:6495f076a470d079be001f97cefd7c188fb5704bc2d12ecac707a44cb89d2eaa",
+                "sha256:674486ef1c14bbb8717f7680b93019a991b704b0a793f21cee74f77092d82f75",
+                "sha256:6b8bfaebc54e0961e041787988c5c01871f77a184e6eab959c9157202908ffbe",
+                "sha256:6f4ed34f4f7b3ede7323d65b80d873e95cedb6323cdb0e51abc328bee94fc29a",
+                "sha256:8dc965dd577dddadd6a7805d71905e29495c4b5ca4a01e6f0500d79cbb1844f8",
+                "sha256:9e1624ea81a819262dfe4a0cdb773c7dfd882bb4976e4a570a9479c7cf471108",
+                "sha256:b7ea63fd01e57d4799f2d3b83155f18b7bea37ef53ce463cd6ede700626cb766",
+                "sha256:c49a7f8e753065ce7fbb1291314a2f0087efd95f71c00f1acd733954ad8c3015",
+                "sha256:c7a95133e455940ff6ec75b840530d55d6530e1a4e1ee4d9074c4e7d17b7be8f",
+                "sha256:d3d88b8797b32c5cf241483d6d030ded0ba9786f48f7108d23a6deeceab9c055",
+                "sha256:f262ae6cf6a9ba1303517b48048a44a84300fcdb2d0862568642d4f5a5c64df7",
+                "sha256:f7f6ba15c1e1bf12668bd763dea1a81550619868f05b795dba945df3984fc8bc"
+            ],
+            "index": "pypi",
+            "version": "==4.0.4"
         },
         "zope.interface": {
             "hashes": [

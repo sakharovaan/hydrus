@@ -26,6 +26,7 @@ Send2Trash = "*"
 service_identity = "*"
 PySocks = "*"
 Twisted = {file = "https://download.lfd.uci.edu/pythonlibs/r5uhg2lo/Twisted-18.9.0-cp36-cp36m-win_amd64.whl"}
+wxpython = "*"
 
 [requires]
 python_version = "3.6"
