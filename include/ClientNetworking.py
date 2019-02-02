@@ -487,8 +487,8 @@ class NetworkEngine( object ):
         
         with self._lock:
             
-            self.MAX_JOBS = self.controller.new_options.GetInteger( 'max_network_jobs' )
-            self.MAX_JOBS_PER_DOMAIN = self.controller.new_options.GetInteger( 'max_network_jobs_per_domain' )
+            self.MAX_JOBS = 3000
+            self.MAX_JOBS_PER_DOMAIN = 500
             
         
     
