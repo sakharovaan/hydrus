@@ -1,0 +1,31 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+
+[packages]
+beautifulsoup4 = "*"
+html5lib = "*"
+lxml = "*"
+nose = "*"
+numpy = "*"
+opencv-python = "*"
+six = "*"
+psutil = "*"
+pycryptodome = "*"
+pylzma = {file = "https://download.lfd.uci.edu/pythonlibs/r5uhg2lo/pylzma-0.5.0-cp36-cp36m-win_amd64.whl"}
+requests = "*"
+lz4 = "*"
+matplotlib = "*"
+PyYAML = "*"
+Pillow = "*"
+pyOpenSSL = "*"
+Send2Trash = "*"
+service_identity = "*"
+PySocks = "*"
+Twisted = {file = "https://download.lfd.uci.edu/pythonlibs/r5uhg2lo/Twisted-18.9.0-cp36-cp36m-win_amd64.whl"}
+
+[requires]
+python_version = "3.6"
