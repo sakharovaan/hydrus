@@ -385,42 +385,7 @@ class NetworkBandwidthManager( HydrusSerialisable.SerialisableBase ):
         
     
     def TryToConsumeAGalleryToken( self, second_level_domain, query_type ):
-        
-        with self._lock:
-            
-            if query_type == 'download page':
-                
-                timestamps_dict = self._last_pages_gallery_query_timestamps
-                
-                delay = HG.client_controller.new_options.GetInteger( 'gallery_page_wait_period_pages' )
-                
-            elif query_type == 'subscription':
-                
-                timestamps_dict = self._last_subscriptions_gallery_query_timestamps
-                
-                delay = HG.client_controller.new_options.GetInteger( 'gallery_page_wait_period_subscriptions' )
-                
-            elif query_type == 'watcher':
-                
-                timestamps_dict = self._last_watchers_query_timestamps
-                
-                delay = HG.client_controller.new_options.GetInteger( 'watcher_page_wait_period' )
-                
-            
-            next_timestamp = timestamps_dict[ second_level_domain ] + delay
-            
-            if HydrusData.TimeHasPassed( next_timestamp ):
-                
-                timestamps_dict[ second_level_domain ] = HydrusData.GetNow()
-                
-                return ( True, 0 )
-                
-            else:
-                
-                return ( False, next_timestamp )
-                
-            
-            raise NotImplementedError( 'Unknown query type' )
+        return (True, 0)
             
         
     
