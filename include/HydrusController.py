@@ -240,26 +240,7 @@ class HydrusController( object ):
         
     
     def AcquireThreadSlot( self, thread_type ):
-        
-        with self._thread_slot_lock:
-            
-            if thread_type not in self._thread_slots:
-                
-                return True # assume no max if no max set
-                
-            
-            ( current_threads, max_threads ) = self._thread_slots[ thread_type ]
-            
-            if current_threads < max_threads:
-                
-                self._thread_slots[ thread_type ] = ( current_threads + 1, max_threads )
-                
-                return True
-                
-            else:
-                
-                return False
-                
+        return True
             
         
     
@@ -412,23 +393,7 @@ class HydrusController( object ):
             with self._call_to_thread_lock:
                 
                 num_threads = sum( ( 1 for t in self._call_to_threads if t.CurrentlyWorking() ) )
-                
-            
-            if num_threads < 4:
-                
-                self._thread_pool_busy_status_text = ''
-                
-            elif num_threads < 10:
-                
-                self._thread_pool_busy_status_text = 'working'
-                
-            elif num_threads < 20:
-                
-                self._thread_pool_busy_status_text = 'busy'
-                
-            else:
-                
-                self._thread_pool_busy_status_text = 'very busy!'
+                self._thread_pool_busy_status_text = str(num_threads)
                 
             
             self._thread_pool_busy_status_text_new_check_time = HydrusData.GetNow() + 10
