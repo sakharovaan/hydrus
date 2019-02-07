@@ -442,9 +442,11 @@ class HydrusDB( object ):
         self._c.execute( 'PRAGMA temp_store = 2;' )
         
         self._c.execute( 'PRAGMA main.cache_size = -10000;' )
+
+        self._c.execute( 'PRAGMA locking_mode = EXCLUSIVE;')
         
         self._c.execute( 'ATTACH ":memory:" AS mem;' )
-        
+
         self._AttachExternalDatabases()
         
         db_names = [ name for ( index, name, path ) in self._c.execute( 'PRAGMA database_list;' ) if name not in ( 'mem', 'temp' ) ]
@@ -455,7 +457,7 @@ class HydrusDB( object ):
             
             if self._no_wal:
                 
-                self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = TRUNCATE;' )
+                self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = MEMORY;' )
                 
                 self._c.execute( 'PRAGMA ' + db_name + '.synchronous = 0;' )
                 
@@ -463,7 +465,7 @@ class HydrusDB( object ):
                 
             else:
                 
-                self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = TRUNCATE;' )
+                self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = MEMORY;' )
                 
                 # if this is set to 1, transactions are not immediately synced to the journal and can be undone following a power-loss
                 # if set to 2, all transactions are synced
