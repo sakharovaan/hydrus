@@ -105,9 +105,7 @@ class GalleryImport( HydrusSerialisable.SerialisableBase ):
         
     
     def _DelayWork( self, time_delta, reason ):
-        
-        self._no_work_until = HydrusData.GetNow() + time_delta
-        self._no_work_until_reason = reason
+        pass
         
     
     def _GetSerialisableInfo( self ):
@@ -795,7 +793,7 @@ class GalleryImport( HydrusSerialisable.SerialisableBase ):
                 
                 self._WorkOnGallery()
                 
-                time.sleep( 1 )
+                time.sleep( 0.1 )
                 
                 HG.client_controller.WaitUntilViewFree()
                 
