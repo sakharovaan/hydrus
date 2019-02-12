@@ -761,7 +761,7 @@ class GalleryImport( HydrusSerialisable.SerialisableBase ):
                 page_shown = not HG.client_controller.PageClosedButNotDestroyed( self._page_key )
                 network_engine_good = not HG.client_controller.network_engine.IsBusy()
                 
-                ok_to_work = work_pending and no_delays and page_shown and network_engine_good
+                ok_to_work = work_pending and page_shown and network_engine_good
                 
             
         
@@ -784,7 +784,7 @@ class GalleryImport( HydrusSerialisable.SerialisableBase ):
             page_shown = not HG.client_controller.PageClosedButNotDestroyed( self._page_key )
             network_engine_good = not HG.client_controller.network_engine.IsBusy()
             
-            ok_to_work = work_pending and no_delays and page_shown and network_engine_good
+            ok_to_work = work_pending and page_shown and network_engine_good
             
         
         while ok_to_work:
