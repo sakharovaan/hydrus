@@ -93,7 +93,7 @@ class HydrusController( object ):
             
             calling_from_the_thread_pool = threading.current_thread() in self._call_to_threads
             
-            if calling_from_the_thread_pool or len( self._call_to_threads ) < 200:
+            if calling_from_the_thread_pool or len( self._call_to_threads ) < 20000:
                 
                 call_to_thread = HydrusThreading.THREADCallToThread( self, 'CallToThread' )
                 
