@@ -141,9 +141,7 @@ def THREADDownloadURL( job_key, url, url_string ):
     def network_job_factory( *args, **kwargs ):
         
         network_job = ClientNetworkingJobs.NetworkJob( *args, **kwargs )
-        
-        network_job.OverrideBandwidth( 30 )
-        
+                
         return network_job
         
     
