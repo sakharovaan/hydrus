@@ -254,8 +254,16 @@ class NetworkJob( object ):
         connect_timeout = HG.client_controller.new_options.GetInteger( 'network_timeout' )
         
         read_timeout = connect_timeout * 6
-        
-        response = session.request( method, url, data = data, files = files, headers = headers, stream = True, timeout = ( connect_timeout, read_timeout ) )
+        completed = False
+
+        while not completed:
+            try:
+                response = session.request( method, url, data = data, files = files, headers = headers, stream = True, timeout = ( connect_timeout, read_timeout ) )
+            except Exception as e:
+                self._status_text = 'error ' + str(e) +', retrying...\u2026'
+                time.sleep(.1)
+            else:
+                completed = True
         
         return response
         
