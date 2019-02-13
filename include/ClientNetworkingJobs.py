@@ -257,14 +257,32 @@ class NetworkJob( object ):
         completed = False
 
         while not completed:
+
             try:
+
+                http_proxy = HG.client_controller.new_options.GetNoneableString('http_proxy')
+                https_proxy = HG.client_controller.new_options.GetNoneableString('https_proxy')
+
+                if http_proxy is not None:
+                    session.proxies['http'] = http_proxy
+    
+                if https_proxy is not None:
+                    session.proxies['https'] = https_proxy
+
                 response = session.request( method, url, data = data, files = files, headers = headers, stream = True, timeout = ( connect_timeout, read_timeout ) )
+
             except Exception as e:
                 self._status_text = 'error ' + str(e) +', retrying...\u2026'
-                time.sleep(.1)
+                time.sleep(1)
+
             else:
-                completed = True
-        
+                if response.ok:
+                    completed = True
+                else:
+                    self._status_text = 'got ' + str(response.status_code) +', retrying...\u2026'
+
+                    time.sleep(1)
+
         return response
         
     
