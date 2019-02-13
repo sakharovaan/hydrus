@@ -245,30 +245,18 @@ class NetworkJob( object ):
                 
             
             self._status_text = 'sending request\u2026'
-            
-            snc = self._session_network_context
-            
-        
-        session = self.engine.session_manager.GetSession( snc )
-        
+
         connect_timeout = HG.client_controller.new_options.GetInteger( 'network_timeout' )
-        
         read_timeout = connect_timeout * 6
         completed = False
 
         while not completed:
 
+            with self._lock:
+                snc = self._session_network_context
+                session = self.engine.session_manager.GetSession(snc)
+
             try:
-
-                http_proxy = HG.client_controller.new_options.GetNoneableString('http_proxy')
-                https_proxy = HG.client_controller.new_options.GetNoneableString('https_proxy')
-
-                if http_proxy is not None:
-                    session.proxies['http'] = http_proxy
-    
-                if https_proxy is not None:
-                    session.proxies['https'] = https_proxy
-
                 response = session.request( method, url, data = data, files = files, headers = headers, stream = True, timeout = ( connect_timeout, read_timeout ) )
 
             except Exception as e:
