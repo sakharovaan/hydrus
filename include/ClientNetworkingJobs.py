@@ -267,9 +267,12 @@ class NetworkJob( object ):
                 if response.ok:
                     completed = True
                 else:
-                    self._status_text = 'got ' + str(response.status_code) +', retrying...\u2026'
+                    if response.status_code == 404:
+                        completed = True
+                    else:
+                        self._status_text = 'got ' + str(response.status_code) +', retrying...\u2026'
 
-                    time.sleep(1)
+                        time.sleep(1)
 
         return response
         
