@@ -11,8 +11,51 @@ from . import HydrusThreading
 import os
 import re
 import stat
+from xml.sax.saxutils import escape
 
 MAX_PATH_LENGTH = 245 # bit of padding from 255 for .txt neigbouring and other surprises
+
+XMP_TEMPLATE = """<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XMP Core 4.4.0-Exiv2">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:digiKam="http://www.digikam.org/ns/1.0/"
+    xmlns:MicrosoftPhoto="http://ns.microsoft.com/photo/1.0/"
+    xmlns:lr="http://ns.adobe.com/lightroom/1.0/"
+    xmlns:mediapro="http://ns.iview-multimedia.com/mediapro/1.0/"
+    xmlns:acdsee="http://ns.acdsee.com/iptc/1.0/"
+    xmlns:tiff="http://ns.adobe.com/tiff/1.0/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmp:CreatorTool="digiKam-5.9.0"
+   acdsee:categories="&lt;Categories&gt;&lt;Category Assigned=&quot;1&quot;&gt;366&lt;/Category&gt;&lt;Category Assigned=&quot;1&quot;&gt;123&lt;/Category&gt;&lt;/Categories&gt;"
+   tiff:Software="digiKam-5.9.0">
+   <digiKam:TagsList>
+    <rdf:Seq>
+{{ tags_list }}    </rdf:Seq>
+   </digiKam:TagsList>
+   <MicrosoftPhoto:LastKeywordXMP>
+    <rdf:Bag>
+{{ tags_list }}    </rdf:Bag>
+   </MicrosoftPhoto:LastKeywordXMP>
+   <lr:hierarchicalSubject>
+    <rdf:Bag>
+{{ tags_list }}    </rdf:Bag>
+   </lr:hierarchicalSubject>
+   <mediapro:CatalogSets>
+    <rdf:Bag>
+{{ tags_list }}    </rdf:Bag>
+   </mediapro:CatalogSets>
+   <dc:subject>
+    <rdf:Bag>
+{{ tags_list }}    </rdf:Bag>
+   </dc:subject>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>"""
+
+TAG_TEMPLATE = "     <rdf:li>%s</rdf:li>\n"
 
 def GenerateExportFilename( destination_directory, media, terms ):
     
@@ -376,7 +419,34 @@ class ExportFolder( HydrusSerialisable.SerialisableBaseNamed ):
                         HydrusPaths.MakeSureDirectoryExists( dest_path_dir )
                         
                         if filename not in sync_filenames:
-                            
+
+                            tags_manager = media_result.GetTagsManager()
+
+                            tags = set()
+
+                            siblings_manager = HG.controller.GetManager('tag_siblings')
+
+                            tag_censorship_manager = HG.client_controller.GetManager('tag_censorship')
+
+                            for service_key in (CC.COMBINED_TAG_SERVICE_KEY, ):
+                                current_tags = tags_manager.GetCurrent()
+
+                                current_tags = siblings_manager.CollapseTags(service_key, current_tags)
+
+                                current_tags = tag_censorship_manager.FilterTags(service_key, current_tags)
+
+                                tags.update(current_tags)
+
+                            tags = list(tags)
+
+                            tags.sort()
+
+                            txt_path = dest_path + '.xmp'
+
+                            with open(txt_path, 'w', encoding='utf-8') as f:
+                                tags_filler = "".join(TAG_TEMPLATE % escape(t) for t in tags)
+                                f.write(XMP_TEMPLATE.replace("{{ tags_list }}", tags_filler))
+
                             copied = HydrusPaths.MirrorFile( source_path, dest_path )
                             
                             if copied:

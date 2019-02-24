@@ -457,20 +457,20 @@ class HydrusDB( object ):
             
             if self._no_wal:
                 
-                self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = MEMORY;' )
+                self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = WAL;' )
                 
-                self._c.execute( 'PRAGMA ' + db_name + '.synchronous = 0;' )
+                self._c.execute( 'PRAGMA ' + db_name + '.synchronous = 1;' )
                 
                 self._c.execute( 'SELECT * FROM ' + db_name + '.sqlite_master;' ).fetchone()
                 
             else:
                 
-                self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = MEMORY;' )
+                self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = WAL;' )
                 
                 # if this is set to 1, transactions are not immediately synced to the journal and can be undone following a power-loss
                 # if set to 2, all transactions are synced
                 # either way, transactions are atomically consistent, but let's not mess around when power-cut during heavy file import or w/e
-                self._c.execute( 'PRAGMA ' + db_name + '.synchronous = 0;' )
+                self._c.execute( 'PRAGMA ' + db_name + '.synchronous = 1;' )
                 
                 try:
                     
@@ -500,9 +500,9 @@ class HydrusDB( object ):
                         
                     else:
                         
-                        self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = MEMORY;' )
+                        self._c.execute( 'PRAGMA ' + db_name + '.journal_mode = WAL;' )
                         
-                        self._c.execute( 'PRAGMA ' + db_name + '.synchronous = 0;' )
+                        self._c.execute( 'PRAGMA ' + db_name + '.synchronous = 1;' )
                         
                         self._c.execute( 'SELECT * FROM ' + db_name + '.sqlite_master;' ).fetchone()
                         
