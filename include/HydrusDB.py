@@ -48,7 +48,7 @@ def ReadLargeIdQueryInSeparateChunks( cursor, select_statement, chunk_size ):
 def VacuumDB( db_path ):
     pass
         
-    
+
 class HydrusDB( object ):
     
     READ_WRITE_ACTIONS = []
@@ -99,8 +99,9 @@ class HydrusDB( object ):
         self._InitDB()
         
         self._RepairDB()
-        
-        ( version, ) = self._c.execute( 'SELECT version FROM version;' ).fetchone()
+
+        self._c.execute('SELECT version FROM version;')
+        ( version, ) = self._c.fetchone()
         
         if version > HC.SOFTWARE_VERSION:
             
@@ -149,9 +150,9 @@ class HydrusDB( object ):
                     
                 
                 raise e
-                
-            
-            ( version, ) = self._c.execute( 'SELECT version FROM version;' ).fetchone()
+
+            self._c.execute('SELECT version FROM version;')
+            ( version, ) = self._c.fetchone()
             
         
         self._CloseDBCursor()
