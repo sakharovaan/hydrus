@@ -695,5 +695,3 @@ class Imageboard( HydrusData.HydrusYAMLBase ):
     def GetBoardInfo( self ): return ( self._post_url, self._flood_time, self._form_fields, self._restrictions )
     
     def GetName( self ): return self._name
-    
-sqlite3.register_adapter( Imageboard, yaml.safe_dump )

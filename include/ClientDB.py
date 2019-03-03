@@ -20,6 +20,7 @@ import gc
 import hashlib
 import itertools
 import json
+import yaml
 from . import HydrusConstants as HC
 from . import HydrusData
 from . import HydrusDB
@@ -192,7 +193,7 @@ class DB( HydrusDB.HydrusDB ):
             
             # insert the files
             
-            self._c.executemany( 'INSERT IGNORE INTO current_files VALUES ( %s, %s, %s );', ( ( service_id, hash_id, timestamp ) for ( hash_id, timestamp ) in valid_rows ) )
+            self._c.executemany( 'INSERT IGNORE INTO current_files VALUES ( %s, %s, %s );', list( ( service_id, hash_id, timestamp ) for ( hash_id, timestamp ) in valid_rows ) )
             
             self._c.execute( 'DELETE FROM file_transfers WHERE service_id = %s AND hash_id IN ' + splayed_valid_hash_ids + ';', ( service_id, ) )
             
@@ -317,10 +318,10 @@ class DB( HydrusDB.HydrusDB ):
     
     def _AddTagParents( self, service_id, pairs, make_content_updates = False ):
         
-        self._c.executemany( 'DELETE FROM tag_parents WHERE service_id = %s AND child_tag_id = %s AND parent_tag_id = %s;', ( ( service_id, child_tag_id, parent_tag_id ) for ( child_tag_id, parent_tag_id ) in pairs ) )
-        self._c.executemany( 'DELETE FROM tag_parent_petitions WHERE service_id = %s AND child_tag_id = %s AND parent_tag_id = %s AND status = %s;', ( ( service_id, child_tag_id, parent_tag_id, HC.CONTENT_STATUS_PENDING ) for ( child_tag_id, parent_tag_id ) in pairs )  )
+        self._c.executemany( 'DELETE FROM tag_parents WHERE service_id = %s AND child_tag_id = %s AND parent_tag_id = %s;', list( ( service_id, child_tag_id, parent_tag_id ) for ( child_tag_id, parent_tag_id ) in pairs ) )
+        self._c.executemany( 'DELETE FROM tag_parent_petitions WHERE service_id = %s AND child_tag_id = %s AND parent_tag_id = %s AND status = %s;', list( ( service_id, child_tag_id, parent_tag_id, HC.CONTENT_STATUS_PENDING ) for ( child_tag_id, parent_tag_id ) in pairs )  )
         
-        self._c.executemany( 'INSERT IGNORE INTO tag_parents ( service_id, child_tag_id, parent_tag_id, status ) VALUES ( %s, %s, %s, %s );', ( ( service_id, child_tag_id, parent_tag_id, HC.CONTENT_STATUS_CURRENT ) for ( child_tag_id, parent_tag_id ) in pairs ) )
+        self._c.executemany( 'INSERT IGNORE INTO tag_parents ( service_id, child_tag_id, parent_tag_id, status ) VALUES ( %s, %s, %s, %s );', list( ( service_id, child_tag_id, parent_tag_id, HC.CONTENT_STATUS_CURRENT ) for ( child_tag_id, parent_tag_id ) in pairs ) )
         
         tag_ids = set()
         
@@ -337,10 +338,10 @@ class DB( HydrusDB.HydrusDB ):
     
     def _AddTagSiblings( self, service_id, pairs, make_content_updates = False ):
         
-        self._c.executemany( 'DELETE FROM tag_siblings WHERE service_id = %s AND bad_tag_id = %s;', ( ( service_id, bad_tag_id ) for ( bad_tag_id, good_tag_id ) in pairs ) )
-        self._c.executemany( 'DELETE FROM tag_sibling_petitions WHERE service_id = %s AND bad_tag_id = %s AND status = %s;', ( ( service_id, bad_tag_id, HC.CONTENT_STATUS_PENDING ) for ( bad_tag_id, good_tag_id ) in pairs ) )
+        self._c.executemany( 'DELETE FROM tag_siblings WHERE service_id = %s AND bad_tag_id = %s;', list( ( service_id, bad_tag_id ) for ( bad_tag_id, good_tag_id ) in pairs ) )
+        self._c.executemany( 'DELETE FROM tag_sibling_petitions WHERE service_id = %s AND bad_tag_id = %s AND status = %s;', list( ( service_id, bad_tag_id, HC.CONTENT_STATUS_PENDING ) for ( bad_tag_id, good_tag_id ) in pairs ) )
         
-        self._c.executemany( 'INSERT IGNORE INTO tag_siblings ( service_id, bad_tag_id, good_tag_id, status ) VALUES ( %s, %s, %s, %s );', ( ( service_id, bad_tag_id, good_tag_id, HC.CONTENT_STATUS_CURRENT ) for ( bad_tag_id, good_tag_id ) in pairs ) )
+        self._c.executemany( 'INSERT IGNORE INTO tag_siblings ( service_id, bad_tag_id, good_tag_id, status ) VALUES ( %s, %s, %s, %s );', list( ( service_id, bad_tag_id, good_tag_id, HC.CONTENT_STATUS_CURRENT ) for ( bad_tag_id, good_tag_id ) in pairs ) )
         
         tag_ids = set()
         
@@ -546,11 +547,11 @@ class DB( HydrusDB.HydrusDB ):
         
         ac_cache_table_name = GenerateCombinedFilesMappingsCacheTableName( service_id )
         
-        self._c.executemany( 'INSERT IGNORE INTO ' + ac_cache_table_name + ' ( tag_id, current_count, pending_count ) VALUES ( %s, %s, %s );', ( ( tag_id, 0, 0 ) for ( tag_id, current_delta, pending_delta ) in count_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO ' + ac_cache_table_name + ' ( tag_id, current_count, pending_count ) VALUES ( %s, %s, %s );', list( ( tag_id, 0, 0 ) for ( tag_id, current_delta, pending_delta ) in count_ids ) )
         
-        self._c.executemany( 'UPDATE ' + ac_cache_table_name + ' SET current_count = current_count + %s, pending_count = pending_count + %s WHERE tag_id = %s;', ( ( current_delta, pending_delta, tag_id ) for ( tag_id, current_delta, pending_delta ) in count_ids ) )
+        self._c.executemany( 'UPDATE ' + ac_cache_table_name + ' SET current_count = current_count + %s, pending_count = pending_count + %s WHERE tag_id = %s;', list( ( current_delta, pending_delta, tag_id ) for ( tag_id, current_delta, pending_delta ) in count_ids ) )
         
-        self._c.executemany( 'DELETE FROM ' + ac_cache_table_name + ' WHERE tag_id = %s AND current_count = %s AND pending_count = %s;', ( ( tag_id, 0, 0 ) for ( tag_id, current_delta, pending_delta ) in count_ids ) )
+        self._c.executemany( 'DELETE FROM ' + ac_cache_table_name + ' WHERE tag_id = %s AND current_count = %s AND pending_count = %s;', list( ( tag_id, 0, 0 ) for ( tag_id, current_delta, pending_delta ) in count_ids ) )
         
     
     def _CacheRepositoryAddHashes( self, service_id, service_hash_ids_to_hashes ):
@@ -725,8 +726,8 @@ class DB( HydrusDB.HydrusDB ):
                     
                 
             
-            self._c.executemany( 'UPDATE shape_vptree SET inner_population = inner_population + 1 WHERE phash_id = %s;', ( ( ancestor_id, ) for ancestor_id in ancestors_we_are_inside ) )
-            self._c.executemany( 'UPDATE shape_vptree SET outer_population = outer_population + 1 WHERE phash_id = %s;', ( ( ancestor_id, ) for ancestor_id in ancestors_we_are_outside ) )
+            self._c.executemany( 'UPDATE shape_vptree SET inner_population = inner_population + 1 WHERE phash_id = %s;', list( ( ancestor_id, ) for ancestor_id in ancestors_we_are_inside ) )
+            self._c.executemany( 'UPDATE shape_vptree SET outer_population = outer_population + 1 WHERE phash_id = %s;', list( ( ancestor_id, ) for ancestor_id in ancestors_we_are_outside ) )
             
         
         radius = None
@@ -749,7 +750,7 @@ class DB( HydrusDB.HydrusDB ):
             phash_ids.add( phash_id )
             
         
-        self._c.executemany( 'INSERT IGNORE INTO shape_perceptual_hash_map ( phash_id, hash_id ) VALUES ( %s, %s );', ( ( phash_id, hash_id ) for phash_id in phash_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO shape_perceptual_hash_map ( phash_id, hash_id ) VALUES ( %s, %s );', list( ( phash_id, hash_id ) for phash_id in phash_ids ) )
         
         if self._GetRowCount() > 0:
             
@@ -781,18 +782,18 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.execute( 'DELETE FROM duplicate_pairs WHERE duplicate_type = %s;', ( HC.DUPLICATE_UNKNOWN, ) )
         
-        self._c.executemany( 'UPDATE shape_search_cache SET searched_distance = NULL WHERE hash_id = %s;', ( ( hash_id, ) for hash_id in hash_ids ) )
+        self._c.executemany( 'UPDATE shape_search_cache SET searched_distance = NULL WHERE hash_id = %s;', list( ( hash_id, ) for hash_id in hash_ids ) )
         
     
     def _CacheSimilarFilesDisassociatePHashes( self, hash_id, phash_ids ):
         
-        self._c.executemany( 'DELETE FROM shape_perceptual_hash_map WHERE phash_id = %s AND hash_id = %s;', ( ( phash_id, hash_id ) for phash_id in phash_ids ) )
+        self._c.executemany( 'DELETE FROM shape_perceptual_hash_map WHERE phash_id = %s AND hash_id = %s;', list( ( phash_id, hash_id ) for phash_id in phash_ids ) )
         
         useful_phash_ids = { phash for ( phash, ) in self._c.execute( 'SELECT phash_id FROM shape_perceptual_hash_map WHERE phash_id IN ' + HydrusData.SplayListForDB( phash_ids ) + ';' ) }
         
         useless_phash_ids = phash_ids.difference( useful_phash_ids )
         
-        self._c.executemany( 'INSERT IGNORE INTO shape_maintenance_branch_regen ( phash_id ) VALUES ( %s );', ( ( phash_id, ) for phash_id in useless_phash_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO shape_maintenance_branch_regen ( phash_id ) VALUES ( %s );', list( ( phash_id, ) for phash_id in useless_phash_ids ) )
         
     
     def _CacheSimilarFilesGenerateBranch( self, job_key, parent_id, phash_id, phash, children ):
@@ -1331,7 +1332,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 # double-check the files exist in shape_search_cache, as I think stale branches are producing deleted file pairs here
                 
-                self._c.executemany( 'INSERT IGNORE INTO duplicate_pairs ( smaller_hash_id, larger_hash_id, duplicate_type ) VALUES ( %s, %s, %s );', ( ( min( hash_id, duplicate_hash_id ), max( hash_id, duplicate_hash_id ), HC.DUPLICATE_UNKNOWN ) for duplicate_hash_id in duplicate_hash_ids ) )
+                self._c.executemany( 'INSERT IGNORE INTO duplicate_pairs ( smaller_hash_id, larger_hash_id, duplicate_type ) VALUES ( %s, %s, %s );', list( ( min( hash_id, duplicate_hash_id ), max( hash_id, duplicate_hash_id ), HC.DUPLICATE_UNKNOWN ) for duplicate_hash_id in duplicate_hash_ids ) )
                 
                 pairs_found += self._GetRowCount()
                 
@@ -1685,9 +1686,9 @@ class DB( HydrusDB.HydrusDB ):
         
         unbalanced_phash_ids = { p_id for ( p_id, p_h ) in unbalanced_nodes }
         
-        self._c.executemany( 'DELETE FROM shape_vptree WHERE phash_id = %s;', ( ( p_id, ) for p_id in unbalanced_phash_ids ) )
+        self._c.executemany( 'DELETE FROM shape_vptree WHERE phash_id = %s;', list( ( p_id, ) for p_id in unbalanced_phash_ids ) )
         
-        self._c.executemany( 'DELETE FROM shape_maintenance_branch_regen WHERE phash_id = %s;', ( ( p_id, ) for p_id in unbalanced_phash_ids ) )
+        self._c.executemany( 'DELETE FROM shape_maintenance_branch_regen WHERE phash_id = %s;', list( ( p_id, ) for p_id in unbalanced_phash_ids ) )
         
         select_statement = 'SELECT phash_id FROM shape_perceptual_hash_map WHERE phash_id IN %s;'
         
@@ -1695,7 +1696,7 @@ class DB( HydrusDB.HydrusDB ):
         
         orphan_phash_ids = unbalanced_phash_ids.difference( useful_phash_ids )
         
-        self._c.executemany( 'DELETE FROM shape_perceptual_hashes WHERE phash_id = %s;', ( ( p_id, ) for p_id in orphan_phash_ids ) )
+        self._c.executemany( 'DELETE FROM shape_perceptual_hashes WHERE phash_id = %s;', list( ( p_id, ) for p_id in orphan_phash_ids ) )
         
         useful_nodes = [ row for row in unbalanced_nodes if row[0] in useful_phash_ids ]
         
@@ -1778,7 +1779,7 @@ class DB( HydrusDB.HydrusDB ):
             hash_ids = self._STL( self._c.execute( 'SELECT hash_id FROM files_info NATURAL JOIN current_files WHERE service_id = %s AND mime IN ' + HydrusData.SplayListForDB( HC.MIMES_WE_CAN_PHASH ) + ';', ( self._combined_local_file_service_id, ) ) )
             
         
-        self._c.executemany( 'INSERT IGNORE INTO shape_maintenance_phash_regen ( hash_id ) VALUES ( %s );', ( ( hash_id, ) for hash_id in hash_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO shape_maintenance_phash_regen ( hash_id ) VALUES ( %s );', list( ( hash_id, ) for hash_id in hash_ids ) )
         
     
     def _CacheSimilarFilesSearch( self, hash_id, max_hamming_distance ):
@@ -2094,7 +2095,7 @@ class DB( HydrusDB.HydrusDB ):
         
         ( cache_files_table_name, cache_current_mappings_table_name, cache_deleted_mappings_table_name, cache_pending_mappings_table_name, ac_cache_table_name ) = GenerateSpecificMappingsCacheTableNames( file_service_id, tag_service_id )
         
-        self._c.executemany( 'INSERT IGNORE INTO ' + cache_files_table_name + ' VALUES ( %s );', ( ( hash_id, ) for hash_id in hash_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO ' + cache_files_table_name + ' VALUES ( %s );', list( ( hash_id, ) for hash_id in hash_ids ) )
         
         ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name ) = GenerateMappingsTableNames( tag_service_id )
         
@@ -2128,7 +2129,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 if num_current > 0:
                     
-                    self._c.executemany( 'INSERT IGNORE INTO ' + cache_current_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', ( ( hash_id, tag_id ) for hash_id in current_hash_ids ) )
+                    self._c.executemany( 'INSERT IGNORE INTO ' + cache_current_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', list( ( hash_id, tag_id ) for hash_id in current_hash_ids ) )
                     
                 
                 #
@@ -2139,7 +2140,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 if num_deleted > 0:
                     
-                    self._c.executemany( 'INSERT IGNORE INTO ' + cache_deleted_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', ( ( hash_id, tag_id ) for hash_id in deleted_hash_ids ) )
+                    self._c.executemany( 'INSERT IGNORE INTO ' + cache_deleted_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', list( ( hash_id, tag_id ) for hash_id in deleted_hash_ids ) )
                     
                 
                 #
@@ -2150,7 +2151,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 if num_pending > 0:
                     
-                    self._c.executemany( 'INSERT IGNORE INTO ' + cache_pending_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', ( ( hash_id, tag_id ) for hash_id in pending_hash_ids ) )
+                    self._c.executemany( 'INSERT IGNORE INTO ' + cache_pending_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', list( ( hash_id, tag_id ) for hash_id in pending_hash_ids ) )
                     
                 
                 if num_current > 0 or num_pending > 0:
@@ -2162,9 +2163,9 @@ class DB( HydrusDB.HydrusDB ):
         
         if len( ac_cache_changes ) > 0:
             
-            self._c.executemany( 'INSERT IGNORE INTO ' + ac_cache_table_name + ' ( tag_id, current_count, pending_count ) VALUES ( %s, %s, %s );', ( ( tag_id, 0, 0 ) for ( tag_id, num_current, num_pending ) in ac_cache_changes ) )
+            self._c.executemany( 'INSERT IGNORE INTO ' + ac_cache_table_name + ' ( tag_id, current_count, pending_count ) VALUES ( %s, %s, %s );', list( ( tag_id, 0, 0 ) for ( tag_id, num_current, num_pending ) in ac_cache_changes ) )
             
-            self._c.executemany( 'UPDATE ' + ac_cache_table_name + ' SET current_count = current_count + %s, pending_count = pending_count + %s WHERE tag_id = %s;', ( ( num_current, num_pending, tag_id ) for ( tag_id, num_current, num_pending ) in ac_cache_changes ) )
+            self._c.executemany( 'UPDATE ' + ac_cache_table_name + ' SET current_count = current_count + %s, pending_count = pending_count + %s WHERE tag_id = %s;', list( ( num_current, num_pending, tag_id ) for ( tag_id, num_current, num_pending ) in ac_cache_changes ) )
             
         
     
@@ -2178,13 +2179,13 @@ class DB( HydrusDB.HydrusDB ):
             
             if len( hash_ids ) > 0:
                 
-                self._c.executemany( 'DELETE FROM ' + cache_pending_mappings_table_name + ' WHERE hash_id = %s AND tag_id = %s;', ( ( hash_id, tag_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + cache_pending_mappings_table_name + ' WHERE hash_id = %s AND tag_id = %s;', list( ( hash_id, tag_id ) for hash_id in hash_ids ) )
                 
                 num_pending_rescinded = self._GetRowCount()
                 
                 #
                 
-                self._c.executemany( 'INSERT IGNORE INTO ' + cache_current_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', ( ( hash_id, tag_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'INSERT IGNORE INTO ' + cache_current_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', list( ( hash_id, tag_id ) for hash_id in hash_ids ) )
                 
                 num_added = self._GetRowCount()
                 
@@ -2201,7 +2202,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 #
                 
-                self._c.executemany( 'DELETE FROM ' + cache_deleted_mappings_table_name + ' WHERE hash_id = %s AND tag_id = %s;', ( ( hash_id, tag_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + cache_deleted_mappings_table_name + ' WHERE hash_id = %s AND tag_id = %s;', list( ( hash_id, tag_id ) for hash_id in hash_ids ) )
                 
             
         
@@ -2225,7 +2226,7 @@ class DB( HydrusDB.HydrusDB ):
         
         ( cache_files_table_name, cache_current_mappings_table_name, cache_deleted_mappings_table_name, cache_pending_mappings_table_name, ac_cache_table_name ) = GenerateSpecificMappingsCacheTableNames( file_service_id, tag_service_id )
         
-        self._c.executemany( 'DELETE FROM ' + cache_files_table_name + ' WHERE hash_id = %s;', ( ( hash_id, ) for hash_id in hash_ids ) )
+        self._c.executemany( 'DELETE FROM ' + cache_files_table_name + ' WHERE hash_id = %s;', list( ( hash_id, ) for hash_id in hash_ids ) )
         
         ac_cache_changes = []
         
@@ -2257,7 +2258,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 if num_current > 0:
                     
-                    self._c.executemany( 'DELETE FROM ' + cache_current_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in current_hash_ids ) )
+                    self._c.executemany( 'DELETE FROM ' + cache_current_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in current_hash_ids ) )
                     
                 
                 #
@@ -2268,7 +2269,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 if num_deleted > 0:
                     
-                    self._c.executemany( 'DELETE FROM ' + cache_deleted_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in deleted_hash_ids ) )
+                    self._c.executemany( 'DELETE FROM ' + cache_deleted_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in deleted_hash_ids ) )
                     
                 
                 #
@@ -2279,7 +2280,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 if num_pending > 0:
                     
-                    self._c.executemany( 'DELETE FROM ' + cache_pending_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in pending_hash_ids ) )
+                    self._c.executemany( 'DELETE FROM ' + cache_pending_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in pending_hash_ids ) )
                     
                 
                 ac_cache_changes.append( ( tag_id, num_current, num_pending ) )
@@ -2288,9 +2289,9 @@ class DB( HydrusDB.HydrusDB ):
         
         if len( ac_cache_changes ) > 0:
             
-            self._c.executemany( 'UPDATE ' + ac_cache_table_name + ' SET current_count = current_count - %s, pending_count = pending_count - %s WHERE tag_id = %s;', ( ( num_current, num_pending, tag_id ) for ( tag_id, num_current, num_pending ) in ac_cache_changes ) )
+            self._c.executemany( 'UPDATE ' + ac_cache_table_name + ' SET current_count = current_count - %s, pending_count = pending_count - %s WHERE tag_id = %s;', list( ( num_current, num_pending, tag_id ) for ( tag_id, num_current, num_pending ) in ac_cache_changes ) )
             
-            self._c.executemany( 'DELETE FROM ' + ac_cache_table_name + ' WHERE tag_id = %s AND current_count = %s AND pending_count = %s;', ( ( tag_id, 0, 0 ) for ( tag_id, num_current, num_pending ) in ac_cache_changes ) )
+            self._c.executemany( 'DELETE FROM ' + ac_cache_table_name + ' WHERE tag_id = %s AND current_count = %s AND pending_count = %s;', list( ( tag_id, 0, 0 ) for ( tag_id, num_current, num_pending ) in ac_cache_changes ) )
             
         
     
@@ -2304,7 +2305,7 @@ class DB( HydrusDB.HydrusDB ):
             
             if len( hash_ids ) > 0:
                 
-                self._c.executemany( 'DELETE FROM ' + cache_current_mappings_table_name + ' WHERE hash_id = %s AND tag_id = %s;', ( ( hash_id, tag_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + cache_current_mappings_table_name + ' WHERE hash_id = %s AND tag_id = %s;', list( ( hash_id, tag_id ) for hash_id in hash_ids ) )
                 
                 num_deleted = self._GetRowCount()
                 
@@ -2317,7 +2318,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 #
                 
-                self._c.executemany( 'INSERT IGNORE INTO ' + cache_deleted_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', ( ( hash_id, tag_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'INSERT IGNORE INTO ' + cache_deleted_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', list( ( hash_id, tag_id ) for hash_id in hash_ids ) )
                 
             
         
@@ -2378,7 +2379,7 @@ class DB( HydrusDB.HydrusDB ):
             
             if len( hash_ids ) > 0:
                 
-                self._c.executemany( 'INSERT IGNORE INTO ' + cache_pending_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', ( ( hash_id, tag_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'INSERT IGNORE INTO ' + cache_pending_mappings_table_name + ' ( hash_id, tag_id ) VALUES ( %s, %s );', list( ( hash_id, tag_id ) for hash_id in hash_ids ) )
                 
                 num_added = self._GetRowCount()
                 
@@ -2403,7 +2404,7 @@ class DB( HydrusDB.HydrusDB ):
             
             if len( hash_ids ) > 0:
                 
-                self._c.executemany( 'DELETE FROM ' + cache_pending_mappings_table_name + ' WHERE hash_id = %s AND tag_id = %s;', ( ( hash_id, tag_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + cache_pending_mappings_table_name + ' WHERE hash_id = %s AND tag_id = %s;', list( ( hash_id, tag_id ) for hash_id in hash_ids ) )
                 
                 num_deleted = self._GetRowCount()
                 
@@ -2833,7 +2834,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.execute( 'CREATE TABLE version ( version INTEGER );' )
         
-        self._c.execute( 'CREATE TABLE yaml_dumps ( dump_type INTEGER, dump_name varchar(255), dump JSON, PRIMARY KEY ( dump_type, dump_name ) );' )
+        self._c.execute( 'CREATE TABLE yaml_dumps ( dump_type INTEGER, dump_name varchar(255), dump TEXT, PRIMARY KEY ( dump_type, dump_name ) );' )
         
         # caches
         
@@ -2894,8 +2895,8 @@ class DB( HydrusDB.HydrusDB ):
             self._AddService( service_key, service_type, name, dictionary )
             
         
-        self._c.executemany( 'INSERT INTO yaml_dumps VALUES ( %s, %s, %s );', ( ( YAML_DUMP_ID_IMAGEBOARD, name, imageboards ) for ( name, imageboards ) in ClientDefaults.GetDefaultImageboards() ) )
-        
+        self._c.executemany( 'INSERT INTO yaml_dumps VALUES ( %s, %s, %s );', list( ( YAML_DUMP_ID_IMAGEBOARD, name, yaml.safe_dump(imageboards) ) for ( name, imageboards ) in ClientDefaults.GetDefaultImageboards() ) )
+
         new_options = ClientOptions.ClientOptions( self._db_dir )
         
         new_options.SetSimpleDownloaderFormulae( ClientDefaults.GetDefaultSimpleDownloaderFormulae() )
@@ -3251,18 +3252,18 @@ class DB( HydrusDB.HydrusDB ):
     
     def _DeleteTagParents( self, service_id, pairs ):
         
-        self._c.executemany( 'DELETE FROM tag_parents WHERE service_id = %s AND child_tag_id = %s AND parent_tag_id = %s;', ( ( service_id, child_tag_id, parent_tag_id ) for ( child_tag_id, parent_tag_id ) in pairs ) )
-        self._c.executemany( 'DELETE FROM tag_parent_petitions WHERE service_id = %s AND child_tag_id = %s AND parent_tag_id = %s AND status = %s;', ( ( service_id, child_tag_id, parent_tag_id, HC.CONTENT_STATUS_PETITIONED ) for ( child_tag_id, parent_tag_id ) in pairs )  )
+        self._c.executemany( 'DELETE FROM tag_parents WHERE service_id = %s AND child_tag_id = %s AND parent_tag_id = %s;', list( ( service_id, child_tag_id, parent_tag_id ) for ( child_tag_id, parent_tag_id ) in pairs ) )
+        self._c.executemany( 'DELETE FROM tag_parent_petitions WHERE service_id = %s AND child_tag_id = %s AND parent_tag_id = %s AND status = %s;', list( ( service_id, child_tag_id, parent_tag_id, HC.CONTENT_STATUS_PETITIONED ) for ( child_tag_id, parent_tag_id ) in pairs )  )
         
-        self._c.executemany( 'INSERT IGNORE INTO tag_parents ( service_id, child_tag_id, parent_tag_id, status ) VALUES ( %s, %s, %s, %s );', ( ( service_id, child_tag_id, parent_tag_id, HC.CONTENT_STATUS_DELETED ) for ( child_tag_id, parent_tag_id ) in pairs ) )
+        self._c.executemany( 'INSERT IGNORE INTO tag_parents ( service_id, child_tag_id, parent_tag_id, status ) VALUES ( %s, %s, %s, %s );', list( ( service_id, child_tag_id, parent_tag_id, HC.CONTENT_STATUS_DELETED ) for ( child_tag_id, parent_tag_id ) in pairs ) )
         
     
     def _DeleteTagSiblings( self, service_id, pairs ):
         
-        self._c.executemany( 'DELETE FROM tag_siblings WHERE service_id = %s AND bad_tag_id = %s;', ( ( service_id, bad_tag_id ) for ( bad_tag_id, good_tag_id ) in pairs ) )
-        self._c.executemany( 'DELETE FROM tag_sibling_petitions WHERE service_id = %s AND bad_tag_id = %s AND status = %s;', ( ( service_id, bad_tag_id, HC.CONTENT_STATUS_PETITIONED ) for ( bad_tag_id, good_tag_id ) in pairs ) )
+        self._c.executemany( 'DELETE FROM tag_siblings WHERE service_id = %s AND bad_tag_id = %s;', list( ( service_id, bad_tag_id ) for ( bad_tag_id, good_tag_id ) in pairs ) )
+        self._c.executemany( 'DELETE FROM tag_sibling_petitions WHERE service_id = %s AND bad_tag_id = %s AND status = %s;', list( ( service_id, bad_tag_id, HC.CONTENT_STATUS_PETITIONED ) for ( bad_tag_id, good_tag_id ) in pairs ) )
         
-        self._c.executemany( 'INSERT IGNORE INTO tag_siblings ( service_id, bad_tag_id, good_tag_id, status ) VALUES ( %s, %s, %s, %s );', ( ( service_id, bad_tag_id, good_tag_id, HC.CONTENT_STATUS_DELETED ) for ( bad_tag_id, good_tag_id ) in pairs ) )
+        self._c.executemany( 'INSERT IGNORE INTO tag_siblings ( service_id, bad_tag_id, good_tag_id, status ) VALUES ( %s, %s, %s, %s );', list( ( service_id, bad_tag_id, good_tag_id, HC.CONTENT_STATUS_DELETED ) for ( bad_tag_id, good_tag_id ) in pairs ) )
         
     
     def _DeleteYAMLDump( self, dump_type, dump_name = None ):
@@ -4193,7 +4194,7 @@ class DB( HydrusDB.HydrusDB ):
         
         if len( hashes_not_in_db ) > 0:
             
-            self._c.executemany( 'INSERT INTO hashes ( hash ) VALUES ( %s );', ( ( hash , ) for hash in hashes_not_in_db ) )
+            self._c.executemany( 'INSERT INTO hashes ( hash ) VALUES ( %s );', list( ( hash , ) for hash in hashes_not_in_db ) )
             
             for hash in hashes_not_in_db:
                 
@@ -6179,7 +6180,7 @@ class DB( HydrusDB.HydrusDB ):
         
         if len( decayed ) > 0:
             
-            self._c.executemany( 'DELETE FROM recent_tags WHERE service_id = %s AND tag_id = %s;', ( ( service_id, tag_id ) for tag_id in decayed ) )
+            self._c.executemany( 'DELETE FROM recent_tags WHERE service_id = %s AND tag_id = %s;', list( ( service_id, tag_id ) for tag_id in decayed ) )
             
         
         sorted_recent_tag_ids = newest_first[ : num_we_want ]
@@ -7219,7 +7220,7 @@ class DB( HydrusDB.HydrusDB ):
     
     def _InboxFiles( self, hash_ids ):
         
-        self._c.executemany( 'INSERT IGNORE INTO file_inbox VALUES ( %s );', ( ( hash_id, ) for hash_id in hash_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO file_inbox VALUES ( %s );', list( ( hash_id, ) for hash_id in hash_ids ) )
         
         num_added = self._GetRowCount()
         
@@ -7466,7 +7467,7 @@ class DB( HydrusDB.HydrusDB ):
             
             self._ReparseFiles( hashes, pub_job_key = False )
             
-            self._c.executemany( 'DELETE FROM reparse_files_queue WHERE hash_id = %s;', ( ( hash_id, ) for hash_id in hash_ids ) )
+            self._c.executemany( 'DELETE FROM reparse_files_queue WHERE hash_id = %s;', list( ( hash_id, ) for hash_id in hash_ids ) )
             
             hash_ids = self._STL( self._c.execute( 'SELECT hash_id FROM reparse_files_queue LIMIT 10;' ) )
             
@@ -7679,7 +7680,7 @@ class DB( HydrusDB.HydrusDB ):
                                     
                                     hash_ids = self._GetHashIds( hashes )
                                     
-                                    self._c.executemany( 'DELETE FROM deleted_files WHERE service_id = %s AND hash_id = %s;', ( ( service_id, hash_id ) for hash_id in hash_ids ) )
+                                    self._c.executemany( 'DELETE FROM deleted_files WHERE service_id = %s AND hash_id = %s;', list( ( service_id, hash_id ) for hash_id in hash_ids ) )
                                     
                                 
                             
@@ -7714,7 +7715,7 @@ class DB( HydrusDB.HydrusDB ):
                             
                             hash_ids = self._GetHashIds( hashes )
                             
-                            self._c.executemany( 'INSERT IGNORE INTO file_transfers ( service_id, hash_id ) VALUES ( %s, %s );', ( ( service_id, hash_id ) for hash_id in hash_ids ) )
+                            self._c.executemany( 'INSERT IGNORE INTO file_transfers ( service_id, hash_id ) VALUES ( %s, %s );', list( ( service_id, hash_id ) for hash_id in hash_ids ) )
                             
                             if service_key == CC.COMBINED_LOCAL_FILE_SERVICE_KEY: notify_new_downloads = True
                             else: notify_new_pending = True
@@ -7729,7 +7730,7 @@ class DB( HydrusDB.HydrusDB ):
                             
                             self._c.execute( 'DELETE FROM file_petitions WHERE service_id = %s AND hash_id IN ' + HydrusData.SplayListForDB( hash_ids ) + ';', ( service_id, ) )
                             
-                            self._c.executemany( 'INSERT IGNORE INTO file_petitions ( service_id, hash_id, reason_id ) VALUES ( %s, %s, %s );', ( ( service_id, hash_id, reason_id ) for hash_id in hash_ids ) )
+                            self._c.executemany( 'INSERT IGNORE INTO file_petitions ( service_id, hash_id, reason_id ) VALUES ( %s, %s, %s );', list( ( service_id, hash_id, reason_id ) for hash_id in hash_ids ) )
                             
                             notify_new_pending = True
                             
@@ -7812,7 +7813,7 @@ class DB( HydrusDB.HydrusDB ):
                             url_ids = { self._GetURLId( url ) for url in urls }
                             hash_ids = self._GetHashIds( hashes )
                             
-                            self._c.executemany( 'INSERT IGNORE INTO url_map ( hash_id, url_id ) VALUES ( %s, %s );', itertools.product( hash_ids, url_ids ) )
+                            self._c.executemany( 'INSERT IGNORE INTO url_map ( hash_id, url_id ) VALUES ( %s, %s );', list(itertools.product( hash_ids, url_ids )) )
                             
                         elif action == HC.CONTENT_UPDATE_DELETE:
                             
@@ -7821,7 +7822,7 @@ class DB( HydrusDB.HydrusDB ):
                             url_ids = { self._GetURLId( url ) for url in urls }
                             hash_ids = self._GetHashIds( hashes )
                             
-                            self._c.executemany( 'DELETE FROM url_map WHERE hash_id = %s AND url_id = %s;', itertools.product( hash_ids, url_ids ) )
+                            self._c.executemany( 'DELETE FROM url_map WHERE hash_id = %s AND url_id = %s;', list(itertools.product( hash_ids, url_ids )) )
                             
                         
                     elif data_type == HC.CONTENT_TYPE_FILE_VIEWING_STATS:
@@ -8883,7 +8884,7 @@ class DB( HydrusDB.HydrusDB ):
             
             tag_ids = [ self._GetTagId( tag ) for tag in tags ]
             
-            self._c.executemany( 'REPLACE INTO recent_tags ( service_id, tag_id, timestamp ) VALUES ( %s, %s, %s );', ( ( service_id, tag_id, now ) for tag_id in tag_ids ) )
+            self._c.executemany( 'REPLACE INTO recent_tags ( service_id, tag_id, timestamp ) VALUES ( %s, %s, %s );', list( ( service_id, tag_id, now ) for tag_id in tag_ids ) )
             
         
     
@@ -9416,7 +9417,7 @@ class DB( HydrusDB.HydrusDB ):
                 self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s;', ( dump_type, dump_name ) )
                 
             
-            self._c.execute( 'INSERT INTO json_dumps_named ( dump_type, dump_name, version, timestamp, dump ) VALUES ( %s, %s, %s, %s, %s );', ( dump_type, dump_name, version, HydrusData.GetNow(), bytes( dump, 'utf-8'  ) ) )
+            self._c.execute( 'INSERT INTO json_dumps_named ( dump_type, dump_name, version, timestamp, dump ) VALUES ( %s, %s, %s, %s, %s );', ( dump_type, dump_name, version, HydrusData.GetNow(), json.dumps(dump) ) )
             
         else:
             
@@ -9437,7 +9438,7 @@ class DB( HydrusDB.HydrusDB ):
             
             self._c.execute( 'DELETE FROM json_dumps WHERE dump_type = %s;', ( dump_type, ) )
             
-            self._c.execute( 'INSERT INTO json_dumps ( dump_type, version, dump ) VALUES ( %s, %s, %s );', ( dump_type, version, bytes( dump, 'utf-8' ) ) )
+            self._c.execute( 'INSERT INTO json_dumps ( dump_type, version, dump ) VALUES ( %s, %s, %s );', ( dump_type, version, json.dumps( dump ) ) )
             
         
     
@@ -9502,7 +9503,7 @@ class DB( HydrusDB.HydrusDB ):
             
         
         self._c.execute( 'INSERT INTO service_directories ( service_id, directory_id, num_files, total_size, note ) VALUES ( %s, %s, %s, %s, %s );', ( service_id, directory_id, num_files, total_size, note ) )
-        self._c.executemany( 'INSERT INTO service_directory_file_map ( service_id, directory_id, hash_id ) VALUES ( %s, %s, %s );', ( ( service_id, directory_id, hash_id ) for hash_id in hash_ids ) )
+        self._c.executemany( 'INSERT INTO service_directory_file_map ( service_id, directory_id, hash_id ) VALUES ( %s, %s, %s );', list( ( service_id, directory_id, hash_id ) for hash_id in hash_ids ) )
         
     
     def _SetTagCensorship( self, info ):
@@ -9530,7 +9531,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.execute( 'DELETE FROM yaml_dumps WHERE dump_type = %s AND dump_name = %s;', ( dump_type, dump_name ) )
         
-        try: self._c.execute( 'INSERT INTO yaml_dumps ( dump_type, dump_name, dump ) VALUES ( %s, %s, %s );', ( dump_type, dump_name, data ) )
+        try: self._c.execute( 'INSERT INTO yaml_dumps ( dump_type, dump_name, dump ) VALUES ( %s, %s, %s );', ( dump_type, dump_name, yaml.safe_dump(data) ) )
         except:
             
             HydrusData.Print( ( dump_type, dump_name, data ) )
@@ -10186,7 +10187,7 @@ class DB( HydrusDB.HydrusDB ):
                     
                     if len( normalised_urls ) > 0:
                         
-                        self._c.executemany( 'INSERT IGNORE INTO urls ( hash_id, url ) VALUES ( %s, %s );', ( ( hash_id, normalised_url ) for normalised_url in normalised_urls ) )
+                        self._c.executemany( 'INSERT IGNORE INTO urls ( hash_id, url ) VALUES ( %s, %s );', list( ( hash_id, normalised_url ) for normalised_url in normalised_urls ) )
                         
                     
                     if i % 100 == 0:
@@ -10812,7 +10813,7 @@ class DB( HydrusDB.HydrusDB ):
                         
                         normalised_url_id = self._GetURLId( normalised_url )
                         
-                        self._c.executemany( 'INSERT IGNORE INTO url_map ( hash_id, url_id ) VALUES ( %s, %s );', ( ( hash_id, normalised_url_id ) for hash_id in hash_ids ) )
+                        self._c.executemany( 'INSERT IGNORE INTO url_map ( hash_id, url_id ) VALUES ( %s, %s );', list( ( hash_id, normalised_url_id ) for hash_id in hash_ids ) )
                         
                         self._c.execute( 'DELETE FROM url_map WHERE url_id = %s;', ( url_id, ) )
                         
@@ -11542,8 +11543,8 @@ class DB( HydrusDB.HydrusDB ):
         self._c.execute( 'CREATE TABLE mem.temp_tag_ids ( tag_id INTEGER );' )
         self._c.execute( 'CREATE TABLE mem.temp_hash_ids ( hash_id INTEGER );' )
         
-        self._c.executemany( 'INSERT INTO temp_tag_ids ( tag_id ) VALUES ( %s );', ( ( tag_id, ) for tag_id in tag_ids_to_search_for ) )
-        self._c.executemany( 'INSERT INTO temp_hash_ids ( hash_id ) VALUES ( %s );', ( ( hash_id, ) for hash_id in hash_ids_to_search_for ) )
+        self._c.executemany( 'INSERT INTO temp_tag_ids ( tag_id ) VALUES ( %s );', list( ( tag_id, ) for tag_id in tag_ids_to_search_for ) )
+        self._c.executemany( 'INSERT INTO temp_hash_ids ( hash_id ) VALUES ( %s );', list( ( hash_id, ) for hash_id in hash_ids_to_search_for ) )
         
         pre_existing_tag_ids = self._STS( self._c.execute( 'SELECT tag_id as t FROM temp_tag_ids WHERE EXISTS ( SELECT 1 FROM ' + current_mappings_table_name + ' WHERE tag_id = t );' ) )
         pre_existing_hash_ids = self._STS( self._c.execute( 'SELECT hash_id as h FROM temp_hash_ids WHERE EXISTS ( SELECT 1 FROM ' + current_mappings_table_name + ' WHERE hash_id = h );' ) )
@@ -11561,15 +11562,15 @@ class DB( HydrusDB.HydrusDB ):
             
             for ( tag_id, hash_ids ) in mappings_ids:
                 
-                self._c.executemany( 'DELETE FROM ' + deleted_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + deleted_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
                 
                 num_deleted_deleted = self._GetRowCount()
                 
-                self._c.executemany( 'DELETE FROM ' + pending_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + pending_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
                 
                 num_pending_deleted = self._GetRowCount()
                 
-                self._c.executemany( 'INSERT IGNORE INTO ' + current_mappings_table_name + ' VALUES ( %s, %s );', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'INSERT IGNORE INTO ' + current_mappings_table_name + ' VALUES ( %s, %s );', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
                 
                 num_current_inserted = self._GetRowCount()
                 
@@ -11591,15 +11592,15 @@ class DB( HydrusDB.HydrusDB ):
             
             for ( tag_id, hash_ids ) in deleted_mappings_ids:
                 
-                self._c.executemany( 'DELETE FROM ' + current_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + current_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
                 
                 num_current_deleted = self._GetRowCount()
                 
-                self._c.executemany( 'DELETE FROM ' + petitioned_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + petitioned_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
                 
                 num_petitions_deleted = self._GetRowCount()
                 
-                self._c.executemany( 'INSERT IGNORE INTO ' + deleted_mappings_table_name + ' VALUES ( %s, %s );', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'INSERT IGNORE INTO ' + deleted_mappings_table_name + ' VALUES ( %s, %s );', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
                 
                 num_deleted_inserted = self._GetRowCount()
                 
@@ -11635,7 +11636,7 @@ class DB( HydrusDB.HydrusDB ):
             
             for ( tag_id, hash_ids ) in pending_mappings_ids:
                 
-                self._c.executemany( 'INSERT IGNORE INTO ' + pending_mappings_table_name + ' VALUES ( %s, %s );', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'INSERT IGNORE INTO ' + pending_mappings_table_name + ' VALUES ( %s, %s );', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
                 
                 num_pending_inserted = self._GetRowCount()
                 
@@ -11654,7 +11655,7 @@ class DB( HydrusDB.HydrusDB ):
             
             for ( tag_id, hash_ids ) in pending_rescinded_mappings_ids:
                 
-                self._c.executemany( 'DELETE FROM ' + pending_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+                self._c.executemany( 'DELETE FROM ' + pending_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
                 
                 num_pending_deleted = self._GetRowCount()
                 
@@ -11701,7 +11702,7 @@ class DB( HydrusDB.HydrusDB ):
         
         for ( tag_id, hash_ids ) in petitioned_rescinded_mappings_ids:
             
-            self._c.executemany( 'DELETE FROM ' + petitioned_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', ( ( tag_id, hash_id ) for hash_id in hash_ids ) )
+            self._c.executemany( 'DELETE FROM ' + petitioned_mappings_table_name + ' WHERE tag_id = %s AND hash_id = %s;', list( ( tag_id, hash_id ) for hash_id in hash_ids ) )
             
             num_petitions_deleted = self._GetRowCount()
             

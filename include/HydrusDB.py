@@ -521,21 +521,21 @@ class HydrusDB( object ):
         
         # strip singleton tuples to an iterator
         
-        return ( item for ( item, ) in iterable_cursor )
+        return ( item for ( item, ) in self._c )
         
     
     def _STL( self, iterable_cursor ):
         
         # strip singleton tuples to a list
         
-        return [ item for ( item, ) in iterable_cursor ]
+        return [ item for ( item, ) in self._c  ]
         
     
     def _STS( self, iterable_cursor ):
         
         # strip singleton tuples to a set
         
-        return { item for ( item, ) in iterable_cursor }
+        return { item for ( item, ) in self._c  }
         
     
     def _UpdateDB( self, version ):
