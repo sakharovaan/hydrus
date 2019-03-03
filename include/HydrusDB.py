@@ -243,7 +243,9 @@ class HydrusDB( object ):
             table_name_simple = table_name
 
         index_name = table_name + '_' + '_'.join( columns ) + '_index'
-        
+        if len(index_name) > 64:
+            index_name = "_".join(x[:4] for x in index_name.split("_"))
+
         if unique:
             
             create_phrase = 'CREATE UNIQUE INDEX '
