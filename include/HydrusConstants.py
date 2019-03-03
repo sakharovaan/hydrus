@@ -58,7 +58,6 @@ LICENSE_PATH = os.path.join( BASE_DIR, 'license.txt' )
 
 #
 
-import sqlite3
 import traceback
 import yaml
 
@@ -725,16 +724,3 @@ def represent_python_tuple( self, data ): return self.represent_sequence( 'tag:y
 yaml.SafeLoader.add_constructor( 'tag:yaml.org,2002:python/tuple', construct_python_tuple )
 yaml.SafeDumper.add_representer( tuple, represent_python_tuple )
 
-# for some reason, sqlite doesn't parse to int before this, despite the column affinity
-# it gives the register_converter function a bytestring :/
-def integer_boolean_to_bool( integer_boolean ): return bool( int( integer_boolean ) )
-
-# sqlite mod
-
-sqlite3.register_adapter( dict, yaml.safe_dump )
-sqlite3.register_adapter( list, yaml.safe_dump )
-sqlite3.register_adapter( tuple, yaml.safe_dump )
-sqlite3.register_adapter( bool, int )
-
-sqlite3.register_converter( 'INTEGER_BOOLEAN', integer_boolean_to_bool )
-sqlite3.register_converter( 'TEXT_YAML', yaml.safe_load )

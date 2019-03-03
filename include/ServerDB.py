@@ -165,7 +165,7 @@ class DB( HydrusDB.HydrusDB ):
                     
                 
             
-            self._c.execute( 'INSERT OR IGNORE INTO files_info ( master_hash_id, size, mime, width, height, duration, num_frames, num_words ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? );', ( master_hash_id, size, mime, width, height, duration, num_frames, num_words ) )
+            self._c.execute( 'INSERT IGNORE INTO files_info ( master_hash_id, size, mime, width, height, duration, num_frames, num_words ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ? );', ( master_hash_id, size, mime, width, height, duration, num_frames, num_words ) )
             
         
         return master_hash_id
@@ -249,7 +249,7 @@ class DB( HydrusDB.HydrusDB ):
             
             self._c.execute( 'DELETE FROM analyze_timestamps WHERE name = ?;', ( name, ) )
             
-            self._c.execute( 'INSERT OR IGNORE INTO analyze_timestamps ( name, timestamp ) VALUES ( ?, ? );', ( name, HydrusData.GetNow() ) )
+            self._c.execute( 'INSERT IGNORE INTO analyze_timestamps ( name, timestamp ) VALUES ( ?, ? );', ( name, HydrusData.GetNow() ) )
             
             time_took = HydrusData.GetNowPrecise() - started
             
@@ -339,15 +339,15 @@ class DB( HydrusDB.HydrusDB ):
             HydrusPaths.MakeSureDirectoryExists( new_dir )
             
         
-        self._c.execute( 'CREATE TABLE services ( service_id INTEGER PRIMARY KEY, service_key BLOB_BYTES, service_type INTEGER, name TEXT, port INTEGER, dictionary_string TEXT );' )
+        self._c.execute( 'CREATE TABLE services ( service_id INTEGER PRIMARY KEY, service_key JSON, service_type INTEGER, name TEXT, port INTEGER, dictionary_string TEXT );' )
         
-        self._c.execute( 'CREATE TABLE accounts ( account_id INTEGER PRIMARY KEY, service_id INTEGER, account_key BLOB_BYTES, hashed_access_key BLOB_BYTES, account_type_id INTEGER, created INTEGER, expires INTEGER, dictionary_string TEXT );' )
+        self._c.execute( 'CREATE TABLE accounts ( account_id INTEGER PRIMARY KEY, service_id INTEGER, account_key JSON, hashed_access_key JSON, account_type_id INTEGER, created INTEGER, expires INTEGER, dictionary_string TEXT );' )
         self._c.execute( 'CREATE UNIQUE INDEX accounts_account_key_index ON accounts ( account_key );' )
         self._c.execute( 'CREATE UNIQUE INDEX accounts_hashed_access_key_index ON accounts ( hashed_access_key );' )
         
         self._c.execute( 'CREATE TABLE account_scores ( service_id INTEGER, account_id INTEGER, score_type INTEGER, score INTEGER, PRIMARY KEY ( service_id, account_id, score_type ) );' )
         
-        self._c.execute( 'CREATE TABLE account_types ( account_type_id INTEGER PRIMARY KEY, service_id INTEGER, account_type_key BLOB_BYTES, title TEXT, dictionary_string TEXT );' )
+        self._c.execute( 'CREATE TABLE account_types ( account_type_id INTEGER PRIMARY KEY, service_id INTEGER, account_type_key JSON, title TEXT, dictionary_string TEXT );' )
         
         self._c.execute( 'CREATE TABLE analyze_timestamps ( name TEXT, timestamp INTEGER );' )
         
@@ -356,15 +356,15 @@ class DB( HydrusDB.HydrusDB ):
         self._c.execute( 'CREATE TABLE reasons ( reason_id INTEGER PRIMARY KEY, reason TEXT );' )
         self._c.execute( 'CREATE UNIQUE INDEX reasons_reason_index ON reasons ( reason );' )
         
-        self._c.execute( 'CREATE TABLE registration_keys ( registration_key BLOB_BYTES PRIMARY KEY, service_id INTEGER, account_type_id INTEGER, account_key BLOB_BYTES, access_key BLOB_BYTES UNIQUE, expires INTEGER );' )
+        self._c.execute( 'CREATE TABLE registration_keys ( registration_key JSON PRIMARY KEY, service_id INTEGER, account_type_id INTEGER, account_key JSON, access_key JSON UNIQUE, expires INTEGER );' )
         
-        self._c.execute( 'CREATE TABLE sessions ( session_key BLOB_BYTES, service_id INTEGER, account_id INTEGER, expires INTEGER );' )
+        self._c.execute( 'CREATE TABLE sessions ( session_key JSON, service_id INTEGER, account_id INTEGER, expires INTEGER );' )
         
         self._c.execute( 'CREATE TABLE version ( version INTEGER, year INTEGER, month INTEGER );' )
         
         # master
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.hashes ( master_hash_id INTEGER PRIMARY KEY, hash BLOB_BYTES UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.hashes ( master_hash_id INTEGER PRIMARY KEY, hash JSON UNIQUE );' )
         
         self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.tags ( master_tag_id INTEGER PRIMARY KEY, tag TEXT UNIQUE );' )
         
@@ -1330,7 +1330,7 @@ class DB( HydrusDB.HydrusDB ):
         
         now = HydrusData.GetNow()
         
-        self._c.executemany( 'INSERT OR IGNORE INTO ' + current_mappings_table_name + ' ( service_tag_id, service_hash_id, account_id, mapping_timestamp ) VALUES ( ?, ?, ?, ? );', [ ( service_tag_id, service_hash_id, account_id, now ) for service_hash_id in service_hash_ids ] )
+        self._c.executemany( 'INSERT IGNORE INTO ' + current_mappings_table_name + ' ( service_tag_id, service_hash_id, account_id, mapping_timestamp ) VALUES ( ?, ?, ?, ? );', [ ( service_tag_id, service_hash_id, account_id, now ) for service_hash_id in service_hash_ids ] )
         
     
     def _RepositoryAddTagParent( self, service_id, account_id, child_master_tag_id, parent_master_tag_id, overwrite_deleted ):
@@ -1359,7 +1359,7 @@ class DB( HydrusDB.HydrusDB ):
         
         now = HydrusData.GetNow()
         
-        self._c.execute( 'INSERT OR IGNORE INTO ' + current_tag_parents_table_name + ' ( child_service_tag_id, parent_service_tag_id, account_id, parent_timestamp ) VALUES ( ?, ?, ?, ? );', ( child_service_tag_id, parent_service_tag_id, account_id, now ) )
+        self._c.execute( 'INSERT IGNORE INTO ' + current_tag_parents_table_name + ' ( child_service_tag_id, parent_service_tag_id, account_id, parent_timestamp ) VALUES ( ?, ?, ?, ? );', ( child_service_tag_id, parent_service_tag_id, account_id, now ) )
         
         child_master_hash_ids = self._RepositoryGetCurrentMappingsMasterHashIds( service_id, child_service_tag_id )
         
@@ -1392,7 +1392,7 @@ class DB( HydrusDB.HydrusDB ):
         
         now = HydrusData.GetNow()
         
-        self._c.execute( 'INSERT OR IGNORE INTO ' + current_tag_siblings_table_name + ' ( bad_service_tag_id, good_service_tag_id, account_id, sibling_timestamp ) VALUES ( ?, ?, ?, ? );', ( bad_service_tag_id, good_service_tag_id, account_id, now ) )
+        self._c.execute( 'INSERT IGNORE INTO ' + current_tag_siblings_table_name + ' ( bad_service_tag_id, good_service_tag_id, account_id, sibling_timestamp ) VALUES ( ?, ?, ?, ? );', ( bad_service_tag_id, good_service_tag_id, account_id, now ) )
         
     
     def _RepositoryBan( self, service_id, subject_account_ids ):
@@ -1440,10 +1440,10 @@ class DB( HydrusDB.HydrusDB ):
         self._CreateIndex( deleted_files_table_name, [ 'account_id' ] )
         self._CreateIndex( deleted_files_table_name, [ 'file_timestamp' ] )
         
-        self._c.execute( 'CREATE TABLE ' + pending_files_table_name + ' ( master_hash_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( master_hash_id, account_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + pending_files_table_name + ' ( master_hash_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( master_hash_id, account_id ) );' )
         self._CreateIndex( pending_files_table_name, [ 'account_id', 'reason_id' ] )
         
-        self._c.execute( 'CREATE TABLE ' + petitioned_files_table_name + ' ( service_hash_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( service_hash_id, account_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + petitioned_files_table_name + ' ( service_hash_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( service_hash_id, account_id ) );' )
         self._CreateIndex( petitioned_files_table_name, [ 'account_id', 'reason_id' ] )
         
         self._c.execute( 'CREATE TABLE ' + ip_addresses_table_name + ' ( master_hash_id INTEGER, ip TEXT, ip_timestamp INTEGER );' )
@@ -1452,36 +1452,36 @@ class DB( HydrusDB.HydrusDB ):
         
         ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name ) = GenerateRepositoryMappingsTableNames( service_id )
         
-        self._c.execute( 'CREATE TABLE ' + current_mappings_table_name + ' ( service_tag_id INTEGER, service_hash_id INTEGER, account_id INTEGER, mapping_timestamp INTEGER, PRIMARY KEY ( service_tag_id, service_hash_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + current_mappings_table_name + ' ( service_tag_id INTEGER, service_hash_id INTEGER, account_id INTEGER, mapping_timestamp INTEGER, PRIMARY KEY ( service_tag_id, service_hash_id ) );' )
         self._CreateIndex( current_mappings_table_name, [ 'account_id' ] )
         self._CreateIndex( current_mappings_table_name, [ 'mapping_timestamp' ] )
         
-        self._c.execute( 'CREATE TABLE ' + deleted_mappings_table_name + ' ( service_tag_id INTEGER, service_hash_id INTEGER, account_id INTEGER, mapping_timestamp INTEGER, PRIMARY KEY ( service_tag_id, service_hash_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + deleted_mappings_table_name + ' ( service_tag_id INTEGER, service_hash_id INTEGER, account_id INTEGER, mapping_timestamp INTEGER, PRIMARY KEY ( service_tag_id, service_hash_id ) );' )
         self._CreateIndex( deleted_mappings_table_name, [ 'account_id' ] )
         self._CreateIndex( deleted_mappings_table_name, [ 'mapping_timestamp' ] )
         
-        self._c.execute( 'CREATE TABLE ' + pending_mappings_table_name + ' ( master_tag_id INTEGER, master_hash_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( master_tag_id, master_hash_id, account_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + pending_mappings_table_name + ' ( master_tag_id INTEGER, master_hash_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( master_tag_id, master_hash_id, account_id ) );' )
         self._CreateIndex( pending_mappings_table_name, [ 'account_id', 'reason_id' ] )
         
-        self._c.execute( 'CREATE TABLE ' + petitioned_mappings_table_name + ' ( service_tag_id INTEGER, service_hash_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( service_tag_id, service_hash_id, account_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + petitioned_mappings_table_name + ' ( service_tag_id INTEGER, service_hash_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( service_tag_id, service_hash_id, account_id ) );' )
         self._CreateIndex( petitioned_mappings_table_name, [ 'account_id', 'reason_id' ] )
         
         #
         
         ( current_tag_parents_table_name, deleted_tag_parents_table_name, pending_tag_parents_table_name, petitioned_tag_parents_table_name ) = GenerateRepositoryTagParentsTableNames( service_id )
         
-        self._c.execute( 'CREATE TABLE ' + current_tag_parents_table_name + ' ( child_service_tag_id INTEGER, parent_service_tag_id INTEGER, account_id INTEGER, parent_timestamp INTEGER, PRIMARY KEY ( child_service_tag_id, parent_service_tag_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + current_tag_parents_table_name + ' ( child_service_tag_id INTEGER, parent_service_tag_id INTEGER, account_id INTEGER, parent_timestamp INTEGER, PRIMARY KEY ( child_service_tag_id, parent_service_tag_id ) );' )
         self._CreateIndex( current_tag_parents_table_name, [ 'account_id' ] )
         self._CreateIndex( current_tag_parents_table_name, [ 'parent_timestamp' ] )
         
-        self._c.execute( 'CREATE TABLE ' + deleted_tag_parents_table_name + ' ( child_service_tag_id INTEGER, parent_service_tag_id INTEGER, account_id INTEGER, parent_timestamp INTEGER, PRIMARY KEY ( child_service_tag_id, parent_service_tag_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + deleted_tag_parents_table_name + ' ( child_service_tag_id INTEGER, parent_service_tag_id INTEGER, account_id INTEGER, parent_timestamp INTEGER, PRIMARY KEY ( child_service_tag_id, parent_service_tag_id ) );' )
         self._CreateIndex( deleted_tag_parents_table_name, [ 'account_id' ] )
         self._CreateIndex( deleted_tag_parents_table_name, [ 'parent_timestamp' ] )
         
-        self._c.execute( 'CREATE TABLE ' + pending_tag_parents_table_name + ' ( child_master_tag_id INTEGER, parent_master_tag_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( child_master_tag_id, parent_master_tag_id, account_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + pending_tag_parents_table_name + ' ( child_master_tag_id INTEGER, parent_master_tag_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( child_master_tag_id, parent_master_tag_id, account_id ) );' )
         self._CreateIndex( pending_tag_parents_table_name, [ 'account_id', 'reason_id' ] )
         
-        self._c.execute( 'CREATE TABLE ' + petitioned_tag_parents_table_name + ' ( child_service_tag_id INTEGER, parent_service_tag_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( child_service_tag_id, parent_service_tag_id, account_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + petitioned_tag_parents_table_name + ' ( child_service_tag_id INTEGER, parent_service_tag_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( child_service_tag_id, parent_service_tag_id, account_id ) );' )
         self._CreateIndex( petitioned_tag_parents_table_name, [ 'account_id', 'reason_id' ] )
         
         #
@@ -1496,10 +1496,10 @@ class DB( HydrusDB.HydrusDB ):
         self._CreateIndex( deleted_tag_siblings_table_name, [ 'account_id' ] )
         self._CreateIndex( deleted_tag_siblings_table_name, [ 'sibling_timestamp' ] )
         
-        self._c.execute( 'CREATE TABLE ' + pending_tag_siblings_table_name + ' ( bad_master_tag_id INTEGER, good_master_tag_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( bad_master_tag_id, account_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + pending_tag_siblings_table_name + ' ( bad_master_tag_id INTEGER, good_master_tag_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( bad_master_tag_id, account_id ) );' )
         self._CreateIndex( pending_tag_siblings_table_name, [ 'account_id', 'reason_id' ] )
         
-        self._c.execute( 'CREATE TABLE ' + petitioned_tag_siblings_table_name + ' ( bad_service_tag_id INTEGER, good_service_tag_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( bad_service_tag_id, account_id ) ) WITHOUT ROWID;' )
+        self._c.execute( 'CREATE TABLE ' + petitioned_tag_siblings_table_name + ' ( bad_service_tag_id INTEGER, good_service_tag_id INTEGER, account_id INTEGER, reason_id INTEGER, PRIMARY KEY ( bad_service_tag_id, account_id ) );' )
         self._CreateIndex( petitioned_tag_siblings_table_name, [ 'account_id', 'reason_id' ] )
         
         #
@@ -1557,7 +1557,7 @@ class DB( HydrusDB.HydrusDB ):
             
             master_hash_ids = self._GetMasterHashIds( update_hashes )
             
-            self._c.executemany( 'INSERT OR IGNORE INTO ' + update_table_name + ' ( master_hash_id ) VALUES ( ? );', ( ( master_hash_id, ) for master_hash_id in master_hash_ids ) )
+            self._c.executemany( 'INSERT IGNORE INTO ' + update_table_name + ' ( master_hash_id ) VALUES ( ? );', ( ( master_hash_id, ) for master_hash_id in master_hash_ids ) )
             
         
         HydrusData.Print( 'Update OK. ' + HydrusData.ToHumanInt( total_definition_rows ) + ' definition rows and ' + HydrusData.ToHumanInt( total_content_rows ) + ' content rows in ' + HydrusData.ToHumanInt( len( updates ) ) + ' update files.' )
@@ -1580,7 +1580,7 @@ class DB( HydrusDB.HydrusDB ):
         
         now = HydrusData.GetNow()
         
-        self._c.executemany( 'INSERT OR IGNORE INTO ' + deleted_files_table_name + ' ( service_hash_id, account_id, file_timestamp ) VALUES ( ?, ?, ? );', ( ( service_hash_id, account_id, now ) for service_hash_id in valid_service_hash_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO ' + deleted_files_table_name + ' ( service_hash_id, account_id, file_timestamp ) VALUES ( ?, ?, ? );', ( ( service_hash_id, account_id, now ) for service_hash_id in valid_service_hash_ids ) )
         
     
     def _RepositoryDeleteMappings( self, service_id, account_id, service_tag_id, service_hash_ids ):
@@ -1598,7 +1598,7 @@ class DB( HydrusDB.HydrusDB ):
         
         now = HydrusData.GetNow()
         
-        self._c.executemany( 'INSERT OR IGNORE INTO ' + deleted_mappings_table_name + ' ( service_tag_id, service_hash_id, account_id, mapping_timestamp ) VALUES ( ?, ?, ?, ? );', ( ( service_tag_id, service_hash_id, account_id, now ) for service_hash_id in valid_service_hash_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO ' + deleted_mappings_table_name + ' ( service_tag_id, service_hash_id, account_id, mapping_timestamp ) VALUES ( ?, ?, ?, ? );', ( ( service_tag_id, service_hash_id, account_id, now ) for service_hash_id in valid_service_hash_ids ) )
         
     
     def _RepositoryDeleteTagParent( self, service_id, account_id, child_service_tag_id, parent_service_tag_id ):
@@ -1612,7 +1612,7 @@ class DB( HydrusDB.HydrusDB ):
         
         now = HydrusData.GetNow()
         
-        self._c.execute( 'INSERT OR IGNORE INTO ' + deleted_tag_parents_table_name + ' ( child_service_tag_id, parent_service_tag_id, account_id, parent_timestamp ) VALUES ( ?, ?, ?, ? );', ( child_service_tag_id, parent_service_tag_id, account_id, now ) )
+        self._c.execute( 'INSERT IGNORE INTO ' + deleted_tag_parents_table_name + ' ( child_service_tag_id, parent_service_tag_id, account_id, parent_timestamp ) VALUES ( ?, ?, ?, ? );', ( child_service_tag_id, parent_service_tag_id, account_id, now ) )
         
     
     def _RepositoryDeleteTagSibling( self, service_id, account_id, bad_service_tag_id, good_service_tag_id ):
@@ -1626,7 +1626,7 @@ class DB( HydrusDB.HydrusDB ):
         
         now = HydrusData.GetNow()
         
-        self._c.execute( 'INSERT OR IGNORE INTO ' + deleted_tag_siblings_table_name + ' ( bad_service_tag_id, good_service_tag_id, account_id, sibling_timestamp ) VALUES ( ?, ?, ?, ? );', ( bad_service_tag_id, good_service_tag_id, account_id, now ) )
+        self._c.execute( 'INSERT IGNORE INTO ' + deleted_tag_siblings_table_name + ' ( bad_service_tag_id, good_service_tag_id, account_id, sibling_timestamp ) VALUES ( ?, ?, ?, ? );', ( bad_service_tag_id, good_service_tag_id, account_id, now ) )
         
     
     def _RepositoryDenyFilePetition( self, service_id, service_hash_ids ):
@@ -3064,7 +3064,7 @@ class DB( HydrusDB.HydrusDB ):
     
     def _RewardAccounts( self, service_id, score_type, scores ):
         
-        self._c.executemany( 'INSERT OR IGNORE INTO account_scores ( service_id, account_id, score_type, score ) VALUES ( ?, ?, ?, ? );', [ ( service_id, account_id, score_type, 0 ) for ( account_id, score ) in scores ] )
+        self._c.executemany( 'INSERT IGNORE INTO account_scores ( service_id, account_id, score_type, score ) VALUES ( ?, ?, ?, ? );', [ ( service_id, account_id, score_type, 0 ) for ( account_id, score ) in scores ] )
         
         self._c.executemany( 'UPDATE account_scores SET score = score + ? WHERE service_id = ? AND account_id = ? and score_type = ?;', [ ( score, service_id, account_id, score_type ) for ( account_id, score ) in scores ] )
         
