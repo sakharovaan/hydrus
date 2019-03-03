@@ -31,8 +31,8 @@ def GenerateRepositoryMasterMapTableNames( service_id ):
     
     suffix = str( service_id )
     
-    hash_id_map_table_name = 'external_master.repository_hash_id_map_' + suffix
-    tag_id_map_table_name = 'external_master.repository_tag_id_map_' + suffix
+    hash_id_map_table_name = 'external_master_repository_hash_id_map_' + suffix
+    tag_id_map_table_name = 'external_master_repository_tag_id_map_' + suffix
     
     return ( hash_id_map_table_name, tag_id_map_table_name )
     
@@ -364,9 +364,9 @@ class DB( HydrusDB.HydrusDB ):
         
         # master
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.hashes ( master_hash_id INTEGER PRIMARY KEY, hash JSON UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_hashes ( master_hash_id INTEGER PRIMARY KEY, hash JSON UNIQUE );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.tags ( master_tag_id INTEGER PRIMARY KEY, tag TEXT UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_tags ( master_tag_id INTEGER PRIMARY KEY, tag TEXT UNIQUE );' )
         
         # inserts
         

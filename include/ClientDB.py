@@ -70,19 +70,19 @@ def ConvertWildcardToSQLiteLikeParameter( wildcard ):
     
 def GenerateCombinedFilesMappingsCacheTableName( service_id ):
     
-    return 'external_caches.combined_files_ac_cache_' + str( service_id )
+    return 'external_caches_combined_files_ac_cache_' + str( service_id )
     
 def GenerateMappingsTableNames( service_id ):
     
     suffix = str( service_id )
     
-    current_mappings_table_name = 'external_mappings.current_mappings_' + suffix
+    current_mappings_table_name = 'external_mappings_current_mappings_' + suffix
     
-    deleted_mappings_table_name = 'external_mappings.deleted_mappings_' + suffix
+    deleted_mappings_table_name = 'external_mappings_deleted_mappings_' + suffix
     
-    pending_mappings_table_name = 'external_mappings.pending_mappings_' + suffix
+    pending_mappings_table_name = 'external_mappings_pending_mappings_' + suffix
     
-    petitioned_mappings_table_name = 'external_mappings.petitioned_mappings_' + suffix
+    petitioned_mappings_table_name = 'external_mappings_petitioned_mappings_' + suffix
     
     return ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name )
     
@@ -90,8 +90,8 @@ def GenerateRepositoryMasterCacheTableNames( service_id ):
     
     suffix = str( service_id )
     
-    hash_id_map_table_name = 'external_master.repository_hash_id_map_' + suffix
-    tag_id_map_table_name = 'external_master.repository_tag_id_map_' + suffix
+    hash_id_map_table_name = 'external_master_repository_hash_id_map_' + suffix
+    tag_id_map_table_name = 'external_master_repository_tag_id_map_' + suffix
     
     return ( hash_id_map_table_name, tag_id_map_table_name )
     
@@ -105,15 +105,15 @@ def GenerateSpecificMappingsCacheTableNames( file_service_id, tag_service_id ):
     
     suffix = str( file_service_id ) + '_' + str( tag_service_id )
     
-    cache_files_table_name = 'external_caches.specific_files_cache_' + suffix
+    cache_files_table_name = 'external_caches_specific_files_cache_' + suffix
     
-    cache_current_mappings_table_name = 'external_caches.specific_current_mappings_cache_' + suffix
+    cache_current_mappings_table_name = 'external_caches_specific_current_mappings_cache_' + suffix
     
-    cache_deleted_mappings_table_name = 'external_caches.specific_deleted_mappings_cache_' + suffix
+    cache_deleted_mappings_table_name = 'external_caches_specific_deleted_mappings_cache_' + suffix
     
-    cache_pending_mappings_table_name = 'external_caches.specific_pending_mappings_cache_' + suffix
+    cache_pending_mappings_table_name = 'external_caches_specific_pending_mappings_cache_' + suffix
     
-    ac_cache_table_name = 'external_caches.specific_ac_cache_' + suffix
+    ac_cache_table_name = 'external_caches_specific_ac_cache_' + suffix
     
     return ( cache_files_table_name, cache_current_mappings_table_name, cache_deleted_mappings_table_name, cache_pending_mappings_table_name, ac_cache_table_name )
     
@@ -357,77 +357,12 @@ class DB( HydrusDB.HydrusDB ):
         
     
     def _AnalyzeStaleBigTables( self, stop_time = None, only_when_idle = False, force_reanalyze = False ):
-        
-        names_to_analyze = self._GetBigTableNamesToAnalyze( force_reanalyze = force_reanalyze )
-        
-        if len( names_to_analyze ) > 0:
-            
-            key_pubbed = False
-            time_started = HydrusData.GetNow()
-            
-            job_key = ClientThreading.JobKey( cancellable = True )
-            
-            try:
-                
-                job_key.SetVariable( 'popup_title', 'database maintenance - analyzing' )
-                
-                self._controller.pub( 'modal_message', job_key )
-                
-                random.shuffle( names_to_analyze )
-                
-                for name in names_to_analyze:
-                    
-                    self._controller.pub( 'splash_set_status_text', 'analyzing ' + name )
-                    job_key.SetVariable( 'popup_text_1', 'analyzing ' + name )
-                    
-                    time.sleep( 0.25 )
-                    
-                    started = HydrusData.GetNowPrecise()
-                    
-                    self._AnalyzeTable( name )
-                    
-                    time_took = HydrusData.GetNowPrecise() - started
-                    
-                    if time_took > 1:
-                        
-                        HydrusData.Print( 'Analyzed ' + name + ' in ' + HydrusData.TimeDeltaToPrettyTimeDelta( time_took ) )
-                        
-                    
-                    p1 = stop_time is not None and HydrusData.TimeHasPassed( stop_time )
-                    p2 = only_when_idle and not self._controller.CurrentlyIdle()
-                    p3 = job_key.IsCancelled()
-                    
-                    if p1 or p2 or p3:
-                        
-                        break
-                        
-                    
-                
-                self._c.execute( 'ANALYZE sqlite_master;' ) # this reloads the current stats into the query planner
-                
-                job_key.SetVariable( 'popup_text_1', 'done!' )
-                
-                HydrusData.Print( job_key.ToString() )
-                
-            finally:
-                
-                job_key.Finish()
-                
-                job_key.Delete( 10 )
-                
-            
+        pass
+
         
     
     def _AnalyzeTable( self, name ):
-        
-        self._c.execute( 'ANALYZE ' + name + ';' )
-        
-        ( num_rows, ) = self._c.execute( 'SELECT COUNT( * ) FROM ' + name + ';' ).fetchone()
-        
-        self._c.execute( 'DELETE FROM analyze_timestamps WHERE name = ?;', ( name, ) )
-        
-        self._c.execute( 'INSERT IGNORE INTO analyze_timestamps ( name, num_rows, timestamp ) VALUES ( ?, ?, ? );', ( name, num_rows, HydrusData.GetNow() ) )
-        
+        pass
     
     def _ArchiveFiles( self, hash_ids ):
         
@@ -2767,6 +2702,7 @@ class DB( HydrusDB.HydrusDB ):
         
     
     def _ClearOrphanTables( self ):
+        # TODO
         
         service_ids = self._STL( self._c.execute( 'SELECT service_id FROM services;' ) )
         
@@ -2791,7 +2727,7 @@ class DB( HydrusDB.HydrusDB ):
         existing_table_names = set()
         
         existing_table_names.update( self._STS( self._c.execute( 'SELECT name FROM sqlite_master WHERE type = ?;', ( 'table', ) ) ) )
-        existing_table_names.update( self._STS( self._c.execute( 'SELECT name FROM external_master.sqlite_master WHERE type = ?;', ( 'table', ) ) ) )
+        existing_table_names.update( self._STS( self._c.execute( 'SELECT name FROM external_master_sqlite_master WHERE type = ?;', ( 'table', ) ) ) )
         
         existing_table_names = { name for name in existing_table_names if True in ( name.startswith( table_prefix ) for table_prefix in table_prefixes ) }
         
@@ -2906,29 +2842,30 @@ class DB( HydrusDB.HydrusDB ):
         
         # master
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.hashes ( hash_id INTEGER PRIMARY KEY, hash varchar(255) UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_hashes ( hash_id INTEGER PRIMARY KEY, hash varchar(255) UNIQUE );' )
         
-        self._c.execute( 'CREATE TABLE external_master.local_hashes ( hash_id INTEGER PRIMARY KEY, md5 varchar(255), sha1 varchar(255), sha512 varchar(255) );' )
-        self._CreateIndex( 'external_master.local_hashes', [ 'md5' ] )
-        self._CreateIndex( 'external_master.local_hashes', [ 'sha1' ] )
-        self._CreateIndex( 'external_master.local_hashes', [ 'sha512' ] )
+        self._c.execute( 'CREATE TABLE external_master_local_hashes ( hash_id INTEGER PRIMARY KEY, md5 varchar(255), sha1 varchar(255), sha512 varchar(255) );' )
+        self._CreateIndex( 'external_master_local_hashes', [ 'md5' ] )
+        self._CreateIndex( 'external_master_local_hashes', [ 'sha1' ] )
+        self._CreateIndex( 'external_master_local_hashes', [ 'sha512' ] )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.namespaces ( namespace_id INTEGER PRIMARY KEY, namespace varchar(255) UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_namespaces ( namespace_id INTEGER PRIMARY KEY, namespace varchar(255) UNIQUE );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.subtags ( subtag_id INTEGER PRIMARY KEY, subtag varchar(255) UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_subtags ( subtag_id INTEGER PRIMARY KEY, subtag varchar(255) UNIQUE );' )
         
-        self._c.execute( 'CREATE VIRTUAL TABLE IF NOT EXISTS external_master.subtags_fts4 USING fts4( subtag );' )
+        self._c.execute( 'CREATE VIRTUAL TABLE IF NOT EXISTS external_master_subtags_fts4 USING fts4( subtag );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.tags ( tag_id INTEGER PRIMARY KEY, namespace_id INTEGER, subtag_id INTEGER );' )
-        self._CreateIndex( 'external_master.tags', [ 'subtag_id', 'namespace_id' ] )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_tags ( tag_id INTEGER PRIMARY KEY, namespace_id INTEGER, subtag_id INTEGER );' )
+        self._CreateIndex( 'external_master_tags', [ 'subtag_id', 'namespace_id' ] )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.texts ( text_id INTEGER PRIMARY KEY, text varchar(255) UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_texts ( text_id INTEGER PRIMARY KEY, text varchar(255) UNIQUE );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.urls ( url_id INTEGER PRIMARY KEY, domain TEXT, url varchar(1000) UNIQUE );' )
-        self._CreateIndex( 'external_master.urls', [ 'domain' ] )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_urls ( url_id INTEGER PRIMARY KEY, domain TEXT, url varchar(1000) UNIQUE );' )
+        self._CreateIndex( 'external_master_urls', [ 'domain' ] )
         
         # inserts
-        
+
+        client_files_default = os.path.join( self._db_dir, 'client_files' )
         location = HydrusPaths.ConvertAbsPathToPortablePath( client_files_default )
         
         for prefix in HydrusData.IterateHexPrefixes():
@@ -3008,24 +2945,24 @@ class DB( HydrusDB.HydrusDB ):
     
     def _CreateDBCaches( self ):
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches.shape_perceptual_hashes ( phash_id INTEGER PRIMARY KEY, phash varchar(255) UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches_shape_perceptual_hashes ( phash_id INTEGER PRIMARY KEY, phash varchar(255) UNIQUE );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches.shape_perceptual_hash_map ( phash_id INTEGER, hash_id INTEGER, PRIMARY KEY ( phash_id, hash_id ) );' )
-        self._CreateIndex( 'external_caches.shape_perceptual_hash_map', [ 'hash_id' ] )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches_shape_perceptual_hash_map ( phash_id INTEGER, hash_id INTEGER, PRIMARY KEY ( phash_id, hash_id ) );' )
+        self._CreateIndex( 'external_caches_shape_perceptual_hash_map', [ 'hash_id' ] )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches.shape_vptree ( phash_id INTEGER PRIMARY KEY, parent_id INTEGER, radius INTEGER, inner_id INTEGER, inner_population INTEGER, outer_id INTEGER, outer_population INTEGER );' )
-        self._CreateIndex( 'external_caches.shape_vptree', [ 'parent_id' ] )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches_shape_vptree ( phash_id INTEGER PRIMARY KEY, parent_id INTEGER, radius INTEGER, inner_id INTEGER, inner_population INTEGER, outer_id INTEGER, outer_population INTEGER );' )
+        self._CreateIndex( 'external_caches_shape_vptree', [ 'parent_id' ] )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches.shape_maintenance_phash_regen ( hash_id INTEGER PRIMARY KEY );' )
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches.shape_maintenance_branch_regen ( phash_id INTEGER PRIMARY KEY );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches_shape_maintenance_phash_regen ( hash_id INTEGER PRIMARY KEY );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches_shape_maintenance_branch_regen ( phash_id INTEGER PRIMARY KEY );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches.shape_search_cache ( hash_id INTEGER PRIMARY KEY, searched_distance INTEGER );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches_shape_search_cache ( hash_id INTEGER PRIMARY KEY, searched_distance INTEGER );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches.duplicate_pairs ( smaller_hash_id INTEGER, larger_hash_id INTEGER, duplicate_type INTEGER, PRIMARY KEY ( smaller_hash_id, larger_hash_id ) );' )
-        self._CreateIndex( 'external_caches.duplicate_pairs', [ 'larger_hash_id', 'smaller_hash_id' ], unique = True )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches_duplicate_pairs ( smaller_hash_id INTEGER, larger_hash_id INTEGER, duplicate_type INTEGER, PRIMARY KEY ( smaller_hash_id, larger_hash_id ) );' )
+        self._CreateIndex( 'external_caches_duplicate_pairs', [ 'larger_hash_id', 'smaller_hash_id' ], unique = True )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches.integer_subtags ( subtag_id INTEGER PRIMARY KEY, integer_subtag INTEGER );' )
-        self._CreateIndex( 'external_caches.integer_subtags', [ 'integer_subtag' ] )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS external_caches_integer_subtags ( subtag_id INTEGER PRIMARY KEY, integer_subtag INTEGER );' )
+        self._CreateIndex( 'external_caches_integer_subtags', [ 'integer_subtag' ] )
         
     
     def _DeleteFiles( self, service_id, hash_ids ):
@@ -9113,7 +9050,7 @@ class DB( HydrusDB.HydrusDB ):
         
         # master
         
-        existing_master_tables = self._STS( self._c.execute( 'SELECT name FROM external_master.sqlite_master WHERE type = ?;', ( 'table', ) ) )
+        existing_master_tables = self._STS( self._c.execute( 'SELECT name FROM external_master_sqlite_master WHERE type = ?;', ( 'table', ) ) )
         
         main_master_tables = set()
         
@@ -9148,15 +9085,15 @@ class DB( HydrusDB.HydrusDB ):
             
             wx.CallAfter( wx.MessageBox, message )
 
-            self._c.execute( 'CREATE TABLE external_master.local_hashes ( hash_id INTEGER PRIMARY KEY, md5 varchar(255), sha1 varchar(255), sha512 varchar(255) );' )
-            self._CreateIndex( 'external_master.local_hashes', [ 'md5' ] )
-            self._CreateIndex( 'external_master.local_hashes', [ 'sha1' ] )
-            self._CreateIndex( 'external_master.local_hashes', [ 'sha512' ] )
+            self._c.execute( 'CREATE TABLE external_master_local_hashes ( hash_id INTEGER PRIMARY KEY, md5 varchar(255), sha1 varchar(255), sha512 varchar(255) );' )
+            self._CreateIndex( 'external_master_local_hashes', [ 'md5' ] )
+            self._CreateIndex( 'external_master_local_hashes', [ 'sha1' ] )
+            self._CreateIndex( 'external_master_local_hashes', [ 'sha512' ] )
             
         
         # mappings
         
-        existing_mapping_tables = self._STS( self._c.execute( 'SELECT name FROM external_mappings.sqlite_master WHERE type = ?;', ( 'table', ) ) )
+        existing_mapping_tables = self._STS( self._c.execute( 'SELECT name FROM external_mappings_sqlite_master WHERE type = ?;', ( 'table', ) ) )
         
         main_mappings_tables = set()
         
@@ -9191,7 +9128,7 @@ class DB( HydrusDB.HydrusDB ):
         
         # caches
         
-        existing_cache_tables = self._STS( self._c.execute( 'SELECT name FROM external_caches.sqlite_master WHERE type = ?;', ( 'table', ) ) )
+        existing_cache_tables = self._STS( self._c.execute( 'SELECT name FROM external_caches_sqlite_master WHERE type = ?;', ( 'table', ) ) )
         
         main_cache_tables = set()
         
@@ -10498,8 +10435,8 @@ class DB( HydrusDB.HydrusDB ):
             self._c.execute( 'CREATE TABLE url_map ( hash_id INTEGER, url_id INTEGER, PRIMARY KEY ( hash_id, url_id ) );' )
             self._CreateIndex( 'url_map', [ 'url_id' ] )
             
-            self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master.urls ( url_id INTEGER PRIMARY KEY, domain TEXT, url varchar(1000) UNIQUE );' )
-            self._CreateIndex( 'external_master.urls', [ 'domain' ] )
+            self._c.execute( 'CREATE TABLE IF NOT EXISTS external_master_urls ( url_id INTEGER PRIMARY KEY, domain TEXT, url varchar(1000) UNIQUE );' )
+            self._CreateIndex( 'external_master_urls', [ 'domain' ] )
             
             #
             
