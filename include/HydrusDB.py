@@ -203,9 +203,6 @@ class HydrusDB( object ):
                 self._Commit()
 
             self._c.close()
-
-            del self._c
-
             self._c = None
             
         
@@ -495,7 +492,7 @@ class HydrusDB( object ):
         # and also so we aren't overmaking it when this gets spammed with a lot of len() == 1 calls
         if len( xs ) >= MAX_CHUNK_SIZE:
             
-            max_statement = select_statement % ( '(' + ','.join( '?' * MAX_CHUNK_SIZE ) + ')' )
+            max_statement = select_statement % ( '(' + ','.join( '%s' * MAX_CHUNK_SIZE ) + ')' )
             
         
         for chunk in HydrusData.SplitListIntoChunks( xs, MAX_CHUNK_SIZE ):
@@ -506,10 +503,10 @@ class HydrusDB( object ):
                 
             else:
                 
-                chunk_statement = select_statement % ( '(' + ','.join( '?' * len( chunk ) ) + ')' )
-                
-            
-            for row in self._c.execute( chunk_statement, chunk ):
+                chunk_statement = select_statement % ( '(' + ','.join( '%s' * len( chunk ) ) + ')' )
+
+            self._c.execute(chunk_statement, chunk)
+            for row in self._c.fetchall():
                 
                 yield row
                 
@@ -525,21 +522,21 @@ class HydrusDB( object ):
         
         # strip singleton tuples to an iterator
         
-        return ( item for ( item, ) in self._c )
+        return ( item for ( item, ) in self._c.fetchall() )
         
     
     def _STL( self, iterable_cursor ):
         
         # strip singleton tuples to a list
         
-        return [ item for ( item, ) in self._c  ]
+        return [ item for ( item, ) in self._c.fetchall()  ]
         
     
     def _STS( self, iterable_cursor ):
         
         # strip singleton tuples to a set
         
-        return { item for ( item, ) in self._c  }
+        return { item for ( item, ) in self._c.fetchall()  }
         
     
     def _UpdateDB( self, version ):
