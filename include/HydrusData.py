@@ -14,7 +14,6 @@ import psutil
 import random
 import re
 import shutil
-import sqlite3
 import struct
 import subprocess
 import sys
@@ -1292,8 +1291,7 @@ class AccountType( HydrusYAMLBase ):
     def IsUnknownAccountType( self ): return self._permissions == [ HC.UNKNOWN_PERMISSION ]
     
     def HasPermission( self, permission ): return permission in self._permissions
-    
-sqlite3.register_adapter( AccountType, yaml.safe_dump )
+
 
 class BigJobPauser( object ):
     

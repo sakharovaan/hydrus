@@ -201,15 +201,11 @@ class HydrusDB( object ):
             if self._in_transaction:
                 
                 self._Commit()
-                
-            
+
             self._c.close()
-            self._db.close()
-            
+
             del self._c
-            del self._db
-            
-            self._db = None
+
             self._c = None
             
         
@@ -285,19 +281,14 @@ class HydrusDB( object ):
         
     
     def _InitDB( self ):
-        
-        create_db = True #TODO
-            
+
         
         self._InitDBCursor()
         
-        result = self._c.execute( "SHOW DATABASES LIKE 'hydrus';")
-        
-        if result is None:
-            
-            create_db = True
-            
-        
+        self._c.execute( "SHOW DATABASES LIKE 'hydrus';"); result = self._c.fetchone()
+
+        create_db = not result
+
         if create_db:
             
             self._is_first_start = True
@@ -307,19 +298,32 @@ class HydrusDB( object ):
             self._Commit()
             
             self._BeginImmediate()
+        else:
+
+            self._c.execute("USE hydrus;")
             
         
     
-    def _InitDBCursor( self ):
-        
-        self._CloseDBCursor()
+    def _InitDBCursor( self, started=False ):
 
-        self._db = mysql.connector.connect(
-            host=os.environ['MYSQL_HOST'],
-            user=os.environ['MYSQL_USER'],
-            password=os.environ['MYSQL_PASSWORD'],
-            buffered=True
-        )
+        if self._c:
+            self._CloseDBCursor()
+
+        if not started:
+            self._db = mysql.connector.connect(
+                host=os.environ['MYSQL_HOST'],
+                user=os.environ['MYSQL_USER'],
+                password=os.environ['MYSQL_PASSWORD'],
+                buffered=True
+            )
+        elif not self._db:
+            self._db = mysql.connector.connect(
+                host=os.environ['MYSQL_HOST'],
+                user=os.environ['MYSQL_USER'],
+                password=os.environ['MYSQL_PASSWORD'],
+                database='hydrus',
+                buffered=True
+            )
         
         self._connection_timestamp = HydrusData.GetNow()
         
@@ -420,7 +424,7 @@ class HydrusDB( object ):
                 
                 self._CloseDBCursor()
                 
-                self._InitDBCursor()
+                self._InitDBCursor(started=True)
                 
                 HydrusData.PrintException( rollback_e )
                 
@@ -459,7 +463,7 @@ class HydrusDB( object ):
         
         if self._in_transaction:
             
-            self._c.execute( 'ROLLBACK TO hydrus_savepoint;' )
+            self._c.execute( 'ROLLBACK TO SAVEPOINT hydrus_savepoint;' )
             
         else:
             
@@ -469,7 +473,7 @@ class HydrusDB( object ):
     
     def _Save( self ):
         
-        self._c.execute( 'RELEASE hydrus_savepoint;' )
+        self._c.execute( 'RELEASE SAVEPOINT hydrus_savepoint;' )
         
         self._c.execute( 'SAVEPOINT hydrus_savepoint;' )
         
@@ -614,7 +618,7 @@ class HydrusDB( object ):
         
         try:
             
-            self._InitDBCursor() # have to reinitialise because the thread id has changed
+            self._InitDBCursor(started=True) # have to reinitialise because the thread id has changed
             
             self._InitDiskCache()
             
@@ -699,7 +703,7 @@ class HydrusDB( object ):
             
             if HydrusData.TimeHasPassed( self._connection_timestamp + CONNECTION_REFRESH_TIME ): # just to clear out the journal files
                 
-                self._InitDBCursor()
+                self._InitDBCursor(started=True)
                 
             
         

@@ -76,13 +76,13 @@ def GenerateMappingsTableNames( service_id ):
     
     suffix = str( service_id )
     
-    current_mappings_table_name = 'external_mappings_current_mappings_' + suffix
+    current_mappings_table_name = 'current_mappings_' + suffix
     
-    deleted_mappings_table_name = 'external_mappings_deleted_mappings_' + suffix
+    deleted_mappings_table_name = 'deleted_mappings_' + suffix
     
-    pending_mappings_table_name = 'external_mappings_pending_mappings_' + suffix
+    pending_mappings_table_name = 'pending_mappings_' + suffix
     
-    petitioned_mappings_table_name = 'external_mappings_petitioned_mappings_' + suffix
+    petitioned_mappings_table_name = 'petitioned_mappings_' + suffix
     
     return ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name )
     
@@ -455,7 +455,7 @@ class DB( HydrusDB.HydrusDB ):
             
         finally:
             
-            self._InitDBCursor()
+            self._InitDBCursor(started=True)
             
             job_key.SetVariable( 'popup_text_1', 'done!' )
             
@@ -2702,8 +2702,7 @@ class DB( HydrusDB.HydrusDB ):
         
     
     def _ClearOrphanTables( self ):
-        # TODO
-        
+
         service_ids = self._STL( self._c.execute( 'SELECT service_id FROM services;' ) )
         
         table_prefixes = []
@@ -2726,9 +2725,8 @@ class DB( HydrusDB.HydrusDB ):
         
         existing_table_names = set()
         
-        existing_table_names.update( self._STS( self._c.execute( 'SELECT name FROM sqlite_master WHERE type = %s;', ( 'table', ) ) ) )
-        existing_table_names.update( self._STS( self._c.execute( 'SELECT name FROM sqlite_master WHERE type = %s;', ( 'table', ) ) ) )
-        
+        existing_table_names.update(  self._STS( self._c.execute( 'show tables in hydrus;' ) ))
+
         existing_table_names = { name for name in existing_table_names if True in ( name.startswith( table_prefix ) for table_prefix in table_prefixes ) }
         
         surplus_table_names = existing_table_names.difference( good_table_names )
@@ -3857,15 +3855,17 @@ class DB( HydrusDB.HydrusDB ):
         
     
     def _GetClientFilesLocations( self ):
-        
-        result = { prefix : HydrusPaths.ConvertPortablePathToAbsPath( location ) for ( prefix, location ) in self._c.execute( 'SELECT prefix, location FROM client_files_locations;' ) }
+
+        self._c.execute('SELECT prefix, location FROM client_files_locations;')
+        result = { prefix : HydrusPaths.ConvertPortablePathToAbsPath( location ) for ( prefix, location ) in self._c.fetchall()  }
         
         return result
         
     
     def _GetDownloads( self ):
-        
-        return { hash for ( hash, ) in self._c.execute( 'SELECT hash FROM file_transfers NATURAL JOIN hashes WHERE service_id = %s;', ( self._combined_local_file_service_id, ) ) }
+        self._c.execute('SELECT hash FROM file_transfers NATURAL JOIN hashes WHERE service_id = %s;', (self._combined_local_file_service_id,))
+
+        return { hash for ( hash, ) in self._c.fetchall()  }
         
     
     def _GetFileHashes( self, given_hashes, given_hash_type, desired_hash_type ):
@@ -5623,7 +5623,7 @@ class DB( HydrusDB.HydrusDB ):
                     
                 finally:
                     
-                    self._InitDBCursor()
+                    self._InitDBCursor(started=True)
                     
                 
             
@@ -5669,7 +5669,7 @@ class DB( HydrusDB.HydrusDB ):
                 dump = str( dump, 'utf-8' )
                 
             
-            serialisable_info = json.loads( dump )
+            serialisable_info = json.loads(json.loads( dump ))
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, version, serialisable_info ) )
             
@@ -5690,7 +5690,7 @@ class DB( HydrusDB.HydrusDB ):
                     dump = str( dump, 'utf-8' )
                     
                 
-                serialisable_info = json.loads( dump )
+                serialisable_info = json.loads(json.loads( dump ))
                 
                 objs.append( HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) ) )
                 
@@ -5968,12 +5968,16 @@ class DB( HydrusDB.HydrusDB ):
         if result is None:
             
             options = ClientDefaults.GetClientDefaultOptions()
+
+            for k, v in options.items():
+                if type(v) is bytes:
+                    options[k] = str(v, 'utf-8')
             
-            self._c.execute( 'INSERT INTO options ( options ) VALUES ( %s );', ( options, ) )
+            self._c.execute( 'INSERT INTO options ( options ) VALUES ( %s );', ( json.dumps(options), ) )
             
         else:
             
-            ( options, ) = result
+            options = json.loads(result[0])
             
             default_options = ClientDefaults.GetClientDefaultOptions()
             
@@ -7365,83 +7369,7 @@ class DB( HydrusDB.HydrusDB ):
         
     
     def _LoadIntoDiskCache( self, stop_time = None, caller_limit = None ):
-        
-        self._CloseDBCursor()
-        
-        try:
-            
-            approx_disk_cache_size = psutil.virtual_memory().available * 4 / 5
-            
-            disk_cache_limit = approx_disk_cache_size * 2 / 3
-            
-        except psutil.Error:
-            
-            disk_cache_limit = 512 * 1024 * 1024
-            
-        
-        so_far_read = 0
-        
-        try:
-            
-            next_stop_time_presentation = 0
-            next_gc_collect = 0
-            
-            paths = [ os.path.join( self._db_dir, filename ) for filename in list(self._db_filenames.values()) ]
-            
-            paths.sort( key = os.path.getsize )
-            
-            for path in paths:
-                
-                with open( path, 'rb' ) as f:
-                    
-                    while len( f.read( HC.READ_BLOCK_SIZE ) ) > 0:
-                        
-                        if stop_time is not None:
-                            
-                            if HydrusData.TimeHasPassed( next_stop_time_presentation ):
-                                
-                                if HydrusData.TimeHasPassed( stop_time ):
-                                    
-                                    return False
-                                    
-                                
-                                HG.client_controller.pub( 'splash_set_status_subtext', 'cached ' + HydrusData.TimestampToPrettyTimeDelta( stop_time, just_now_string = 'ok', just_now_threshold = 1 ) )
-                                
-                                next_stop_time_presentation = HydrusData.GetNow() + 1
-                                
-                            
-                        
-                        so_far_read += HC.READ_BLOCK_SIZE
-                        
-                        if so_far_read > disk_cache_limit:
-                            
-                            return True
-                            
-                        
-                        if caller_limit is not None and so_far_read > caller_limit:
-                            
-                            return False
-                            
-                        
-                        if HydrusData.TimeHasPassed( next_gc_collect ):
-                            
-                            gc.collect()
-                            
-                            next_gc_collect = HydrusData.GetNow() + 1
-                            
-                            time.sleep( 0.00001 )
-                            
-                        
-                    
-                
-            
-        finally:
-            
-            gc.collect()
-            
-            self._InitDBCursor()
-            
-        
+        self._InitDBCursor(started=True)
         return True
         
     
@@ -9050,7 +8978,7 @@ class DB( HydrusDB.HydrusDB ):
         
         # master
         
-        existing_master_tables = self._STS( self._c.execute( 'SELECT name FROM sqlite_master WHERE type = %s;', ( 'table', ) ) )
+        existing_master_tables = self._STS( self._c.execute( 'show tables in hydrus;' ) )
         
         main_master_tables = set()
         
@@ -9093,13 +9021,13 @@ class DB( HydrusDB.HydrusDB ):
         
         # mappings
         
-        existing_mapping_tables = self._STS( self._c.execute( 'SELECT name FROM external_mappings_sqlite_master WHERE type = %s;', ( 'table', ) ) )
+        existing_mapping_tables = self._STS( self._c.execute( 'show tables in hydrus;' ) )
         
         main_mappings_tables = set()
         
         for service_id in tag_service_ids:
             
-            main_mappings_tables.update( ( name.split( '.' )[1] for name in GenerateMappingsTableNames( service_id ) ) )
+            main_mappings_tables.update( name for name in GenerateMappingsTableNames( service_id ) )
             
         
         missing_main_tables = main_mappings_tables.difference( existing_mapping_tables )
@@ -9128,7 +9056,7 @@ class DB( HydrusDB.HydrusDB ):
         
         # caches
         
-        existing_cache_tables = self._STS( self._c.execute( 'SELECT name FROM sqlite_master WHERE type = %s;', ( 'table', ) ) )
+        existing_cache_tables = self._STS( self._c.execute( 'show tables in hydrus;' ) )
         
         main_cache_tables = set()
         
@@ -9166,12 +9094,12 @@ class DB( HydrusDB.HydrusDB ):
         
         for ( file_service_id, tag_service_id ) in itertools.product( file_service_ids, tag_service_ids ):
             
-            mappings_cache_tables.update( ( name.split( '.' )[1] for name in GenerateSpecificMappingsCacheTableNames( file_service_id, tag_service_id ) ) )
+            mappings_cache_tables.update( ( name for name in GenerateSpecificMappingsCacheTableNames( file_service_id, tag_service_id ) ) )
             
         
         for tag_service_id in tag_service_ids:
             
-            mappings_cache_tables.add( GenerateCombinedFilesMappingsCacheTableName( tag_service_id ).split( '.' )[1] )
+            mappings_cache_tables.add( GenerateCombinedFilesMappingsCacheTableName( tag_service_id ))
             
         
         missing_main_tables = mappings_cache_tables.difference( existing_cache_tables )
@@ -9337,7 +9265,7 @@ class DB( HydrusDB.HydrusDB ):
             
             self._CloseDBCursor()
             
-            self._InitDBCursor()
+            self._InitDBCursor(started=True)
             
             job_key.Finish()
             
@@ -11923,7 +11851,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._CloseDBCursor()
         
-        self._InitDBCursor()
+        self._InitDBCursor(started=True)
         
     
     def _Vacuum( self, stop_time = None, force_vacuum = False ):
