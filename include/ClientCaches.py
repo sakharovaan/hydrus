@@ -2579,7 +2579,7 @@ class ServicesManager( object ):
         
         try:
             
-            return self._keys_to_services[ str(service_key, 'utf-8') ]
+            return self._keys_to_services[ service_key ]
             
         except KeyError:
             

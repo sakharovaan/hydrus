@@ -64,7 +64,6 @@ class HydrusDB( object ):
         self._no_wal = no_wal
         
         self._transaction_started = 0
-        self._in_transaction = False
         self._transaction_contains_writes = False
         
         self._connection_timestamp = 0
@@ -176,15 +175,11 @@ class HydrusDB( object ):
     
     def _BeginImmediate( self ):
         
-        if not self._in_transaction:
-            
-            self._c.execute( 'START TRANSACTION;' )
-            self._c.execute( 'BEGIN;' )
-            self._c.execute( 'SAVEPOINT hydrus_savepoint;' )
-            self._c.execute( 'SET autocommit=0;')
+        if not self._db.in_transaction:
+
+            self._db.start_transaction()
 
             self._transaction_started = HydrusData.GetNow()
-            self._in_transaction = True
             self._transaction_contains_writes = False
             
         
@@ -198,7 +193,7 @@ class HydrusDB( object ):
         
         if self._db is not None:
             
-            if self._in_transaction:
+            if self._db.in_transaction:
                 
                 self._Commit()
 
@@ -209,12 +204,10 @@ class HydrusDB( object ):
     
     def _Commit( self ):
         
-        if self._in_transaction:
+        if self._db.in_transaction:
             
-            self._c.execute( 'COMMIT;' )
-            
-            self._in_transaction = False
-            
+            self._db.commit()
+
         else:
             
             HydrusData.Print( 'Received a call to commit, but was not in a transaction!' )
@@ -416,9 +409,7 @@ class HydrusDB( object ):
             except Exception as rollback_e:
                 
                 HydrusData.Print( 'When the transaction failed, attempting to rollback the database failed. Please restart the client as soon as is convenient.' )
-                
-                self._in_transaction = False
-                
+
                 self._CloseDBCursor()
                 
                 self._InitDBCursor(started=True)
@@ -458,9 +449,9 @@ class HydrusDB( object ):
     
     def _Rollback( self ):
         
-        if self._in_transaction:
+        if self._db.in_transaction:
             
-            self._c.execute( 'ROLLBACK TO SAVEPOINT hydrus_savepoint;' )
+            self._db.rollback()
             
         else:
             
@@ -470,9 +461,8 @@ class HydrusDB( object ):
     
     def _Save( self ):
         
-        self._c.execute( 'RELEASE SAVEPOINT hydrus_savepoint;' )
-        
-        self._c.execute( 'SAVEPOINT hydrus_savepoint;' )
+        self._db.commit()
+        self._db.start_transaction()
         
     
     def _SelectFromList( self, select_statement, xs ):
@@ -492,7 +482,7 @@ class HydrusDB( object ):
         # and also so we aren't overmaking it when this gets spammed with a lot of len() == 1 calls
         if len( xs ) >= MAX_CHUNK_SIZE:
             
-            max_statement = select_statement % ( '(' + ','.join( '%s' * MAX_CHUNK_SIZE ) + ')' )
+            max_statement = select_statement % ( '(' + ','.join( ['%s'] * MAX_CHUNK_SIZE ) + ')' )
             
         
         for chunk in HydrusData.SplitListIntoChunks( xs, MAX_CHUNK_SIZE ):
@@ -503,7 +493,7 @@ class HydrusDB( object ):
                 
             else:
                 
-                chunk_statement = select_statement % ( '(' + ','.join( '%s' * len( chunk ) ) + ')' )
+                chunk_statement = select_statement % ( '(' + ','.join( ['%s'] * len( chunk ) ) + ')' )
 
             self._c.execute(chunk_statement, chunk)
             for row in self._c.fetchall():
@@ -521,22 +511,28 @@ class HydrusDB( object ):
     def _STI( self, iterable_cursor ):
         
         # strip singleton tuples to an iterator
-        
-        return ( item for ( item, ) in self._c.fetchall() )
+        try:
+            return ( item for ( item, ) in self._c.fetchall() )
+        except mysql.connector.errors.InterfaceError:
+            return ()
         
     
     def _STL( self, iterable_cursor ):
         
         # strip singleton tuples to a list
-        
-        return [ item for ( item, ) in self._c.fetchall()  ]
+        try:
+            return [ item for ( item, ) in self._c.fetchall() ]
+        except mysql.connector.errors.InterfaceError:
+            return []
         
     
     def _STS( self, iterable_cursor ):
         
         # strip singleton tuples to a set
-        
-        return { item for ( item, ) in self._c.fetchall()  }
+        try:
+            return { item for ( item, ) in self._c.fetchall()  }
+        except mysql.connector.errors.InterfaceError:
+            return {}
         
     
     def _UpdateDB( self, version ):
