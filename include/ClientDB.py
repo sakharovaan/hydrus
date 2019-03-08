@@ -287,7 +287,7 @@ class DB( HydrusDB.HydrusDB ):
             
             ( hash_id_map_table_name, tag_id_map_table_name ) = GenerateRepositoryMasterCacheTableNames( service_id )
             
-            self._c.execute( 'CREATE TABLE ' + hash_id_map_table_name + ' ( service_hash_id INTEGER PRIMARY KEY AUTO, hash_id INTEGER );' )
+            self._c.execute( 'CREATE TABLE ' + hash_id_map_table_name + ' ( service_hash_id INTEGER PRIMARY KEY , hash_id INTEGER );' )
             self._c.execute( 'CREATE TABLE ' + tag_id_map_table_name + ' ( service_tag_id INTEGER PRIMARY KEY, tag_id INTEGER );' )
             
         
@@ -5721,7 +5721,7 @@ class DB( HydrusDB.HydrusDB ):
             
             # build it
             self._c.execute('SELECT service_id, service_key FROM services;')
-            service_ids_to_service_keys = { service_id : service_key for ( service_id, service_key ) in self._c.fetchall()}
+            service_ids_to_service_keys = { service_id : binascii.a2b_hex(service_key) for ( service_id, service_key ) in self._c.fetchall()}
             
             missing_media_results = []
             

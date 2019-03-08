@@ -1139,7 +1139,7 @@ class Controller( HydrusController.HydrusController ):
     
     def Run( self ):
         
-        self._app = wx.App()
+        self._app = wx.App(0)
         
         self._app.locale = wx.Locale( wx.LANGUAGE_DEFAULT ) # Very important to init this here and keep it non garbage collected
         

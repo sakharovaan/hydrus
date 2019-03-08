@@ -353,13 +353,13 @@ class HydrusDB( object ):
             
             if job_type in ( 'read_write', 'write' ):
                 
-                self._current_status = 'db write locked'
+                self._current_status = 'db writing'
                 
                 self._transaction_contains_writes = True
                 
             else:
                 
-                self._current_status = 'db read locked'
+                self._current_status = 'db reading'
                 
             
             self.publish_status_update()
