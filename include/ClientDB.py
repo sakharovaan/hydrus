@@ -5572,7 +5572,7 @@ class DB( HydrusDB.HydrusDB ):
                 dump = str( dump, 'utf-8' )
                 
             
-            serialisable_info = json.loads(json.loads( dump ))
+            serialisable_info = json.loads( dump )
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, version, serialisable_info ) )
             
@@ -5593,7 +5593,7 @@ class DB( HydrusDB.HydrusDB ):
                     dump = str( dump, 'utf-8' )
                     
                 
-                serialisable_info = json.loads(json.loads( dump ))
+                serialisable_info = json.loads( dump )
                 
                 objs.append( HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) ) )
                 
@@ -7706,7 +7706,7 @@ class DB( HydrusDB.HydrusDB ):
                             
                             if sub_action in ( 'copy', 'delete', 'delete_deleted', 'delete_for_deleted_files' ):
                                 
-                                self._c.execute( 'CREATE TEMPORARY TABLE temp_operation ( job_id INTEGER PRIMARY KEY AUTO_INCREMENT AUTO_INCREMENT, tag_id INTEGER, hash_id INTEGER );' )
+                                self._c.execute( 'CREATE TEMPORARY TABLE temp_operation ( job_id INTEGER PRIMARY KEY AUTO_INCREMENT, tag_id INTEGER, hash_id INTEGER );' )
                                 
                                 ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name ) = GenerateMappingsTableNames( service_id )
                                 
