@@ -22,7 +22,7 @@ sql_conn = mysql.connector.connect(
                 buffered=True
             )
 sql_cursor = sql_conn.cursor(buffered=True)
-sql_cursor.execute('CREATE DATABASE ' + config['mysql_db']['database'] + ';')
+sql_cursor.execute('CREATE DATABASE IF NOT EXISTS ' + config['mysql_db']['database'] + ';')
 sql_conn.commit()
 sql_conn.close()
 
@@ -39,7 +39,9 @@ sql_cursor = sql_conn.cursor(buffered=True)
 "self._c.execute( 'CREATE TABLE IF NOT EXISTS subtags_fts4 ( docid INT AUTO_INCREMENT PRIMARY KEY, subtag TEXT, FULLTEXT(subtag) );' )"
 
 
-def adapt_line(line):
+def adapt_line(line_bin):
+    line = str(line_bin, 'utf8')
+
     if 'fts4' in line:
         return '-- ;'
 
@@ -61,13 +63,10 @@ def adapt_line(line):
         line = line.replace('dump VARCHAR(255)', 'dump LONGTEXT').replace("'c0subtag'", "c0subtag varchar(255)")
         line = line.replace('dump_name TEXT', 'dump_name VARCHAR(255)').replace("TEXT UNIQUE", "varchar(255) UNIQUE")
 
-        if 'CREATE TABLE json' in line:
-            line = line.replace("dump LONGTEXT", "dump JSON")
-
-
     if line.startswith('INSERT INTO'):
 
         line = line.replace(",X'", ",'")
+        line_bin = line_bin.replace(b",X'", b",'")
 
         if line.startswith("INSERT INTO json_dumps"):
             try:
@@ -79,14 +78,17 @@ def adapt_line(line):
                 dump_json = binascii.a2b_hex(dump)
                 line = line.replace(dump, str(dump_json.replace(b'\'', b'\'\''))[2:-1]).replace("\\'\\''", "\'\'")
 
+        if line.startswith("INSERT INTO services"):
+            return str(line_bin.replace(b'\\"', b'\\\\"'), 'utf8')
+
+
     if 'sqlite' in line:
         return '-- ;'
 
-    print(line)
     return line
 
 
 for file in bases.keys():
-    with open(path.join(path.abspath('.'), file)) as f:
+    with open(path.join(path.abspath('.'), file), 'rb') as f:
         for line in f.readlines():
             sql_cursor.execute(adapt_line(line))

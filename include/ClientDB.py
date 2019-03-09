@@ -2747,9 +2747,9 @@ class DB( HydrusDB.HydrusDB ):
         self._c.execute( 'CREATE TABLE file_petitions ( service_id INTEGER REFERENCES services ON DELETE CASCADE, hash_id INTEGER, reason_id INTEGER, PRIMARY KEY ( service_id, hash_id, reason_id ) );' )
         self._CreateIndex( 'file_petitions', [ 'hash_id' ] )
         
-        self._c.execute( 'CREATE TABLE json_dict ( name varchar(255) PRIMARY KEY, dump JSON );' )
-        self._c.execute( 'CREATE TABLE json_dumps ( dump_type INTEGER PRIMARY KEY, version INTEGER, dump JSON );' )
-        self._c.execute( 'CREATE TABLE json_dumps_named ( dump_type INTEGER, dump_name varchar(255), version INTEGER, timestamp INTEGER, dump JSON, PRIMARY KEY ( dump_type, dump_name, timestamp ) );' )
+        self._c.execute( 'CREATE TABLE json_dict ( name varchar(255) PRIMARY KEY, dump LONGTEXT );' )
+        self._c.execute( 'CREATE TABLE json_dumps ( dump_type INTEGER PRIMARY KEY, version INTEGER, dump LONGTEXT );' )
+        self._c.execute( 'CREATE TABLE json_dumps_named ( dump_type INTEGER, dump_name varchar(255), version INTEGER, timestamp INTEGER, dump LONGTEXT, PRIMARY KEY ( dump_type, dump_name, timestamp ) );' )
         
         self._c.execute( 'CREATE TABLE last_shutdown_work_time ( last_shutdown_work_time INTEGER );' )
         
@@ -2757,7 +2757,7 @@ class DB( HydrusDB.HydrusDB ):
         self._CreateIndex( 'local_ratings', [ 'hash_id' ] )
         self._CreateIndex( 'local_ratings', [ 'rating' ] )
         
-        self._c.execute( 'CREATE TABLE options ( options JSON );', )
+        self._c.execute( 'CREATE TABLE options ( options LONGTEXT );', )
         
         self._c.execute( 'CREATE TABLE recent_tags ( service_id INTEGER REFERENCES services ON DELETE CASCADE, tag_id INTEGER, timestamp INTEGER, PRIMARY KEY ( service_id, tag_id ) );' )
         
@@ -2778,7 +2778,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.execute( 'CREATE TABLE statuses ( status_id INTEGER PRIMARY KEY AUTO_INCREMENT, status varchar(255) UNIQUE );' )
         
-        self._c.execute( 'CREATE TABLE tag_censorship ( service_id INTEGER PRIMARY KEY REFERENCES services ON DELETE CASCADE, blacklist BOOL, tags JSON );' )
+        self._c.execute( 'CREATE TABLE tag_censorship ( service_id INTEGER PRIMARY KEY REFERENCES services ON DELETE CASCADE, blacklist BOOL, tags LONGTEXT );' )
         
         self._c.execute( 'CREATE TABLE tag_parents ( service_id INTEGER REFERENCES services ON DELETE CASCADE, child_tag_id INTEGER, parent_tag_id INTEGER, status INTEGER, PRIMARY KEY ( service_id, child_tag_id, parent_tag_id, status ) );' )
         
@@ -5567,12 +5567,7 @@ class DB( HydrusDB.HydrusDB ):
             
             ( version, dump ) = result
             
-            if isinstance( dump, bytes ):
-                
-                dump = str( dump, 'utf-8' )
-                
-            
-            serialisable_info = json.loads( dump )
+            serialisable_info = json.loads(dump)
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, version, serialisable_info ) )
             
@@ -5616,7 +5611,7 @@ class DB( HydrusDB.HydrusDB ):
                 dump = str( dump, 'utf-8' )
                 
             
-            serialisable_info = json.loads(json.loads( dump ))
+            serialisable_info = json.loads( dump )
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) )
             
@@ -5873,17 +5868,17 @@ class DB( HydrusDB.HydrusDB ):
         if result is None:
             
             options = ClientDefaults.GetClientDefaultOptions()
-
-            for k, v in options.items():
-                if type(v) is bytes:
-                    options[k] = str(v, 'utf-8')
             
-            self._c.execute( 'INSERT INTO options ( options ) VALUES ( %s );', ( json.dumps(options), ) )
+            self._c.execute( 'INSERT INTO options ( options ) VALUES ( %s );', ( yaml.safe_dump(options), ) )
             
         else:
             
-            options = json.loads(result[0])
-            
+            options = yaml.safe_load(result[0])
+
+            for k, v in options.items():
+                if type(v) is str and v.startswith('!bytes_'):
+                    options[k] = binascii.a2b_hex(v.replace('!bytes_',''))
+
             default_options = ClientDefaults.GetClientDefaultOptions()
             
             for key in default_options:
@@ -9212,8 +9207,9 @@ class DB( HydrusDB.HydrusDB ):
         
     
     def _SaveOptions( self, options ):
-        
-        self._c.execute( 'UPDATE options SET options = %s;', ( json.dumps(options), ) )
+        options = dict(options)
+
+        self._c.execute( 'UPDATE options SET options = %s;', ( yaml.safe_dump(options), ) )
         
         self.pub_after_job( 'thumbnail_resize' )
         self.pub_after_job( 'notify_new_options' )
@@ -9264,7 +9260,7 @@ class DB( HydrusDB.HydrusDB ):
                 self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s;', ( dump_type, dump_name ) )
                 
             
-            self._c.execute( 'INSERT INTO json_dumps_named ( dump_type, dump_name, version, timestamp, dump ) VALUES ( %s, %s, %s, %s, %s );', ( dump_type, dump_name, version, HydrusData.GetNow(), json.dumps(dump) ) )
+            self._c.execute( 'INSERT INTO json_dumps_named ( dump_type, dump_name, version, timestamp, dump ) VALUES ( %s, %s, %s, %s, %s );', ( dump_type, dump_name, version, HydrusData.GetNow(), dump ) )
             
         else:
             
@@ -9285,7 +9281,7 @@ class DB( HydrusDB.HydrusDB ):
             
             self._c.execute( 'DELETE FROM json_dumps WHERE dump_type = %s;', ( dump_type, ) )
             
-            self._c.execute( 'INSERT INTO json_dumps ( dump_type, version, dump ) VALUES ( %s, %s, %s );', ( dump_type, version, json.dumps( dump ) ) )
+            self._c.execute( 'INSERT INTO json_dumps ( dump_type, version, dump ) VALUES ( %s, %s, %s );', ( dump_type, version, dump ) )
             
         
     
@@ -9299,7 +9295,7 @@ class DB( HydrusDB.HydrusDB ):
             
             json_dump = json.dumps( value )
             
-            self._c.execute( 'REPLACE INTO json_dict ( name, dump ) VALUES ( %s, %s );', ( name, bytes( json_dump, 'utf-8' ) ) )
+            self._c.execute( 'REPLACE INTO json_dict ( name, dump ) VALUES ( %s, %s );', ( name, json_dump ) )
             
         
     
