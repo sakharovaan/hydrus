@@ -28,6 +28,8 @@ PySocks = "*"
 Twisted = {file = "https://download.lfd.uci.edu/pythonlibs/u2hcgva4/Twisted-18.9.0-cp36-cp36m-win_amd64.whl"}
 wxpython = "*"
 mysql-connector-python = "*"
+yaml = "*"
+mysql-connector = "*"
 
 [requires]
 python_version = "3.6"

@@ -24,7 +24,7 @@ rating = {
     "e": "rating:explicit"
 }
 
-for file in os.scandir('C:\\'):
+for file in os.scandir('E:\danbooru_dump_metadata'):
     with open(file, encoding='utf-8') as f:
         print(file)
         for line in f.readlines():
@@ -40,7 +40,7 @@ for file in os.scandir('C:\\'):
 
             file_metadata[j['id']].append(rating[j['rating']])
 
-for file in glob.iglob("Y:\danbooru_dump\**\*", recursive=True):
+for file in glob.iglob("E:\danbooru\**\*", recursive=True):
     print(file)
     fileno = os.path.basename(os.path.splitext(file)[0])
 

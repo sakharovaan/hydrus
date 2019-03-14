@@ -2818,7 +2818,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.execute( 'CREATE TABLE IF NOT EXISTS namespaces ( namespace_id INTEGER PRIMARY KEY AUTO_INCREMENT, namespace varchar(255) UNIQUE );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS subtags ( subtag_id INTEGER PRIMARY KEY AUTO_INCREMENT, subtag varchar(255) UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS subtags ( subtag_id INTEGER PRIMARY KEY AUTO_INCREMENT, subtag varchar(512) );' )
         
         self._c.execute( 'CREATE TABLE IF NOT EXISTS subtags_fts4 ( docid INT AUTO_INCREMENT PRIMARY KEY, subtag TEXT, FULLTEXT(subtag) );' )
         
@@ -2827,8 +2827,9 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.execute( 'CREATE TABLE IF NOT EXISTS texts ( text_id INTEGER PRIMARY KEY AUTO_INCREMENT, text varchar(255) UNIQUE );' )
         
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS urls ( url_id INTEGER PRIMARY KEY AUTO_INCREMENT, domain VARCHAR(255), url VARCHAR(2083) CHARACTER SET ascii UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS urls ( url_id INTEGER PRIMARY KEY AUTO_INCREMENT, domain VARCHAR(255), url VARCHAR(512) );' )
         self._CreateIndex( 'urls', [ 'domain' ] )
+        self._CreateIndex( 'urls', [ 'url' ] )
         
         # inserts
 
@@ -5567,7 +5568,7 @@ class DB( HydrusDB.HydrusDB ):
             
             ( version, dump ) = result
             
-            serialisable_info = json.loads(dump)
+            serialisable_info = json.loads(str(binascii.a2b_hex(bytes(dump, 'utf8')), 'utf8'))
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, version, serialisable_info ) )
             
@@ -5588,7 +5589,7 @@ class DB( HydrusDB.HydrusDB ):
                     dump = str( dump, 'utf-8' )
                     
                 
-                serialisable_info = json.loads( dump )
+                serialisable_info =  json.loads(str(binascii.a2b_hex(bytes(dump, 'utf8')), 'utf8'))
                 
                 objs.append( HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) ) )
                 
@@ -5609,9 +5610,9 @@ class DB( HydrusDB.HydrusDB ):
             if isinstance( dump, bytes ):
                 
                 dump = str( dump, 'utf-8' )
-                
-            
-            serialisable_info = json.loads( dump )
+
+
+            serialisable_info =  json.loads(str(binascii.a2b_hex(bytes(dump, 'utf8')), 'utf8'))
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) )
             
@@ -5659,7 +5660,7 @@ class DB( HydrusDB.HydrusDB ):
             dump = str( dump, 'utf-8' )
             
         
-        value = json.loads( dump )
+        value = json.loads(str(binascii.a2b_hex(bytes(dump, 'utf8')), 'utf8'))
         
         return value
         
@@ -9260,7 +9261,7 @@ class DB( HydrusDB.HydrusDB ):
                 self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s;', ( dump_type, dump_name ) )
                 
             
-            self._c.execute( 'INSERT INTO json_dumps_named ( dump_type, dump_name, version, timestamp, dump ) VALUES ( %s, %s, %s, %s, %s );', ( dump_type, dump_name, version, HydrusData.GetNow(), dump ) )
+            self._c.execute( 'INSERT INTO json_dumps_named ( dump_type, dump_name, version, timestamp, dump ) VALUES ( %s, %s, %s, %s, %s );', ( dump_type, dump_name, version, HydrusData.GetNow(),  str(binascii.b2a_hex(bytes(dump, 'utf8')), 'utf8') ))
             
         else:
             
@@ -9281,7 +9282,7 @@ class DB( HydrusDB.HydrusDB ):
             
             self._c.execute( 'DELETE FROM json_dumps WHERE dump_type = %s;', ( dump_type, ) )
             
-            self._c.execute( 'INSERT INTO json_dumps ( dump_type, version, dump ) VALUES ( %s, %s, %s );', ( dump_type, version, dump ) )
+            self._c.execute( 'INSERT INTO json_dumps ( dump_type, version, dump ) VALUES ( %s, %s, %s );', ( dump_type, version, str(binascii.b2a_hex(bytes(dump, 'utf8')), 'utf8') ) )
             
         
     
@@ -9295,7 +9296,7 @@ class DB( HydrusDB.HydrusDB ):
             
             json_dump = json.dumps( value )
             
-            self._c.execute( 'REPLACE INTO json_dict ( name, dump ) VALUES ( %s, %s );', ( name, json_dump ) )
+            self._c.execute( 'REPLACE INTO json_dict ( name, dump ) VALUES ( %s, %s );', ( name, str(binascii.b2a_hex(bytes(json_dump, 'utf8')), 'utf8') ) )
             
         
     
