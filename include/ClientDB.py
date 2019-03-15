@@ -2710,8 +2710,36 @@ class DB( HydrusDB.HydrusDB ):
             
             self._c.execute( 'DROP table ' + table_name + ';' )
             
-        
-    
+    def _SaveNamedDump(self, dump):
+        self._PurgeNamedDumps()
+        gen_uuid = str(uuid.uuid4())
+        path = os.path.join(HC.JSON_PATH , gen_uuid + '.json')
+
+        with open(path, mode='w') as f:
+            f.write(json.dumps(dump))
+
+        return os.path.abspath(path)
+
+    def _LoadNamedDump(self, dump):
+        dump_loaded = None
+
+        with open(os.path.join(HC.JSON_PATH , dump), mode='r') as f:
+            dump_loaded = json.loads(f.read())
+
+        return dump_loaded
+
+    def _PurgeNamedDumps(self):
+        dump_names = []
+        self._c.execute('SELECT dump FROM json_dumps;'); result = self._c.fetchall()
+        dump_names.extend([x[0] for x in result])
+        self._c.execute('SELECT dump FROM json_dumps_named;'); result =self._c.fetchall()
+        dump_names.extend([x[0] for x in result])
+
+        for file in glob.iglob(HC.JSON_PATH + '*'):
+            if os.path.split(file)[1].endswith('.json'):
+                if not os.path.split(file)[1] in dump_names:
+                        os.unlink(file)
+
     def _CreateDB( self ):
         self._c.execute( 'CREATE DATABASE hydrus;')
         self._c.execute( 'USE hydrus;')
@@ -2908,7 +2936,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.execute( 'INSERT INTO version ( version ) VALUES ( %s );', ( HC.SOFTWARE_VERSION, ) )
         
-        self._c.executemany( 'INSERT INTO json_dumps_named VALUES ( %s, %s, %s, %s, %s );', ClientDefaults.GetDefaultScriptRows() )
+        #self._c.executemany( 'INSERT INTO json_dumps_named VALUES ( %s, %s, %s, %s, %s );', ClientDefaults.GetDefaultScriptRows() )
         
     
     def _CreateDBCaches( self ):
@@ -2946,7 +2974,7 @@ class DB( HydrusDB.HydrusDB ):
                 
                 self._DeleteFiles( local_file_service_id, hash_ids )
                 
-            
+
             self._DeleteFiles( self._trash_service_id, hash_ids )
             
         
@@ -5568,7 +5596,7 @@ class DB( HydrusDB.HydrusDB ):
             
             ( version, dump ) = result
             
-            serialisable_info = json.loads(str(binascii.a2b_hex(bytes(dump, 'utf8')), 'utf8'))
+            serialisable_info = self._LoadNamedDump( dump )
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, version, serialisable_info ) )
             
@@ -5589,7 +5617,7 @@ class DB( HydrusDB.HydrusDB ):
                     dump = str( dump, 'utf-8' )
                     
                 
-                serialisable_info =  json.loads(str(binascii.a2b_hex(bytes(dump, 'utf8')), 'utf8'))
+                serialisable_info = self._LoadNamedDump(dump)
                 
                 objs.append( HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) ) )
                 
@@ -5612,7 +5640,7 @@ class DB( HydrusDB.HydrusDB ):
                 dump = str( dump, 'utf-8' )
 
 
-            serialisable_info =  json.loads(str(binascii.a2b_hex(bytes(dump, 'utf8')), 'utf8'))
+            serialisable_info =  self._LoadNamedDump(dump)
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) )
             
@@ -5660,7 +5688,7 @@ class DB( HydrusDB.HydrusDB ):
             dump = str( dump, 'utf-8' )
             
         
-        value = json.loads(str(binascii.a2b_hex(bytes(dump, 'utf8')), 'utf8'))
+        value = json.loads(dump)
         
         return value
         
@@ -9224,7 +9252,7 @@ class DB( HydrusDB.HydrusDB ):
             
             try:
                 
-                dump = json.dumps( serialisable_info )
+                dump = self._SaveNamedDump( serialisable_info )
                 
             except Exception as e:
                 
@@ -9261,7 +9289,7 @@ class DB( HydrusDB.HydrusDB ):
                 self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s;', ( dump_type, dump_name ) )
                 
             
-            self._c.execute( 'INSERT INTO json_dumps_named ( dump_type, dump_name, version, timestamp, dump ) VALUES ( %s, %s, %s, %s, %s );', ( dump_type, dump_name, version, HydrusData.GetNow(),  str(binascii.b2a_hex(bytes(dump, 'utf8')), 'utf8') ))
+            self._c.execute( 'INSERT INTO json_dumps_named ( dump_type, dump_name, version, timestamp, dump ) VALUES ( %s, %s, %s, %s, %s );', ( dump_type, dump_name, version, HydrusData.GetNow(),  dump))
             
         else:
             
@@ -9269,7 +9297,7 @@ class DB( HydrusDB.HydrusDB ):
             
             try:
                 
-                dump = json.dumps( serialisable_info )
+                dump = self._SaveNamedDump( serialisable_info )
                 
             except Exception as e:
                 
@@ -9282,7 +9310,7 @@ class DB( HydrusDB.HydrusDB ):
             
             self._c.execute( 'DELETE FROM json_dumps WHERE dump_type = %s;', ( dump_type, ) )
             
-            self._c.execute( 'INSERT INTO json_dumps ( dump_type, version, dump ) VALUES ( %s, %s, %s );', ( dump_type, version, str(binascii.b2a_hex(bytes(dump, 'utf8')), 'utf8') ) )
+            self._c.execute( 'INSERT INTO json_dumps ( dump_type, version, dump ) VALUES ( %s, %s, %s );', ( dump_type, version, dump ))
             
         
     
@@ -9296,7 +9324,7 @@ class DB( HydrusDB.HydrusDB ):
             
             json_dump = json.dumps( value )
             
-            self._c.execute( 'REPLACE INTO json_dict ( name, dump ) VALUES ( %s, %s );', ( name, str(binascii.b2a_hex(bytes(json_dump, 'utf8')), 'utf8') ) )
+            self._c.execute( 'REPLACE INTO json_dict ( name, dump ) VALUES ( %s, %s );', ( name, json_dump ) )
             
         
     

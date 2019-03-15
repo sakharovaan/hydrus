@@ -301,16 +301,16 @@ class HydrusDB( object ):
 
         if not started:
             self._db = mysql.connector.connect(
-                host=os.environ['MYSQL_HOST'],
-                user=os.environ['MYSQL_USER'],
-                password=os.environ['MYSQL_PASSWORD'],
+                host=HC.MYSQL_HOST,
+                user=HC.MYSQL_USER,
+                password=HC.MYSQL_PASSWORD,
                 buffered=True
             )
         elif not self._db:
             self._db = mysql.connector.connect(
-                host=os.environ['MYSQL_HOST'],
-                user=os.environ['MYSQL_USER'],
-                password=os.environ['MYSQL_PASSWORD'],
+                host=HC.MYSQL_HOST,
+                user=HC.MYSQL_USER,
+                password=HC.MYSQL_PASSWORD,
                 database='hydrus',
                 buffered=True
             )

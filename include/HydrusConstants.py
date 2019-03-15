@@ -724,3 +724,11 @@ def represent_python_tuple( self, data ): return self.represent_sequence( 'tag:y
 yaml.SafeLoader.add_constructor( 'tag:yaml.org,2002:python/tuple', construct_python_tuple )
 yaml.SafeDumper.add_representer( tuple, represent_python_tuple )
 
+with open('config.yaml') as f:
+    config = yaml.safe_load(f.read())
+
+MYSQL_HOST = config['mysql_db']['host']
+MYSQL_USER = config['mysql_db']['user']
+MYSQL_PASSWORD = config['mysql_db']['password']
+MYSQL_DB = config['mysql_db']['database']
+JSON_PATH = config['json_path']
