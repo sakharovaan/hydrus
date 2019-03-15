@@ -8,6 +8,7 @@ from . import HydrusText
 import os
 import queue
 import mysql.connector
+from mysql.connector.constants import CharacterSet
 import traceback
 import time
 
@@ -296,6 +297,8 @@ class HydrusDB( object ):
     
     def _InitDBCursor( self, started=False ):
 
+        charset = CharacterSet.get_charset_info("utf8mb4", "utf8mb4_0900_ai_ci")
+
         if self._c:
             self._CloseDBCursor()
 
@@ -304,7 +307,8 @@ class HydrusDB( object ):
                 host=HC.MYSQL_HOST,
                 user=HC.MYSQL_USER,
                 password=HC.MYSQL_PASSWORD,
-                buffered=True
+                buffered=True,
+                charset=charset[0]
             )
         elif not self._db:
             self._db = mysql.connector.connect(
@@ -312,7 +316,8 @@ class HydrusDB( object ):
                 user=HC.MYSQL_USER,
                 password=HC.MYSQL_PASSWORD,
                 database='hydrus',
-                buffered=True
+                buffered=True,
+                charset=charset[0]
             )
         
         self._connection_timestamp = HydrusData.GetNow()

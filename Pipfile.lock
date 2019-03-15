@@ -278,31 +278,6 @@
             "index": "pypi",
             "version": "==3.0.3"
         },
-        "mysql-connector-python": {
-            "hashes": [
-                "sha256:01b168ef896e524b88675795783da2c37c4958d557c25bfe04558e4296cd1ee5",
-                "sha256:037bde8da566ec342f5014b409240ee8e89ac9fdbce9a358643e88e458f35125",
-                "sha256:3770fb563635438f1aff2e83f5e6b2e08a799d804d4dabdbb5d393444608a658",
-                "sha256:3d05de72009aa4c9082d1f11e79d93229258a51ae478a9554b4badcbb67db33a",
-                "sha256:403f6b113604c387c2d53b1ad6228d336260dc061ba8449a608454fdbce0247d",
-                "sha256:43af3b9358d00614ec4832b38a98866c0593cb2c7121c30ca33af48480454c74",
-                "sha256:4de8824d8c26edd246b1174e319099c375a7639488c475268d6459f94f40229d",
-                "sha256:5eaf324580d891ad0556daf6c334473707ba62fccc59782edc82a19d45510850",
-                "sha256:6550043d08406d4a78c53315a53452ab7dde162218daac8ab330e52262e972ad",
-                "sha256:6ff25090b8887a70e6d0f89e5e6c9eb49475d444efc180954fc6d9cc0e0607b6",
-                "sha256:818d6ac938d5e340744fc56fe773a5153911ef44ee2a4b98d874dede4e14677b",
-                "sha256:a67f8072b222351534e5a2d3af3a5f521e8f7a431541c4d054be3084ae554534",
-                "sha256:a6a51636cc3b96ff6d1dfe33b00caa49e5ddf1dd607c34571e00e01b7e19f600",
-                "sha256:b4308928e2ca113b077f7f4ad14611af60700015135ec522d5ac0cf7d0127bae",
-                "sha256:b7ba68f779ff3203d29948462200dd7c6c01b25f7145e4995410c7c10dfa06ee",
-                "sha256:bd085adce53817643b40e0ef9c664e6a1924b1bed43e197aebb2fe20625f09d9",
-                "sha256:c86dae735a4a49c388ff01f69f0797e8619c5344d50c82edec70574a8a4f1ae9",
-                "sha256:ead74bd4ebca9358cb08c581a31cf81bf9fc8acc6fc5cc6f0dbbd2fd096a78bf",
-                "sha256:f0d2dee9adb85c1e32c980dac6e35d7f4869e56d8da550e4d836b9a5271bcf4e"
-            ],
-            "index": "pypi",
-            "version": "==8.0.15"
-        },
         "nose": {
             "hashes": [
                 "sha256:9ff7c6cc443f8c51994b34a667bbcf45afd6d945be7477b52e97516fd17c53ac",

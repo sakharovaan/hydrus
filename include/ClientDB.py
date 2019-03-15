@@ -2719,7 +2719,7 @@ class DB( HydrusDB.HydrusDB ):
         with open(path, mode='w') as f:
             f.write(json.dumps(dump))
 
-        return os.path.abspath(path)
+        return gen_uuid + '.json'
 
     def _LoadNamedDump(self, dump):
         dump_loaded = None
@@ -3667,8 +3667,8 @@ class DB( HydrusDB.HydrusDB ):
                 else:
                     
                     subtags_fts4_param = '"' + half_complete_subtag + '"'
-                    
-                    return self._STL( self._c.execute( 'SELECT docid FROM subtags_fts4 WHERE MATCH subtag AGAINST %s;', ( subtags_fts4_param, ) ) )
+
+                    return self._STL( self._c.execute( 'SELECT docid FROM subtags_fts4 WHERE MATCH (subtag) AGAINST (%s);', ( subtags_fts4_param, ) ) )
                     
                 
             
