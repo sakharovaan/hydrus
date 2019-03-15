@@ -22,6 +22,9 @@ header_and_mime = [
     ( 0, b'GIF87a', HC.IMAGE_GIF ),
     ( 0, b'GIF89a', HC.IMAGE_GIF ),
     ( 0, b'\x89PNG', HC.UNDETERMINED_PNG ),
+    ( 8, b'WEBP', HC.IMAGE_WEBP ),
+    ( 0, b'II*\x00', HC.IMAGE_TIFF ),
+    ( 0, b'MM\x00*', HC.IMAGE_TIFF ),
     ( 0, b'BM', HC.IMAGE_BMP ),
     ( 0, b'CWS', HC.APPLICATION_FLASH ),
     ( 0, b'FWS', HC.APPLICATION_FLASH ),
@@ -69,9 +72,9 @@ def SaveThumbnailToStreamPIL( pil_image, dimensions, f ):
     
 def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS, percentage_in = 35 ):
     
-    if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF ):
+    if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF ):
         
-        thumbnail = GenerateThumbnailFromStaticImage( path, dimensions, mime )
+        thumbnail = GenerateThumbnailFileBytesFromStaticImagePath( path, dimensions, mime )
         
     else:
         
@@ -129,6 +132,10 @@ def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS
             
             SaveThumbnailToStreamPIL( pil_image, dimensions, f )
             
+            renderer.Stop()
+            
+            del renderer
+            
         
         f.seek( 0 )
         
@@ -139,7 +146,7 @@ def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS
     
     return thumbnail
     
-def GenerateThumbnailFromStaticImagePIL( path, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS, mime = None ):
+def GenerateThumbnailFileBytesFromStaticImagePathPIL( path, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS, mime = None ):
     
     f = io.BytesIO()
     
@@ -155,7 +162,7 @@ def GenerateThumbnailFromStaticImagePIL( path, dimensions = HC.UNSCALED_THUMBNAI
     
     return thumbnail
     
-GenerateThumbnailFromStaticImage = GenerateThumbnailFromStaticImagePIL
+GenerateThumbnailFileBytesFromStaticImagePath = GenerateThumbnailFileBytesFromStaticImagePathPIL
 
 def GetExtraHashesFromPath( path ):
     
@@ -215,7 +222,7 @@ def GetFileInfo( path, mime = None ):
     num_frames = None
     num_words = None
     
-    if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF ):
+    if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF ):
         
         ( ( width, height ), duration, num_frames ) = HydrusImageHandling.GetImageProperties( path, mime )
         

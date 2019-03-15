@@ -5,6 +5,7 @@ from . import ClientImporting
 from . import ClientImportFileSeeds
 from . import ClientImportGallerySeeds
 from . import ClientImportOptions
+from . import ClientTags
 from . import HydrusConstants as HC
 from . import HydrusData
 from . import HydrusExceptions
@@ -937,7 +938,12 @@ class URLsImport( HydrusSerialisable.SerialisableBase ):
             
         
     
-    def PendURLs( self, urls ):
+    def PendURLs( self, urls, service_keys_to_tags = None ):
+        
+        if service_keys_to_tags is None:
+            
+            service_keys_to_tags = ClientTags.ServiceKeysToTags()
+            
         
         with self._lock:
             
@@ -955,6 +961,8 @@ class URLsImport( HydrusSerialisable.SerialisableBase ):
                     
                     file_seed = ClientImportFileSeeds.FileSeed( ClientImportFileSeeds.FILE_SEED_TYPE_URL, url )
                     
+                    file_seed.SetFixedServiceKeysToTags( service_keys_to_tags )
+                    
                     file_seeds.append( file_seed )
                     
                 else:
@@ -962,6 +970,8 @@ class URLsImport( HydrusSerialisable.SerialisableBase ):
                     can_generate_more_pages = False
                     
                     gallery_seed = ClientImportGallerySeeds.GallerySeed( url, can_generate_more_pages = can_generate_more_pages )
+                    
+                    gallery_seed.SetFixedServiceKeysToTags( service_keys_to_tags )
                     
                     gallery_seeds.append( gallery_seed )
                     

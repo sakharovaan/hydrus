@@ -3,6 +3,7 @@ from . import HydrusData
 from . import HydrusExceptions
 from . import HydrusImageHandling
 from . import HydrusPaths
+from . import HydrusText
 from . import HydrusThreading
 import numpy
 import os
@@ -110,11 +111,11 @@ def GetFFMPEGInfoLines( path, count_frames_manually = False ):
             
         
     
-    sbp_kwargs = HydrusData.GetSubprocessKWArgs( text = True )
+    sbp_kwargs = HydrusData.GetSubprocessKWArgs()
     
     proc = subprocess.Popen( cmd, bufsize = 10**5, stdout = subprocess.PIPE, stderr = subprocess.PIPE, **sbp_kwargs )
     
-    info = proc.stderr.read()
+    data_bytes = proc.stderr.read()
     
     proc.wait()
     
@@ -122,7 +123,9 @@ def GetFFMPEGInfoLines( path, count_frames_manually = False ):
     
     del proc
     
-    lines = info.splitlines()
+    ( text, encoding ) = HydrusText.NonFailingUnicodeDecode( data_bytes, 'utf-8' )
+    
+    lines = text.splitlines()
     
     try:
         
@@ -240,7 +243,7 @@ def GetMime( path ):
         # a webm has at least vp8/vp9 video and optionally vorbis audio
         
         has_webm_video = False
-        has_webm_audio = True
+        has_webm_audio = False
         
         if ParseFFMPEGHasVideo( lines ):
             
@@ -253,9 +256,16 @@ def GetMime( path ):
         
         ( has_audio, audio_format ) = ParseFFMPEGAudio( lines )
         
-        if has_audio and 'vorbis' not in audio_format:
+        if has_audio:
             
-            has_webm_audio = False
+            webm_audio_formats = ( 'vorbis', 'opus' )
+            
+            has_webm_audio = True in ( webm_audio_format in audio_format for webm_audio_format in webm_audio_formats )
+            
+        else:
+            
+            # no audio at all is not a vote against webm
+            has_webm_audio = True
             
         
         if has_webm_video and has_webm_audio:
@@ -623,12 +633,7 @@ class VideoRendererFFMPEG( object ):
         self.initialize()
         
     
-    def __del__( self ):
-        
-        self.close()
-        
-    
-    def close(self):
+    def close( self ):
         
         if self.process is not None:
             
@@ -732,11 +737,25 @@ class VideoRendererFFMPEG( object ):
             
             nbytes = self.depth * w * h
             
-            s = self.process.stdout.read(nbytes)
+            s = self.process.stdout.read( nbytes )
             
             if len(s) != nbytes:
                 
                 if self.lastread is None:
+                    
+                    if self.pos != 0:
+                        
+                        # this renderer was asked to render starting from mid-vid and this was not possible due to broken key frame index whatever
+                        # lets try and render from the vid start before we say the whole vid is broke
+                        # I tried doing 'start from 0 and skip n frames', but this is super laggy so would need updates further up the pipe to display this to the user
+                        # atm this error states does not communicate to the videocontainer that the current frame num has changed, so the frames are henceforth out of phase
+                        
+                        frames_to_jump = self.pos
+                        
+                        self.set_position( 0 )
+                        
+                        return self.read_frame()
+                        
                     
                     raise Exception( 'Unable to render that video! Please send it to hydrus dev so he can look at it!' )
                     
@@ -773,3 +792,7 @@ class VideoRendererFFMPEG( object ):
             
         
     
+    def Stop( self ):
+        
+        self.close()
+        

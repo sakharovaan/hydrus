@@ -4,12 +4,15 @@ import datetime
 import http.client
 from . import HydrusConstants as HC
 from . import HydrusData
+from . import HydrusExceptions
 from . import HydrusSerialisable
+import json
 import psutil
 import socket
 import ssl
 import threading
 import time
+import urllib
 
 import urllib3
 from urllib3.exceptions import InsecureRequestWarning
@@ -75,6 +78,89 @@ def LocalPortInUse( port ):
         CONNECTION_SUCCESS = 0
         
         return result == CONNECTION_SUCCESS
+        
+    
+def ParseTwistedRequestGETArgs( requests_args, int_params, byte_params, string_params, json_params ):
+    
+    args = ParsedRequestArguments()
+    
+    for name_bytes in requests_args:
+        
+        values_bytes = requests_args[ name_bytes ]
+        
+        try:
+            
+            name = str( name_bytes, 'utf-8' )
+            
+        except UnicodeDecodeError:
+            
+            continue
+            
+        
+        value_bytes = values_bytes[0]
+        
+        try:
+            
+            value = str( value_bytes, 'utf-8' )
+            
+        except UnicodeDecodeError:
+            
+            continue
+            
+        
+        if name in int_params:
+            
+            try:
+                
+                args[ name ] = int( value )
+                
+            except:
+                
+                raise HydrusExceptions.BadRequestException( 'I was expecting to parse \'' + name + '\' as an integer, but it failed.' )
+                
+            
+        elif name in byte_params:
+            
+            try:
+                
+                args[ name ] = bytes.fromhex( value )
+                
+            except:
+                
+                raise HydrusExceptions.BadRequestException( 'I was expecting to parse \'' + name + '\' as a hex-encoded bytestring, but it failed.' )
+                
+            
+        elif name in string_params:
+            
+            try:
+                
+                args[ name ] = urllib.parse.unquote( value )
+                
+            except:
+                
+                raise HydrusExceptions.BadRequestException( 'I was expecting to parse \'' + name + '\' as a percent-encdode string, but it failed.' )
+                
+            
+        elif name in json_params:
+            
+            try:
+                
+                args[ name ] = json.loads( urllib.parse.unquote( value ) )
+                
+            except:
+                
+                raise HydrusExceptions.BadRequestException( 'I was expecting to parse \'' + name + '\' as a json-encoded string, but it failed.' )
+                
+            
+        
+    
+    return args
+    
+class ParsedRequestArguments( dict ):
+    
+    def __missing__( self, key ):
+        
+        raise HydrusExceptions.BadRequestException( 'It looks like the parameter "{}" was missing!'.format( key ) )
         
     
 class BandwidthRules( HydrusSerialisable.SerialisableBase ):
@@ -339,7 +425,7 @@ class BandwidthTracker( HydrusSerialisable.SerialisableBase ):
         
         for d in ( self._months_bytes, self._days_bytes, self._hours_bytes, self._minutes_bytes, self._seconds_bytes, self._months_requests, self._days_requests, self._hours_requests, self._minutes_requests, self._seconds_requests ):
             
-            dicts_flat.append( list(d.items()) )
+            dicts_flat.append( list( d.items() ) )
             
         
         return dicts_flat

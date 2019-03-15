@@ -7,7 +7,6 @@ from . import HydrusConstants as HC
 import os
 import shutil
 import stat
-from . import TestConstants
 import unittest
 from . import HydrusData
 from . import ClientConstants as CC
@@ -53,7 +52,10 @@ class TestDaemons( unittest.TestCase ):
             HG.test_controller.SetRead( 'serialisable_names', [ 'imp' ] )
             HG.test_controller.SetRead( 'serialisable_named', import_folder )
             
-            ClientDaemons.DAEMONCheckImportFolders( HG.test_controller )
+            HG.test_controller.ClearWrites( 'import_file' )
+            HG.test_controller.ClearWrites( 'serialisable' )
+            
+            ClientDaemons.DAEMONCheckImportFolders()
             
             import_file = HG.test_controller.GetWrite( 'import_file' )
             

@@ -232,6 +232,10 @@ def CalculateMediaSize( media, zoom ):
     
     return ( media_width, media_height )
     
+def IsStaticImage( media ):
+    
+    return media.GetMime() in HC.IMAGES and not ShouldHaveAnimationBar( media )
+    
 def ShouldHaveAnimationBar( media ):
     
     is_animated_gif = media.GetMime() == HC.IMAGE_GIF and media.HasDuration()
@@ -279,36 +283,6 @@ class Animation( wx.Window ):
         self.Bind( wx.EVT_MOUSE_EVENTS, self.EventPropagateMouse )
         self.Bind( wx.EVT_KEY_UP, self.EventPropagateKey )
         self.Bind( wx.EVT_ERASE_BACKGROUND, self.EventEraseBackground )
-        
-    
-    def __del__( self ):
-        
-        if self._video_container is not None:
-            
-            self._video_container.Stop()
-            
-            self._video_container = None
-            
-        
-        if self._frame_bmp is not None:
-            
-            if wx.App.IsMainLoopRunning():
-                
-                wx.CallAfter( self._frame_bmp.Destroy )
-                
-            
-            self._frame_bmp = None
-            
-        
-        if self._canvas_bmp is not None:
-            
-            if wx.App.IsMainLoopRunning():
-                
-                wx.CallAfter( self._canvas_bmp.Destroy )
-                
-            
-            self._canvas_bmp = None
-            
         
     
     def _DrawFrame( self, dc ):
@@ -597,7 +571,7 @@ class Animation( wx.Window ):
         self._paused = not self._paused
         
     
-    def SetMedia( self, media, start_paused ):
+    def SetMedia( self, media, start_paused = False ):
         
         self._media = media
         
@@ -607,7 +581,14 @@ class Animation( wx.Window ):
         self._a_frame_has_been_drawn = False
         self._has_played_once_through = False
         
-        self._num_frames = self._media.GetNumFrames()
+        if self._media is not None:
+            
+            self._num_frames = self._media.GetNumFrames()
+            
+        else:
+            
+            self._num_frames = 1
+            
         
         self._current_frame_index = int( ( self._num_frames - 1 ) * HC.options[ 'animation_start_position' ] )
         self._current_frame_drawn = False
@@ -625,9 +606,21 @@ class Animation( wx.Window ):
         
         self._frame_bmp = None
         
-        HG.client_controller.gui.RegisterAnimationUpdateWindow( self )
+        if self._media is None:
+            
+            HG.client_controller.gui.UnregisterAnimationUpdateWindow( self )
+            
+        else:
+            
+            HG.client_controller.gui.RegisterAnimationUpdateWindow( self )
+            
+            self.Refresh()
+            
         
-        self.Refresh()
+    
+    def SetNoneMedia( self ):
+        
+        self.SetMedia( None )
         
     
     def TIMERAnimationUpdate( self ):
@@ -1026,7 +1019,7 @@ class CanvasFrame( ClientGUITopLevelWindows.FrameThatResizes ):
             self.ShowFullScreen( False, wx.FULLSCREEN_ALL )
             
         
-        self._canvas_window.CleanBeforeClose()
+        self._canvas_window.CleanBeforeDestroy()
         
         self.DestroyLater()
         
@@ -2052,9 +2045,11 @@ class Canvas( wx.Window ):
             
         
     
-    def CleanBeforeClose( self ):
+    def CleanBeforeDestroy( self ):
         
         self._SaveCurrentMediaViewTime()
+        
+        self.SetMedia( None )
         
     
     def EventCharHook( self, event ):
@@ -3903,22 +3898,10 @@ class CanvasMediaList( ClientMedia.ListeningMediaList, CanvasWithHovers ):
         previous = self._current_media
         next = self._current_media
         
-        if self._just_started:
-            
-            delay_base = 0.8
-            
-            num_to_go_back = 1
-            num_to_go_forward = 1
-            
-            self._just_started = False
-            
-        else:
-            
-            delay_base = 0.4
-            
-            num_to_go_back = 3
-            num_to_go_forward = 5
-            
+        delay_base = 0.1
+        
+        num_to_go_back = 3
+        num_to_go_forward = 5
         
         # if media_looked_at nukes the list, we want shorter delays, so do next first
         
@@ -3958,8 +3941,6 @@ class CanvasMediaList( ClientMedia.ListeningMediaList, CanvasWithHovers ):
             to_render.append( ( previous, delay ) )
             
         
-        ( my_width, my_height ) = self.GetClientSize()
-        
         image_cache = HG.client_controller.GetCache( 'images' )
         
         for ( media, delay ) in to_render:
@@ -3967,7 +3948,7 @@ class CanvasMediaList( ClientMedia.ListeningMediaList, CanvasWithHovers ):
             hash = media.GetHash()
             mime = media.GetMime()
             
-            if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG ):
+            if IsStaticImage( media ):
                 
                 if not image_cache.HasImageRenderer( hash ):
                     
@@ -4947,7 +4928,13 @@ class MediaContainer( wx.Window ):
         self._embed_button = EmbedButton( self )
         self._embed_button.Bind( wx.EVT_LEFT_DOWN, self.EventEmbedButton )
         
+        self._animation_window = Animation( self )
         self._animation_bar = AnimationBar( self )
+        self._static_image_window = StaticImage( self )
+        
+        self._animation_window.Hide()
+        self._animation_bar.Hide()
+        self._static_image_window.Hide()
         
         self.Hide()
         
@@ -4956,11 +4943,19 @@ class MediaContainer( wx.Window ):
         self.Bind( wx.EVT_ERASE_BACKGROUND, self.EventEraseBackground )
         
     
-    def _DestroyThisMediaWindow( self, media_window ):
+    def _DestroyOrHideThisMediaWindow( self, media_window ):
         
         if media_window is not None:
             
-            media_window.DestroyLater()
+            if isinstance( media_window, ( Animation, StaticImage ) ):
+                
+                media_window.SetNoneMedia()
+                media_window.Hide()
+                
+            else:
+                
+                media_window.DestroyLater()
+                
             
         
     
@@ -5034,10 +5029,12 @@ class MediaContainer( wx.Window ):
                         
                     else:
                         
-                        self._media_window = Animation( self )
+                        self._animation_window.Show()
+                        
+                        self._media_window = self._animation_window
                         
                     
-                    self._media_window.SetMedia( self._media, start_paused )
+                    self._media_window.SetMedia( self._media, start_paused = start_paused )
                     
                 
                 if ShouldHaveAnimationBar( self._media ):
@@ -5059,7 +5056,9 @@ class MediaContainer( wx.Window ):
                     
                 else:
                     
-                    self._media_window = StaticImage( self )
+                    self._static_image_window.Show()
+                    
+                    self._media_window = self._static_image_window
                     
                 
                 self._media_window.SetMedia( self._media )
@@ -5070,7 +5069,7 @@ class MediaContainer( wx.Window ):
         
         if old_media_window is not None and destroy_old_media_window:
             
-            self._DestroyThisMediaWindow( old_media_window )
+            self._DestroyOrHideThisMediaWindow( old_media_window )
             
         
     
@@ -5260,7 +5259,7 @@ class MediaContainer( wx.Window ):
         
         self._HideAnimationBar()
         
-        self._DestroyThisMediaWindow( self._media_window )
+        self._DestroyOrHideThisMediaWindow( self._media_window )
         
         self._media_window = None
         
@@ -5298,9 +5297,9 @@ class MediaContainer( wx.Window ):
         
         self._media = None
         
-        self._DestroyThisMediaWindow( self._media_window )
-        
         self._HideAnimationBar()
+        
+        self._DestroyOrHideThisMediaWindow( self._media_window )
         
         self._media_window = None
         
@@ -5689,16 +5688,22 @@ class StaticImage( wx.Window ):
             HG.client_controller.gui.RegisterAnimationUpdateWindow( self )
             
         
-        self._dirty = True
+        self._SetDirty()
         
-        self.Refresh()
+    
+    def SetNoneMedia( self ):
+        
+        self._media = None
+        self._image_renderer = None
+        self._is_rendered = False
+        self._first_background_drawn = False
         
     
     def TIMERAnimationUpdate( self ):
         
         try:
             
-            if self._image_renderer.IsReady():
+            if self._image_renderer is None or self._image_renderer.IsReady():
                 
                 self._SetDirty()
                 

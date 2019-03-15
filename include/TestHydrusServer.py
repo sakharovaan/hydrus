@@ -1,7 +1,10 @@
+from . import ClientConstants as CC
+from . import ClientAPI
 from . import ClientLocalServer
 from . import ClientMedia
 from . import ClientRatings
 from . import ClientServices
+from . import ClientTags
 import hashlib
 import http.client
 from . import HydrusConstants as HC
@@ -10,14 +13,17 @@ from . import HydrusNetwork
 from . import HydrusPaths
 from . import HydrusServer
 from . import HydrusServerResources
+from . import HydrusText
+import json
 import os
 import random
 from . import ServerFiles
 from . import ServerServer
 import ssl
-from . import TestConstants
+from . import TestController
 import time
 import unittest
+import urllib
 from twisted.internet import reactor
 #from twisted.internet.endpoints import TCP4ClientEndpoint, connectProtocol
 from twisted.internet.defer import deferredGenerator, waitForDeferred
@@ -40,8 +46,6 @@ class TestServer( unittest.TestCase ):
         
         cls._access_key = HydrusData.GenerateKey()
         
-        services = []
-        
         cls._serverside_file_service = HydrusNetwork.GenerateService( HydrusData.GenerateKey(), HC.FILE_REPOSITORY, 'file repo', HC.DEFAULT_SERVICE_PORT + 1 )
         cls._serverside_tag_service = HydrusNetwork.GenerateService( HydrusData.GenerateKey(), HC.TAG_REPOSITORY, 'tag repo', HC.DEFAULT_SERVICE_PORT )
         cls._serverside_admin_service = HydrusNetwork.GenerateService( HydrusData.GenerateKey(), HC.SERVER_ADMIN, 'server admin', HC.DEFAULT_SERVER_ADMIN_PORT )
@@ -54,7 +58,7 @@ class TestServer( unittest.TestCase ):
         cls._clientside_tag_service.SetCredentials( HydrusNetwork.Credentials( '127.0.0.1', HC.DEFAULT_SERVICE_PORT, cls._access_key ) )
         cls._clientside_admin_service.SetCredentials( HydrusNetwork.Credentials( '127.0.0.1', HC.DEFAULT_SERVER_ADMIN_PORT, cls._access_key ) )
         
-        cls._local_booru = ClientServices.GenerateService( HydrusData.GenerateKey(), HC.LOCAL_BOORU, 'local booru' )
+        cls._local_booru = ClientServices.GenerateService( CC.LOCAL_BOORU_SERVICE_KEY, HC.LOCAL_BOORU, 'local booru' )
         
         services_manager = HG.test_controller.services_manager
         
@@ -75,8 +79,8 @@ class TestServer( unittest.TestCase ):
         
         def TWISTEDSetup():
             
-            cls._ssl_cert_path = os.path.join( TestConstants.DB_DIR, 'server.crt' )
-            cls._ssl_key_path = os.path.join( TestConstants.DB_DIR, 'server.key' )
+            cls._ssl_cert_path = os.path.join( TestController.DB_DIR, 'server.crt' )
+            cls._ssl_key_path = os.path.join( TestController.DB_DIR, 'server.key' )
             
             # if db test ran, this is still hanging around and read-only, so don't bother to fail overwriting
             if not os.path.exists( cls._ssl_cert_path ):
@@ -166,6 +170,8 @@ class TestServer( unittest.TestCase ):
             file_bytes = f.read()
             
         
+        HG.test_controller.ClearWrites( 'file' )
+        
         service.Request( HC.POST, 'file', { 'file' : file_bytes } )
         
         written = HG.test_controller.GetWrite( 'file' )
@@ -237,7 +243,7 @@ class TestServer( unittest.TestCase ):
         share_key = HydrusData.GenerateKey()
         hashes = [ HydrusData.GenerateKey() for i in range( 5 ) ]
         
-        client_files_default = os.path.join( TestConstants.DB_DIR, 'client_files' )
+        client_files_default = os.path.join( TestController.DB_DIR, 'client_files' )
         
         hash_encoded = hashes[0].hex()
         
@@ -435,6 +441,8 @@ class TestServer( unittest.TestCase ):
         '''
         update = HydrusData.ClientToServerContentUpdatePackage( {}, hash_ids_to_hashes )
         
+        HG.test_controller.ClearWrites( 'update' )
+        
         service.Request( HC.POST, 'content_update_package', { 'update' : update } )
         
         written = HG.test_controller.GetWrite( 'update' )
@@ -501,6 +509,8 @@ class TestServer( unittest.TestCase ):
         account_types = [ HydrusNetwork.AccountType.GenerateAdminAccountType( service.GetServiceType() ) ]
         
         HG.test_controller.SetRead( 'account_types', account_types )
+        
+        HG.test_controller.ClearWrites( 'account_types' )
         
         response = service.Request( HC.GET, 'account_types' )
         
@@ -598,6 +608,7 @@ class TestServer( unittest.TestCase ):
         self._test_basics( host, port, https = False )
         self._test_local_booru( host, port )
         
+    
     '''
 class TestAMP( unittest.TestCase ):
     

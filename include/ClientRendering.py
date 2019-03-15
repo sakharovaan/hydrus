@@ -48,9 +48,21 @@ def FrameIndexOutOfRange( index, range_start, range_end ):
     
     return False
     
-def GenerateHydrusBitmap( path, mime, compressed = True ):
+def GenerateHydrusBitmap( path, mime, compressed = True, desired_dimensions = None, do_thumbnail_resize = False ):
     
     numpy_image = ClientImageHandling.GenerateNumpyImage( path, mime )
+    
+    if desired_dimensions is not None:
+        
+        if do_thumbnail_resize:
+            
+            numpy_image = ClientImageHandling.EfficientlyThumbnailNumpyImage( numpy_image, desired_dimensions )
+            
+        else:
+            
+            numpy_image = ClientImageHandling.EfficientlyResizeNumpyImage( numpy_image, desired_dimensions )
+            
+        
     
     return GenerateHydrusBitmapFromNumPyImage( numpy_image, compressed = compressed )
     
@@ -93,8 +105,6 @@ class ImageRenderer( object ):
         
     
     def _Initialise( self ):
-        
-        time.sleep( 0.00001 )
         
         self._numpy_image = ClientImageHandling.GenerateNumpyImage( self._path, self._mime )
         
@@ -207,6 +217,8 @@ class RasterContainerVideo( RasterContainer ):
         self._init_position = init_position
         
         self._initialised = False
+        
+        self._renderer = None
         
         self._frames = {}
         
@@ -325,6 +337,15 @@ class RasterContainerVideo( RasterContainer ):
             
             if self._stop or HG.view_shutdown:
                 
+                self._renderer.Stop()
+                
+                self._renderer = None
+                
+                with self._lock:
+                    
+                    self._frames = {}
+                    
+                
                 return
                 
             
@@ -415,12 +436,12 @@ class RasterContainerVideo( RasterContainer ):
                 
                 with self._lock:
                     
-                    we_have_the_ideal_next_frame = self._HasFrame( self._ideal_next_frame )
+                    work_still_to_do = self._last_index_rendered != self._buffer_end_index
                     
                 
-                if not we_have_the_ideal_next_frame: # there is work to do!
+                if work_still_to_do:
                     
-                    time.sleep( 0.00001 )
+                    time.sleep( 0.0001 )
                     
                 else:
                     

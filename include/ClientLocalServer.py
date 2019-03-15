@@ -1,5 +1,6 @@
 from . import ClientLocalServerResources
 from . import HydrusServer
+from twisted.web.resource import NoResource
 
 class HydrusClientService( HydrusServer.HydrusService ):
     
@@ -38,7 +39,41 @@ class HydrusServiceClientAPI( HydrusClientService ):
         
         root = HydrusClientService._InitRoot( self )
         
-        # api calls here
+        root.putChild( b'api_version', ClientLocalServerResources.HydrusResourceClientAPIVersion( self._service, self._client_requests_domain ) )
+        root.putChild( b'request_new_permissions', ClientLocalServerResources.HydrusResourceClientAPIPermissionsRequest( self._service, self._client_requests_domain ) )
+        root.putChild( b'verify_access_key', ClientLocalServerResources.HydrusResourceClientAPIVerify( self._service, self._client_requests_domain ) )
+        
+        add_files = NoResource()
+        
+        root.putChild( b'add_files', add_files )
+        
+        add_files.putChild( b'add_file', ClientLocalServerResources.HydrusResourceClientAPIRestrictedAddFile( self._service, self._client_requests_domain ) )
+        
+        add_tags = NoResource()
+        
+        root.putChild( b'add_tags', add_tags )
+        
+        add_tags.putChild( b'add_tags', ClientLocalServerResources.HydrusResourceClientAPIRestrictedAddTagsAddTags( self._service, self._client_requests_domain ) )
+        add_tags.putChild( b'clean_tags', ClientLocalServerResources.HydrusResourceClientAPIRestrictedAddTagsCleanTags( self._service, self._client_requests_domain ) )
+        add_tags.putChild( b'get_tag_services', ClientLocalServerResources.HydrusResourceClientAPIRestrictedAddTagsGetTagServices( self._service, self._client_requests_domain ) )
+        
+        add_urls = NoResource()
+        
+        root.putChild( b'add_urls', add_urls )
+        
+        add_urls.putChild( b'get_url_info', ClientLocalServerResources.HydrusResourceClientAPIRestrictedAddURLsGetURLInfo( self._service, self._client_requests_domain ) )
+        add_urls.putChild( b'get_url_files', ClientLocalServerResources.HydrusResourceClientAPIRestrictedAddURLsGetURLFiles( self._service, self._client_requests_domain ) )
+        add_urls.putChild( b'add_url', ClientLocalServerResources.HydrusResourceClientAPIRestrictedAddURLsImportURL( self._service, self._client_requests_domain ) )
+        add_urls.putChild( b'associate_url', ClientLocalServerResources.HydrusResourceClientAPIRestrictedAddURLsAssociateURL( self._service, self._client_requests_domain ) )
+        
+        get_files = NoResource()
+        
+        root.putChild( b'get_files', get_files )
+        
+        get_files.putChild( b'search_files', ClientLocalServerResources.HydrusResourceClientAPIRestrictedGetFilesSearchFiles( self._service, self._client_requests_domain ) )
+        get_files.putChild( b'file_metadata', ClientLocalServerResources.HydrusResourceClientAPIRestrictedGetFilesFileMetadata( self._service, self._client_requests_domain ) )
+        get_files.putChild( b'file', ClientLocalServerResources.HydrusResourceClientAPIRestrictedGetFilesGetFile( self._service, self._client_requests_domain ) )
+        get_files.putChild( b'thumbnail', ClientLocalServerResources.HydrusResourceClientAPIRestrictedGetFilesGetThumbnail( self._service, self._client_requests_domain ) )
         
         return root
         

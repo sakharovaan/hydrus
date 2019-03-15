@@ -2,6 +2,7 @@ from . import ClientConstants as CC
 from . import ClientImporting
 from . import ClientNetworkingDomain
 from . import ClientParsing
+from . import ClientTags
 import collections
 from . import HydrusConstants as HC
 from . import HydrusData
@@ -67,7 +68,7 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
     
     SERIALISABLE_TYPE = HydrusSerialisable.SERIALISABLE_TYPE_GALLERY_SEED
     SERIALISABLE_NAME = 'Gallery Log Entry'
-    SERIALISABLE_VERSION = 1
+    SERIALISABLE_VERSION = 2
     
     def __init__( self, url = None, can_generate_more_pages = True ):
         
@@ -84,6 +85,8 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
         
         self.url = url
         self._can_generate_more_pages = can_generate_more_pages
+        
+        self._fixed_service_keys_to_tags = ClientTags.ServiceKeysToTags()
         
         self.created = HydrusData.GetNow()
         self.modified = self.created
@@ -112,12 +115,16 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
     
     def _GetSerialisableInfo( self ):
         
-        return ( self.url, self._can_generate_more_pages, self.created, self.modified, self.status, self.note, self._referral_url )
+        serialisable_fixed_service_keys_to_tags = self._fixed_service_keys_to_tags.GetSerialisableTuple()
+        
+        return ( self.url, self._can_generate_more_pages, serialisable_fixed_service_keys_to_tags, self.created, self.modified, self.status, self.note, self._referral_url )
         
     
     def _InitialiseFromSerialisableInfo( self, serialisable_info ):
         
-        ( self.url, self._can_generate_more_pages, self.created, self.modified, self.status, self.note, self._referral_url ) = serialisable_info
+        ( self.url, self._can_generate_more_pages, serialisable_fixed_service_keys_to_tags, self.created, self.modified, self.status, self.note, self._referral_url ) = serialisable_info
+        
+        self._fixed_service_keys_to_tags = HydrusSerialisable.CreateFromSerialisableTuple( serialisable_fixed_service_keys_to_tags )
         
     
     def _UpdateModified( self ):
@@ -125,6 +132,21 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
         self.modified = HydrusData.GetNow()
         
     
+    def _UpdateSerialisableInfo( self, version, old_serialisable_info ):
+        
+        if version == 1:
+            
+            ( url, can_generate_more_pages, created, modified, status, note, referral_url ) = old_serialisable_info
+            
+            fixed_service_keys_to_tags = ClientTags.ServiceKeysToTags()
+            
+            serialisable_fixed_service_keys_to_tags = fixed_service_keys_to_tags.GetSerialisableTuple()
+            
+            new_serialisable_info = ( url, can_generate_more_pages, serialisable_fixed_service_keys_to_tags, created, modified, status, note, referral_url )
+            
+            return ( 2, new_serialisable_info )
+            
+        
     def ForceNextPageURLGeneration( self ):
         
         self._force_next_page_url_generation = True
@@ -149,6 +171,11 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
         network_job = network_job_factory( 'GET', url_to_check )
         
         return network_job
+        
+    
+    def SetFixedServiceKeysToTags( self, service_keys_to_tags ):
+        
+        self._fixed_service_keys_to_tags = ClientTags.ServiceKeysToTags( service_keys_to_tags )
         
     
     def SetReferralURL( self, referral_url ):
@@ -224,7 +251,7 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
             
             ( url_to_check, parser ) = HG.client_controller.network_engine.domain_manager.GetURLToFetchAndParser( self.url )
             
-            status_hook( 'downloading page' )
+            status_hook( 'downloading gallery page' )
             
             if self._referral_url not in ( self.url, url_to_check ):
                 
@@ -270,6 +297,11 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
                 
             
             file_seeds = ClientImporting.ConvertAllParseResultsToFileSeeds( all_parse_results, self.url, file_import_options )
+            
+            for file_seed in file_seeds:
+                
+                file_seed.SetFixedServiceKeysToTags( self._fixed_service_keys_to_tags )
+                
             
             num_urls_total = len( file_seeds )
             
@@ -359,6 +391,11 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
                         
                         next_gallery_seeds = [ GallerySeed( next_page_url ) for next_page_url in new_next_page_urls ]
                         
+                        for next_gallery_seed in next_gallery_seeds:
+                            
+                            next_gallery_seed.SetFixedServiceKeysToTags( self._fixed_service_keys_to_tags )
+                            
+                        
                         gallery_seed_log.AddGallerySeeds( next_gallery_seeds )
                         
                         added_new_gallery_pages = True
@@ -402,7 +439,7 @@ class GallerySeed( HydrusSerialisable.SerialisableBase ):
                 time.sleep( 2 )
                 
             
-        except HydrusExceptions.ForbiddenException:
+        except HydrusExceptions.InsufficientCredentialsException:
             
             status = CC.STATUS_VETOED
             note = '403'
@@ -518,10 +555,7 @@ class GallerySeedLog( HydrusSerialisable.SerialisableBase ):
     
     def _GetSerialisableInfo( self ):
         
-        with self._lock:
-            
-            return self._gallery_seeds.GetSerialisableTuple()
-            
+        return self._gallery_seeds.GetSerialisableTuple()
         
     
     def _InitialiseFromSerialisableInfo( self, serialisable_info ):

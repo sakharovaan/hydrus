@@ -8,6 +8,185 @@
 		<div class="content">
 			<h3>changelog</h3>
 			<ul>
+				<li><h3>version 343</h3></li>
+				<ul>
+					<li>client api:</li>
+					<li>fixed an int/str type mismatch issue with service_names_to_actions_to_tags in /add_tags/add_tags in the client api that meant that argument was not working</li>
+					<li>fixed up some last /get_files/search_files stuff</li>
+					<li>added /get_files/file_metadata</li>
+					<li>added /get_files/file</li>
+					<li>added /get_files/thumbnail</li>
+					<li>added help and unit tests to reflect the above</li>
+					<li>updated client api version to 4</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>the list of paths in the manual file import dialog is now sortable. this order will be preserved in regular and 'add tags' ok events for this dialog. it has a new '#' column so you can return to 'parse' order if desired</li>
+					<li>animation and static image windows in the media viewer canvas are now recycled through media type transitions, making for slightly smoother browsing between mixed media</li>
+					<li>increased aggression of media viewer image prefetch</li>
+					<li>added support for 'MM' Tiffs</li>
+					<li>fixed webm mime parsing for webms with no audio (these were falling back to mkv)</li>
+					<li>improved the error reports when a serialised png fails to import</li>
+					<li>the mass-open-urls popup is now pausable as well as cancellable</li>
+					<li>fixed several recently broken ui unit tests</li>
+					<li>misc old code cleanup</li>
+					<li>some misc test controller/constant refactoring</li>
+				</ul>
+				<li><h3>version 342</h3></li>
+				<ul>
+					<li>added support for webp import. it does not yet support animated webps, which, if the local platform supports, will import like apngs used to: just the first frame</li>
+					<li>added support for tiff import. it works ok for 24bit and 8bit (monochrome) tiffs, but I am not sure how well it will do with 48bit</li>
+					<li>both webp and tiff should work on the duplicate files system</li>
+					<li>improved webm detection to include opus audio (previously, these files were falling back to mkv)</li>
+					<li>fixed an issue where unusual formats with duration but no frames or frames but no duration were being sorted and otherwise presented incorrectly</li>
+					<li>improved autocomplete job cancelability. this job can now cancel much faster on large jobs, meaning typing searches with large result sets will hit less CPU and return faster on subsequent keystrokes</li>
+					<li>_all_ of the complicated 'copy url' commands from the thumbnail right-click->known urls menu are now available on the 'open' submenu! if there is more than one url to open (e.g. 'open all of these files blahbooru post urls' on a selection of 50 files), you will be presented with a yes/no dialog to confirm, and it will open one url in your browser every second (with a cancellable popup if num_urls > 5)</li>
+					<li>by default, system:everything is now hidden if its total files is >10k. you can force it to always show under options->default system predicates</li>
+					<li>the gallery downloader's list's status column now shows gallery status (deferring to active file status) when appropriate and shows 'done!' when all work is complete</li>
+					<li>after working back and forth with a user, I _believe_ the linux similar files >0 distance search crash is finally fixed</li>
+					<li>fixed sorting by media views/viewtiming with collections</li>
+					<li>a single-selected collection right-click now shows total media views for all files in the collection! you can now see how long you have been viewing an artist!</li>
+					<li>fixed an issue that lead to export folders not running on always-on clients as often as they should</li>
+					<li>updated the gelbooru 0.2.5 file page parser to pull rating tag from the correct location (previously, it was pulling from what appears to be a site-wide 'mature' browser hint)</li>
+					<li>improved memory cleanup stability when animations and other parts of the video rendering pipeline are deleted--this _may_ fix some rare crashes</li>
+					<li>increased animation rendering aggression overall and particularly in 'future' of frame buffer</li>
+					<li>if a video renderer that is asked to start some way into the video fails to render anything, it will now fall back to trying to render from the beginning. this is slightly hacky atm and leads to out of phase rendering frames, but it is better than an error</li>
+					<li>added a '--no_db_temp_files' launch parameter that will force the client or server to return to the recent old behaviour of exclusively using memory for journalling. this is useful if your temp directory is small and/or your available ram is very large. if running in this mode, the client will attempt to check available memory (instead of free space on your temp dir) before performing very large transactions</li>
+					<li>with the new lighter-weight update transactions, the client now tests for less free space for journalling before running repository update processing</li>
+					<li>added /get_files/search_files to the client api, which does the first half of file searching. it allows tag search (including -tag negation) and system inbox/archive. since the second half, which will fetch file metadata, is not yet in, this can't do anything interesting yet</li>
+					<li>updated help and unit tests to support this, client api version is now 3</li>
+					<li>some misc refactoring</li>
+				</ul>
+				<li><h3>version 341</h3></li>
+				<ul>
+					<li>client api:</li>
+					<li>added /add_tags/add_tags, which does several kinds of tag content updates</li>
+					<li>added /add_tags/clean_tags, which shows how hydrus will handle potential tags</li>
+					<li>added /add_urls/associate_url, which allows you to associate urls with files</li>
+					<li>added 'destination_page_name' to /add_urls/add_url, which will choose which destination watcher/url importer to place the url (or create a new one with that name)</li>
+					<li>updated client api version to 2</li>
+					<li>updated client help and unit tests for the above</li>
+					<li>added a linked contents to the client api help</li>
+					<li>improved some server error handling, mostly moving 403s to more correct 400s</li>
+					<li>improved how missing parameter 400 errors are reported from the server vs deeper keyerrors that should be 500</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>tag repository update processing now saves progress to disk every million rows or every minute, whichever comes first. this reduces journaling bloat, improves recovery when the process quits unexpectedly, and makes for significantly faster cancel when requested by the user</li>
+					<li>when processing duplicates and copying/merging/moving ratings, the 'source' file will now also overwrite the 'destination' file's rating if that destination rating is lower (previously, the rating would only go over if the dest had no rating set)</li>
+					<li>added a new 'thumbnail experiment mode' under help->debug->gui. this will load fullsize thumbs and resize them in memory, please see release post for more details</li>
+					<li>reduced menubar replacement flicker while, I believe, keeping and strengthening recent menubar indexing stability improvements</li>
+					<li>the tag autocomplete dropdown will now always embed (instead of floating) in non-Windows</li>
+					<li>when data seems non-decodable, the fallback encoding format is now that given by chardet, rather than utf-8</li>
+					<li>improved serialisability of some pending tag data</li>
+					<li>watchers can now hold and pass on fixed pending tag data</li>
+					<li>gallery log objects can now hold and pass on fixed pending tag data</li>
+					<li>file import objects can now hold and action fixed pending tag data</li>
+					<li>hard drive imports now store their paths-to-tags info in this new format, directly in the file import objects</li>
+					<li>improved some url-import page drop-target-selection logic</li>
+					<li>improved error reporting when dropping/api-adding urls</li>
+					<li>adjusted some url import workflow so big 'already in db' download lists should work a bit faster</li>
+					<li>attempting to start the program with some external database files but not the main 'client.db/server.db' file will now cause a boot-fail exception with an explanation before any stub db files can be made</li>
+					<li>tightened up some hydrus service login-capability-testing code that was previously stopping certain error states from recovering promptly, even on a force account refresh, while the service was maxed on bandwidth</li>
+					<li>fixed a source of linux CRITICAL logspam related to several common dialogs</li>
+					<li>improved ui stability on boot when file folders are missing (particularly for linux)</li>
+					<li>improved stability for the various async tasks on the duplicates processing page, particularly for linux. I am not sure I got everything here, but it is definitely better</li>
+					<li>did some more misc stability improvements, particularly in various boot fail scenarios</li>
+					<li>completely removed an ancient and janky focus catcher widget from the main gui frame</li>
+					<li>now various db caching is improved on the python side, removed a sqlite instruction to force temp information to always stay in memory--hot data returns to staying mostly in memory to start and then spools to disk if the transaction gets too large</li>
+					<li>fixed approx bitrate sorting for malformed video files with explicitly '0' duration</li>
+					<li>daemon_profile_mode now spams some more info about export folders</li>
+					<li>fixed an issue that meant client db maintenance was firing its jobs too aggressively, regardless of idle status</li>
+					<li>updated windows build to cv 4.0</li>
+					<li>misc refactoring and fixes</li>
+				</ul>
+				<li><h3>version 340</h3></li>
+				<ul>
+					<li>client api:</li>
+					<li>fixed up some api permissions object stuff so that /verify_access_key response can always serialise correctly</li>
+					<li>fixed the 'add_url' api call's instability</li>
+					<li>the API will now always return JSON on 200. anything else should be presumed to be raw text</li>
+					<li>'/api_version' now returns JSON, and after talking with users, it will now start incrementing with every api change. it remains 1 just for this week</li>
+					<li>'/request_access_permissions' now returns JSON</li>
+					<li>'/add_url' now results JSON on success with more info, 403 on failure</li>
+					<li>'/get_url_info' now returns the 'normalised_url' in the response JSON</li>
+					<li>added '/get_url_files', which returns 'url_file_statuses', listing known hashes and file import status for that url</li>
+					<li>added '/add_files/add_file', which can import a file from a path or bytes</li>
+					<li>added '/add_tags/get_tag_services', which will return info on the client's tag services</li>
+					<li>updated client api help to reflect the above changes and fleshed out the intro a bit</li>
+					<li>fixed the client api permissions enum values in the help, which I somehow transcribed wrong first time</li>
+					<li>updated the client api tests to check the above</li>
+					<li>refactored client api tests to be neater and in their own file</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>fixed the page of pages close bug</li>
+					<li>added a downloader for nijie.info to the client defaults (it needs a login)</li>
+					<li>updated danbooru file page parsers to get 'rating' tag</li>
+					<li>added gelbooru 0.1.11 parser for future application</li>
+					<li>fixed an issue that was stopping advanced content updates from fully copying all the desired mappings in the transaction</li>
+					<li>added a semi-hacky checkbox to 'options->files and trash' that will delay all new file/thumb requests for 15s after the computer resumes from sleep (useful if your files are on a NAS that takes a few seconds to reconnect on wake)</li>
+					<li>wrote some more graceful fallback decoding handling code that attempts original assumed encoding and 'utf-8' if different and returns the one with the fewest '�' replacement characters</li>
+					<li>the network engine and the ffmpeg info parsing now use this new 'safe' decoding, so even if a site has borked bytes or the video file has unexpected Shift-JIS title metadata, it'll still go through, albeit with some question marks</li>
+					<li>moved some more old daemons to the new job scheduler, deleted some old daemon code</li>
+					<li>improved some daemon job wake and shutdown code</li>
+					<li>wrote a proper upnp manager object and improved all-around reliability of the auto upnp-service-mapping code</li>
+					<li>simplified the upnp check code so it now only ever checks/does anything if the respective services actually want upnp mappings. surplus mappings are now wiped immediately on service update</li>
+					<li>fixed upnp mapping fetching to cope with ipv6 results</li>
+					<li>improved some memory clearing code to deal with some semi-stubborn objects</li>
+					<li>improved some 'iterate through this giant list of single numbers from the db without using a lot of memory' code and applied it to the autocomplete cache regeneration routine</li>
+					<li>improved menubar stability, both in finding menus and swapping them out</li>
+					<li>if a serialised json object fails to load from the db, this is now caught, the bad object deleted and written to a new file in the db dir, and all logging info captured along with an explanatory popup thrown on screen. so, if a subscription fails to load, it will now be extracted so that a subsequent subscription edit/run will work with the remaining good objects. in the case of backed-up objects (gui sessions atm), reattempting the load should restore the next most recent backup</li>
+					<li>fixed an issue with login script validation when the given credentials have surplus ( key, value ) pairs to the script's credential definitions</li>
+					<li>fixed two login invalid cookie error handling bugs</li>
+					<li>maybe made some dupe filter searching more stable</li>
+					<li>fixed a py2 datatype issue that made the client unbootable when updating the client from <296</li>
+					<li>the client now pauses to nag and moan about backups if you try to update more than 15 versions in one go</li>
+					<li>slightly sped up discord bugfix file drag and drops and expanded file limit up to 25 files/200MB</li>
+					<li>added experimental secret discord bugfix dnd mode checkbox</li>
+					<li>improved how html parsing deals with some unexpected bad tag data</li>
+					<li>turned on primitive high-dpi support for OS X. let me know if it fixes any blurry issues on retina displays</li>
+					<li>wrote a new 'ui test' under the debug->gui menu to help catch common-action bugs that slipped through weekly work</li>
+					<li>improved how the test code does some wx/ui stuff, but also broke some more and ran out of time to clean it up--this is an ongoing project</li>
+					<li>improved how some text import line splitting works</li>
+					<li>misc fixes</li>
+				</ul>
+				<li><h3>version 339</h3></li>
+				<ul>
+					<li>client api:</li>
+					<li>wrote some ui to handle client api permissions adding and editing</li>
+					<li>wrote a 'catch a permissions request' mini-dialog for external api permissions adding</li>
+					<li>wrote api calls:</li>
+					<li>GET</li>
+					<li>/api_version</li>
+					<li>/request_new_permissions</li>
+					<li>/verify_access_key</li>
+					<li>/add_urls/get_url_info</li>
+					<li>POST</li>
+					<li>/add_urls/add_url</li>
+					<li>and made a new 'client api' help page to describe in detail what these do</li>
+					<li>wrote fairly comprehensive unit tests for the new client api</li>
+					<li>refactored a bunch of 'hydrus network' specific stuff away from general server code that the client api now uses</li>
+					<li>neatened up 401 vs 403 error handling across the program, and replaced some clientside error handling that was inelegantly borrowing these network errors</li>
+					<li>deleted very old prototype file/thumbnail client server fetch code, which was no longer in use</li>
+					<li>.</li>
+					<li>misc and bug fixes:</li>
+					<li>added a 'clear ratings' button to the ratings service 'review services' panels. it can clear out ratings for deleted, non-local, or _all_ files</li>
+					<li>the '3 downloaders are working, is it ok to close the client?' message is now folded into the 'confirm client exit (auto-yes in 15s)' dialog. this merged dialog will still appear for users who have the regular confirm client exit dialog turned off (and still auto-yeses in 15s)</li>
+					<li>the file url downloader now reports 'downloading file' and 'importing url' text status separately</li>
+					<li>fixed a typo bug from last week that was breaking asc/desc ratings service sorting</li>
+					<li>fixed a typo bug from last week that was stopping manage import folders from opening</li>
+					<li>fixed a typo bug from last week that was breaking setting upnp port on the local booru/client api service management panel</li>
+					<li>the advanced file reparse-and-re-thumbnailing routine now correctly moves a file to its new extension if its mime changes (e.g. png->apng, or webm/mkv distinctions)</li>
+					<li>the client file manager now silently detects and auto-repairs instances of missing files where the file actually does exist, just with the wrong extension</li>
+					<li>fixed a url parsing issue that was normalise-mangling url classes with no path but some query parameters</li>
+					<li>the network engine now uses utf-8 decoding when no specific encoding is set (previously ISO-8859-1)</li>
+					<li>fixed an ffmpeg video parsing bug when the video included Shift-JIS metadata. it should work for other unusual encodings as well</li>
+					<li>maybe cleaned up some menubar management code</li>
+					<li>the filename tagging dialog now uses a notebook for service choice, like the manage tags dialog, rather than the janky old listbook</li>
+					<li>fixed a py2-to-3 issue with the admin-only 'is server currently busy' check while a backup is running</li>
+					<li>improved some dialog button event handling. it may completely fix the 'trytoendmodal' issue some users run into</li>
+					<li>improved some JSON db serialisation error reporting code, trying to pin down an issue several users have seen with session save</li>
+					<li>improved thread-safety of serialisable objects as they serialise</li>
+					<li>misc improvements and cleanup</li>
+				</ul>
 				<li><h3>version 338</h3></li>
 				<ul>
 					<li>after talking with some users, put a bit of time into tag autocomplete wolkflow. both read (search pages) and write (manage tags) autocomplete inputs now operate ~asynchronously~, with the tag fetch working on a separate thread. tag jobs can also now cancel at certain checkpoints in the tag search process if overwritten by a new request. therefore, a variety of tag lookup scenarios _should_ be less painful. this change was executed in a semi-inelegant way, so please report if you encounter bugs from fast typing etc...</li>

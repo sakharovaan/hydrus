@@ -6,7 +6,6 @@ from . import ClientServices
 import collections
 from . import HydrusConstants as HC
 import os
-from . import TestConstants
 import unittest
 from . import HydrusData
 from . import HydrusGlobals as HG
@@ -86,6 +85,8 @@ class TestManagers( unittest.TestCase ):
         undo_manager = ClientCaches.UndoManager( HG.client_controller )
         
         #
+        
+        HG.test_controller.ClearWrites( 'content_updates' )
         
         undo_manager.AddCommand( 'content_updates', command_1 )
         

@@ -267,7 +267,10 @@ class Service( object ):
     
     def IsDirty( self ):
         
-        return self._dirty
+        with self._lock:
+            
+            return self._dirty
+            
         
     
     def IsFunctional( self ):
@@ -547,30 +550,33 @@ class ServiceRemote( Service ):
         return 3600 * 4
         
     
-    def _CheckFunctional( self, including_external_communication = True ):
+    def _CheckFunctional( self, including_external_communication = True, including_bandwidth = True ):
         
         if including_external_communication:
             
-            self._CheckCanCommunicateExternally()
+            self._CheckCanCommunicateExternally( including_bandwidth = including_bandwidth )
             
         
         Service._CheckFunctional( self )
         
     
-    def _CheckCanCommunicateExternally( self ):
+    def _CheckCanCommunicateExternally( self, including_bandwidth = True ):
         
         if not HydrusData.TimeHasPassed( self._no_requests_until ):
             
-            raise HydrusExceptions.PermissionException( self._no_requests_reason + ' - next request ' + HydrusData.TimestampToPrettyTimeDelta( self._no_requests_until ) )
+            raise HydrusExceptions.InsufficientCredentialsException( self._no_requests_reason + ' - next request ' + HydrusData.TimestampToPrettyTimeDelta( self._no_requests_until ) )
             
         
-        example_nj = ClientNetworkingJobs.NetworkJobHydrus( self._service_key, 'GET', self._GetBaseURL() )
-        
-        can_start = HG.client_controller.network_engine.bandwidth_manager.CanDoWork( example_nj.GetNetworkContexts(), threshold = 60 )
-        
-        if not can_start:
+        if including_bandwidth:
             
-            raise HydrusExceptions.BandwidthException( 'bandwidth exceeded' )
+            example_nj = ClientNetworkingJobs.NetworkJobHydrus( self._service_key, 'GET', self._GetBaseURL() )
+            
+            can_start = HG.client_controller.network_engine.bandwidth_manager.CanDoWork( example_nj.GetNetworkContexts(), threshold = 60 )
+            
+            if not can_start:
+                
+                raise HydrusExceptions.BandwidthException( 'bandwidth exceeded' )
+                
             
         
     
@@ -684,24 +690,24 @@ class ServiceRestricted( ServiceRemote ):
             
         
     
-    def _CheckFunctional( self, including_external_communication = True, including_account = True ):
+    def _CheckFunctional( self, including_external_communication = True, including_bandwidth = True, including_account = True ):
         
         if including_account:
             
             self._account.CheckFunctional()
             
         
-        ServiceRemote._CheckFunctional( self, including_external_communication = including_external_communication )
+        ServiceRemote._CheckFunctional( self, including_external_communication = including_external_communication, including_bandwidth = including_bandwidth )
         
     
-    def _CheckCanCommunicateExternally( self ):
+    def _CheckCanCommunicateExternally( self, including_bandwidth = True ):
         
         if not self._credentials.HasAccessKey():
             
-            raise HydrusExceptions.PermissionException( 'this service has no access key set' )
+            raise HydrusExceptions.MissingCredentialsException( 'this service has no access key set' )
             
         
-        ServiceRemote._CheckCanCommunicateExternally( self )
+        ServiceRemote._CheckCanCommunicateExternally( self, including_bandwidth = including_bandwidth )
         
         
     
@@ -723,11 +729,11 @@ class ServiceRestricted( ServiceRemote ):
         self._next_account_sync = dictionary[ 'next_account_sync' ]
         
     
-    def CheckFunctional( self, including_external_communication = True, including_account = True ):
+    def CheckFunctional( self, including_external_communication = True, including_bandwidth = True, including_account = True ):
         
         with self._lock:
             
-            self._CheckFunctional( including_external_communication = including_external_communication, including_account = including_account )
+            self._CheckFunctional( including_external_communication = including_external_communication, including_bandwidth = including_bandwidth, including_account = including_account )
             
         
     
@@ -768,16 +774,19 @@ class ServiceRestricted( ServiceRemote ):
             return True
             
         
-        return self._account.IsDirty()
+        with self._lock:
+            
+            return self._account.IsDirty()
+            
         
     
-    def IsFunctional( self, including_external_communication = True, including_account = True ):
+    def IsFunctional( self, including_external_communication = True, including_bandwidth = True, including_account = True ):
         
         with self._lock:
             
             try:
                 
-                self._CheckFunctional( including_external_communication = including_external_communication, including_account = including_account )
+                self._CheckFunctional( including_external_communication = including_external_communication, including_bandwidth = including_bandwidth, including_account = including_account )
                 
                 return True
                 
@@ -875,20 +884,20 @@ class ServiceRestricted( ServiceRemote ):
             
             if content_type == 'application/json':
                 
-                hydrus_args = HydrusNetwork.ParseNetworkBytesToHydrusArgs( network_bytes )
+                parsed_args = HydrusNetwork.ParseNetworkBytesToParsedHydrusArgs( network_bytes )
                 
-                if command == 'account' and 'account' in hydrus_args:
+                if command == 'account' and 'account' in parsed_args:
                     
                     data_used = network_job.GetTotalDataUsed()
                     
-                    account = hydrus_args[ 'account' ]
+                    account = parsed_args[ 'account' ]
                     
                     # because the account was one behind when it was serialised! mostly do this just to sync up nicely with the service bandwidth tracker
                     account.ReportDataUsed( data_used )
                     account.ReportRequestUsed()
                     
                 
-                response = hydrus_args
+                response = parsed_args
                 
             else:
                 
@@ -909,11 +918,7 @@ class ServiceRestricted( ServiceRemote ):
                     
                     HG.client_controller.network_engine.session_manager.ClearSession( self.network_context )
                     
-                elif isinstance( e, HydrusExceptions.PermissionException ):
-                    
-                    self._DealWithAccountError()
-                    
-                elif isinstance( e, HydrusExceptions.ForbiddenException ):
+                elif isinstance( e, ( HydrusExceptions.MissingCredentialsException, HydrusExceptions.InsufficientCredentialsException ) ):
                     
                     self._DealWithAccountError()
                     
@@ -933,7 +938,6 @@ class ServiceRestricted( ServiceRemote ):
                     
                     self._DelayFutureRequests( str( e ) )
                     
-                
                 
             
             raise
@@ -1013,6 +1017,10 @@ class ServiceRestricted( ServiceRemote ):
                     raise
                     
                 
+            except HydrusExceptions.ShutdownException:
+                
+                return
+                
             except Exception:
                 
                 HydrusData.Print( 'Failed to refresh account for ' + name + ':' )
@@ -1065,7 +1073,7 @@ class ServiceRepository( ServiceRestricted ):
         
         try:
             
-            self._CheckFunctional( including_external_communication = False, including_account = False )
+            self._CheckFunctional( including_external_communication = False, including_bandwidth = False, including_account = False )
             
             return True
             
@@ -1075,19 +1083,19 @@ class ServiceRepository( ServiceRestricted ):
             
         
     
-    def _CheckFunctional( self, including_external_communication = True, including_account = True ):
+    def _CheckFunctional( self, including_external_communication = True, including_bandwidth = True, including_account = True ):
         
         if self._paused:
             
-            raise HydrusExceptions.PermissionException( 'Repository is paused!' )
+            raise HydrusExceptions.InsufficientCredentialsException( 'Repository is paused!' )
             
         
         if HG.client_controller.options[ 'pause_repo_sync' ]:
             
-            raise HydrusExceptions.PermissionException( 'All repositories are paused!' )
+            raise HydrusExceptions.InsufficientCredentialsException( 'All repositories are paused!' )
             
         
-        ServiceRestricted._CheckFunctional( self, including_external_communication = including_external_communication, including_account = including_account )
+        ServiceRestricted._CheckFunctional( self, including_external_communication = including_external_communication, including_bandwidth = including_bandwidth, including_account = including_account )
         
     
     def _GetSerialisableDictionary( self ):
@@ -1495,6 +1503,10 @@ class ServiceRepository( ServiceRestricted ):
                 
                 time.sleep( 3 ) # stop spamming of repo sync daemon from bringing this up again too quick
                 
+            
+        except HydrusExceptions.ShutdownException:
+            
+            return
             
         except Exception as e:
             

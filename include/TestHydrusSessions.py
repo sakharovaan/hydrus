@@ -5,7 +5,6 @@ from . import HydrusExceptions
 from . import HydrusNetwork
 from . import HydrusSessions
 import os
-from . import TestConstants
 import unittest
 from . import HydrusData
 from . import HydrusGlobals as HG
@@ -53,6 +52,8 @@ class TestSessions( unittest.TestCase ):
         self.assertIs( read_account, account )
         
         # test adding a session
+        
+        HG.test_controller.ClearWrites( 'session' )
         
         expires = HydrusData.GetNow() + 300
         

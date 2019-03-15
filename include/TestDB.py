@@ -14,6 +14,7 @@ from . import ClientImportFileSeeds
 from . import ClientRatings
 from . import ClientSearch
 from . import ClientServices
+from . import ClientTags
 import collections
 from . import HydrusConstants as HC
 from . import HydrusData
@@ -28,7 +29,7 @@ from . import ServerDB
 import shutil
 import sqlite3
 import stat
-from . import TestConstants
+from . import TestController
 import time
 import threading
 import unittest
@@ -42,7 +43,7 @@ class TestClientDB( unittest.TestCase ):
         cls._delete_db()
         
         # class variable
-        cls._db = ClientDB.DB( HG.test_controller, TestConstants.DB_DIR, 'client' )
+        cls._db = ClientDB.DB( HG.test_controller, TestController.DB_DIR, 'client' )
         
     
     @classmethod
@@ -59,7 +60,7 @@ class TestClientDB( unittest.TestCase ):
         
         for filename in db_filenames:
             
-            path = os.path.join( TestConstants.DB_DIR, filename )
+            path = os.path.join( TestController.DB_DIR, filename )
             
             os.remove( path )
             
@@ -70,7 +71,7 @@ class TestClientDB( unittest.TestCase ):
     @classmethod
     def setUpClass( cls ):
         
-        cls._db = ClientDB.DB( HG.test_controller, TestConstants.DB_DIR, 'client' )
+        cls._db = ClientDB.DB( HG.test_controller, TestController.DB_DIR, 'client' )
         
         HG.test_controller.SetRead( 'hash_status', ( CC.STATUS_UNKNOWN, None, '' ) )
         
@@ -593,7 +594,7 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
@@ -601,11 +602,11 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
-            service_keys_to_tags = { HydrusData.GenerateKey() : [ 'some', 'tags' ] }
+            service_keys_to_tags = ClientTags.ServiceKeysToTags( { HydrusData.GenerateKey() : [ 'some', 'tags' ] } )
             
             management_controller = ClientGUIManagement.CreateManagementControllerImportHDD( [ 'some', 'paths' ], ClientImportOptions.FileImportOptions(), { 'paths' : service_keys_to_tags }, True )
             
@@ -613,7 +614,7 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
@@ -621,7 +622,7 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
@@ -629,7 +630,7 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
@@ -639,7 +640,7 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
@@ -649,7 +650,7 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [ HydrusData.GenerateKey() for i in range( 200 ) ] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
@@ -659,7 +660,7 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
@@ -669,17 +670,17 @@ class TestClientDB( unittest.TestCase ):
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
-            fsc = ClientSearch.FileSearchContext( file_service_key = CC.LOCAL_FILE_SERVICE_KEY, predicates = [ ClientSearch.Predicate( HC.PREDICATE_TYPE_SYSTEM_RATING, ( '>', 0.2, TestConstants.LOCAL_RATING_NUMERICAL_SERVICE_KEY ) ), ClientSearch.Predicate( HC.PREDICATE_TYPE_SYSTEM_FILE_SERVICE, ( True, HC.CONTENT_STATUS_CURRENT, CC.LOCAL_FILE_SERVICE_KEY ) ) ] )
+            fsc = ClientSearch.FileSearchContext( file_service_key = CC.LOCAL_FILE_SERVICE_KEY, predicates = [ ClientSearch.Predicate( HC.PREDICATE_TYPE_SYSTEM_RATING, ( '>', 0.2, TestController.LOCAL_RATING_NUMERICAL_SERVICE_KEY ) ), ClientSearch.Predicate( HC.PREDICATE_TYPE_SYSTEM_FILE_SERVICE, ( True, HC.CONTENT_STATUS_CURRENT, CC.LOCAL_FILE_SERVICE_KEY ) ) ] )
             
             management_controller = ClientGUIManagement.CreateManagementControllerQuery( 'files', CC.LOCAL_FILE_SERVICE_KEY, fsc, True )
             
             page = ClientGUIPages.Page( test_frame, HG.test_controller, management_controller, [] )
             
-            session.AddPage( page )
+            session.AddPageTuple( page )
             
             #
             
@@ -689,7 +690,7 @@ class TestClientDB( unittest.TestCase ):
             
             page_names = []
             
-            for ( page_type, page_data ) in result.GetPages():
+            for ( page_type, page_data ) in result.GetPageTuples():
                 
                 if page_type == 'page':
                     
@@ -792,8 +793,8 @@ class TestClientDB( unittest.TestCase ):
     
     def test_import_folders( self ):
         
-        import_folder_1 = ClientImportLocal.ImportFolder( 'imp 1', path = TestConstants.DB_DIR, mimes = HC.VIDEO, publish_files_to_popup_button = False )
-        import_folder_2 = ClientImportLocal.ImportFolder( 'imp 2', path = TestConstants.DB_DIR, mimes = HC.IMAGES, period = 1200, publish_files_to_popup_button = False )
+        import_folder_1 = ClientImportLocal.ImportFolder( 'imp 1', path = TestController.DB_DIR, mimes = HC.VIDEO, publish_files_to_popup_button = False )
+        import_folder_2 = ClientImportLocal.ImportFolder( 'imp 2', path = TestController.DB_DIR, mimes = HC.IMAGES, period = 1200, publish_files_to_popup_button = False )
         
         #
         
@@ -826,11 +827,11 @@ class TestClientDB( unittest.TestCase ):
     
     def test_init( self ):
         
-        self.assertTrue( os.path.exists( TestConstants.DB_DIR ) )
+        self.assertTrue( os.path.exists( TestController.DB_DIR ) )
         
-        self.assertTrue( os.path.exists( os.path.join( TestConstants.DB_DIR, 'client.db' ) ) )
+        self.assertTrue( os.path.exists( os.path.join( TestController.DB_DIR, 'client.db' ) ) )
         
-        client_files_default = os.path.join( TestConstants.DB_DIR, 'client_files' )
+        client_files_default = os.path.join( TestController.DB_DIR, 'client_files' )
         
         self.assertTrue( os.path.exists( client_files_default ) )
         
@@ -1187,7 +1188,7 @@ class TestServerDB( unittest.TestCase ):
     @classmethod
     def setUpClass( cls ):
         
-        cls._db = ServerDB.DB( HG.test_controller, TestConstants.DB_DIR, 'server' )
+        cls._db = ServerDB.DB( HG.test_controller, TestController.DB_DIR, 'server' )
         
     
     @classmethod
@@ -1269,11 +1270,11 @@ class TestServerDB( unittest.TestCase ):
         
         self.assertNotEqual( access_key, access_key_2 )
         
-        self.assertRaises( HydrusExceptions.ForbiddenException, self._read, 'account_key_from_access_key', self._tag_service_key, access_key )
+        self.assertRaises( HydrusExceptions.InsufficientCredentialsException, self._read, 'account_key_from_access_key', self._tag_service_key, access_key )
         
         account_key = self._read( 'account_key_from_access_key', self._tag_service_key, access_key_2 )
         
-        self.assertRaises( HydrusExceptions.ForbiddenException, self._read, 'access_key', r_key )
+        self.assertRaises( HydrusExceptions.InsufficientCredentialsException, self._read, 'access_key', r_key )
         
     
     def _test_content_creation( self ):

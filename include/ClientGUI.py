@@ -34,6 +34,7 @@ from . import ClientPaths
 from . import ClientRendering
 from . import ClientSearch
 from . import ClientServices
+from . import ClientTags
 from . import ClientThreading
 import collections
 import cv2
@@ -97,10 +98,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         self._statusbar_thread_updater = ClientGUICommon.ThreadToGUIUpdater( self._statusbar, self.RefreshStatusBar )
         
-        self._focus_holder = wx.Window( self )
-        
-        self._focus_holder.SetSize( ( 0, 0 ) )
-        
         self._closed_pages = []
         
         self._lock = threading.Lock()
@@ -109,7 +106,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         self._notebook = ClientGUIPages.PagesNotebook( self, self._controller, 'top page notebook' )
         
-        self.SetDropTarget( ClientDragDrop.FileDropTarget( self, self.ImportFiles, self.ImportURL, self._notebook.MediaDragAndDropDropped, self._notebook.PageDragAndDropDropped ) )
+        self.SetDropTarget( ClientDragDrop.FileDropTarget( self, self.ImportFiles, self.ImportURLFromDragAndDrop, self._notebook.MediaDragAndDropDropped, self._notebook.PageDragAndDropDropped ) )
         
         wx.GetApp().SetTopWindow( self )
         
@@ -146,8 +143,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         self._controller.sub( self, 'SetStatusBarDirty', 'set_status_bar_dirty' )
         self._controller.sub( self, 'SetTitle', 'main_gui_title' )
         self._controller.sub( self, 'SyncToTagArchive', 'sync_to_tag_archive' )
-        
-        self._menus = {}
         
         vbox = wx.BoxSizer( wx.VERTICAL )
         
@@ -577,9 +572,9 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             time.sleep( 10 )
             
-            result = service.Request( HC.GET, 'busy' )
+            result_bytes = service.Request( HC.GET, 'busy' )
             
-            while result == '1':
+            while result_bytes == b'1':
                 
                 if self._controller.ViewIsShutdown():
                     
@@ -588,7 +583,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                 
                 time.sleep( 10 )
                 
-                result = service.Request( HC.GET, 'busy' )
+                result_bytes = service.Request( HC.GET, 'busy' )
                 
             
             it_took = HydrusData.GetNow() - started
@@ -1037,15 +1032,33 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         HydrusData.ShowText( 'Printing garbage to log' )
         
-        HydrusData.Print( 'uncollectable garbage: ' + str( gc.garbage ) )
+        HydrusData.Print( 'uncollectable gc.garbage:' )
+        
+        count = collections.Counter()
+        
+        for o in gc.garbage:
+            
+            count[ type( o ) ] += 1
+            
+        
+        to_print = list( count.items() )
+        
+        to_print.sort( key = lambda pair: -pair[1] )
+        
+        for ( k, v ) in to_print:
+            
+            HydrusData.Print( ( k, v ) )
+            
+        
+        del gc.garbage[:]
         
         old_debug = gc.get_debug()
+        
+        HydrusData.Print( 'running a collect with stats on:' )
         
         gc.set_debug( gc.DEBUG_LEAK | gc.DEBUG_STATS )
         
         gc.collect()
-        
-        HydrusData.Print( 'all garbage: ' + str( gc.garbage ) )
         
         del gc.garbage[:]
         
@@ -1055,14 +1068,12 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         count = collections.Counter()
         
-        class_count = collections.Counter()
-        
         for o in gc.get_objects():
             
             count[ type( o ) ] += 1
             
         
-        HydrusData.Print( 'gc types:' )
+        HydrusData.Print( 'currently tracked types:' )
         
         to_print = list( count.items() )
         
@@ -1070,7 +1081,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         for ( k, v ) in to_print:
             
-            if v > 100:
+            if v > 25:
                 
                 HydrusData.Print( ( k, v ) )
                 
@@ -1082,11 +1093,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
     def _DebugShowScheduledJobs( self ):
         
         self._controller.DebugShowScheduledJobs()
-        
-    
-    def _DebugSimulateWakeFromSleepEvent( self ):
-        
-        self._controller.SimulateWakeFromSleepEvent()
         
     
     def _DeleteGUISession( self, name ):
@@ -1146,11 +1152,9 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         if name not in self._dirty_menus:
             
-            ( menu, label, show ) = self._menus[ name ]
+            menu_index = self._FindMenuBarIndex( name )
             
-            if show:
-                
-                menu_index = self._FindMenuBarIndex( menu )
+            if menu_index != wx.NOT_FOUND:
                 
                 self._menubar.EnableTop( menu_index, False )
                 
@@ -1202,17 +1206,17 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
         
     
-    def _FindMenuBarIndex( self, menu ):
+    def _FindMenuBarIndex( self, name ):
         
         for index in range( self._menubar.GetMenuCount() ):
             
-            if self._menubar.GetMenu( index ) == menu:
+            if self._menubar.GetMenu( index ).hydrus_menubar_name == name:
                 
                 return index
                 
             
         
-        raise HydrusExceptions.DataMissing( 'Menu not found!' )
+        return wx.NOT_FOUND
         
     
     def _ForceFitAllNonGUITLWs( self ):
@@ -1262,6 +1266,8 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
     def _GenerateMenuInfo( self, name ):
         
         menu = wx.Menu()
+        
+        menu.hydrus_menubar_name = name
         
         def file():
             
@@ -2030,7 +2036,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             ClientGUIMenus.AppendMenuCheckItem( self, debug_modes, 'force idle mode', 'Make the client consider itself idle and fire all maintenance routines right now. This may hang the gui for a while.', HG.force_idle_mode, self._SwitchBoolean, 'force_idle_mode' )
             ClientGUIMenus.AppendMenuCheckItem( self, debug_modes, 'no page limit mode', 'Let the user create as many pages as they want with no warnings or prohibitions.', HG.no_page_limit_mode, self._SwitchBoolean, 'no_page_limit_mode' )
             ClientGUIMenus.AppendMenuCheckItem( self, debug_modes, 'thumbnail debug mode', 'Show some thumbnail debug info.', HG.thumbnail_debug_mode, self._SwitchBoolean, 'thumbnail_debug_mode' )
-            ClientGUIMenus.AppendMenuItem( self, debug_modes, 'simulate a wake from sleep', 'Tell the controller to pretend that it just woke up from sleep.', self._DebugSimulateWakeFromSleepEvent )
+            ClientGUIMenus.AppendMenuItem( self, debug_modes, 'simulate a wake from sleep', 'Tell the controller to pretend that it just woke up from sleep.', self._controller.SimulateWakeFromSleepEvent )
             
             ClientGUIMenus.AppendMenu( debug, debug_modes, 'debug modes' )
             
@@ -2055,12 +2061,14 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             ClientGUIMenus.AppendMenuCheckItem( self, report_modes, 'media load report mode', 'Have the client report media load information, where supported.', HG.media_load_report_mode, self._SwitchBoolean, 'media_load_report_mode' )
             ClientGUIMenus.AppendMenuCheckItem( self, report_modes, 'network report mode', 'Have the network engine report new jobs.', HG.network_report_mode, self._SwitchBoolean, 'network_report_mode' )
             ClientGUIMenus.AppendMenuCheckItem( self, report_modes, 'shortcut report mode', 'Have the new shortcut system report what shortcuts it catches and whether it matches an action.', HG.shortcut_report_mode, self._SwitchBoolean, 'shortcut_report_mode' )
+            ClientGUIMenus.AppendMenuCheckItem( self, report_modes, 'subprocess report mode', 'Report whenever an external process is called.', HG.subprocess_report_mode, self._SwitchBoolean, 'subprocess_report_mode' )
             ClientGUIMenus.AppendMenuCheckItem( self, report_modes, 'subscription report mode', 'Have the subscription system report what it is doing.', HG.subscription_report_mode, self._SwitchBoolean, 'subscription_report_mode' )
             
             ClientGUIMenus.AppendMenu( debug, report_modes, 'report modes' )
             
             gui_actions = wx.Menu()
             
+            ClientGUIMenus.AppendMenuCheckItem( self, gui_actions, 'thumbnail experiment mode', 'Try the new experiment.', HG.thumbnail_experiment_mode, self._SwitchBoolean, 'thumbnail_experiment_mode' )
             ClientGUIMenus.AppendMenuItem( self, gui_actions, 'make some popups', 'Throw some varied popups at the message manager, just to check it is working.', self._DebugMakeSomePopups )
             ClientGUIMenus.AppendMenuItem( self, gui_actions, 'make a popup in five seconds', 'Throw a delayed popup at the message manager, giving you time to minimise or otherwise alter the client before it arrives.', self._controller.CallLater, 5, HydrusData.ShowText, 'This is a delayed popup message.' )
             ClientGUIMenus.AppendMenuItem( self, gui_actions, 'make a modal popup in five seconds', 'Throw up a delayed modal popup to test with. It will stay alive for five seconds.', self._DebugMakeDelayedModalPopup )
@@ -2070,6 +2078,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             ClientGUIMenus.AppendMenuItem( self, gui_actions, 'force a layout for all non-main-gui tlws now', 'Tell all sub-frames to relayout--useful to test some layout issues.', self._ForceLayoutAllNonGUITLWs )
             ClientGUIMenus.AppendMenuItem( self, gui_actions, 'force a fit for all non-gui tlws now', 'Tell all sub-frames to refit--useful to test some layout issues.', self._ForceFitAllNonGUITLWs )
             ClientGUIMenus.AppendMenuItem( self, gui_actions, 'save \'last session\' gui session', 'Make an immediate save of the \'last session\' gui session. Mostly for testing crashes, where last session is not saved correctly.', self._notebook.SaveGUISession, 'last session' )
+            ClientGUIMenus.AppendMenuItem( self, gui_actions, 'run the ui test', 'Run hydrus_dev\'s weekly UI Test. Guaranteed to work and not mess up your session, ha ha.', self._RunUITest )
             
             ClientGUIMenus.AppendMenu( debug, gui_actions, 'gui actions' )
             
@@ -2105,14 +2114,33 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             return ( menu, '&help', True )
             
         
-        if name == 'file': return file()
-        elif name == 'undo': return undo()
-        elif name == 'pages': return pages()
-        elif name == 'database': return database()
-        elif name == 'network': return network()
-        elif name == 'pending': return pending()
-        elif name == 'services': return services()
-        elif name == 'help': return help()
+        if name == 'file': result = file()
+        elif name == 'undo': result = undo()
+        elif name == 'pages': result = pages()
+        elif name == 'database': result = database()
+        elif name == 'network': result = network()
+        elif name == 'pending': result = pending()
+        elif name == 'services': result = services()
+        elif name == 'help': result = help()
+        
+        # hackery dackery doo
+        ( menu, label, show ) = result
+        
+        if show:
+            
+            if HC.PLATFORM_OSX:
+                
+                menu.SetTitle( label ) # causes bugs in os x if this is not here
+                
+            
+        else:
+            
+            ClientGUIMenus.DestroyMenu( self, menu )
+            
+            menu = None
+            
+        
+        return ( menu, label, show )
         
     
     def _GenerateNewAccounts( self, service_key ):
@@ -2271,6 +2299,60 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
         
     
+    def _ImportURL( self, url, service_keys_to_tags = None, destination_page_name = None ):
+        
+        if service_keys_to_tags is None:
+            
+            service_keys_to_tags = ClientTags.ServiceKeysToTags()
+            
+        
+        url = HG.client_controller.network_engine.domain_manager.NormaliseURL( url )
+        
+        ( url_type, match_name, can_parse ) = self._controller.network_engine.domain_manager.GetURLParseCapability( url )
+        
+        if url_type in ( HC.URL_TYPE_GALLERY, HC.URL_TYPE_POST, HC.URL_TYPE_WATCHABLE ) and not can_parse:
+            
+            message = 'This URL was recognised as a "{}" but this URL class does not yet have a parsing script linked to it!'.format( match_name )
+            message += os.linesep * 2
+            message += 'Since this URL cannot be parsed, a downloader cannot be created for it! Please check your url class links under the \'networking\' menu.'
+            
+            raise HydrusExceptions.URLMatchException( message )
+            
+        
+        if url_type in ( HC.URL_TYPE_UNKNOWN, HC.URL_TYPE_FILE, HC.URL_TYPE_POST, HC.URL_TYPE_GALLERY ):
+            
+            page = self._notebook.GetOrMakeURLImportPage( desired_page_name = destination_page_name )
+            
+            if page is not None:
+                
+                self._notebook.ShowPage( page )
+                
+                management_panel = page.GetManagementPanel()
+                
+                management_panel.PendURL( url, service_keys_to_tags = service_keys_to_tags )
+                
+                return ( url, '"{}" URL added successfully.'.format( match_name ) )
+                
+            
+        elif url_type == HC.URL_TYPE_WATCHABLE:
+            
+            page = self._notebook.GetOrMakeMultipleWatcherPage( desired_page_name = destination_page_name )
+            
+            if page is not None:
+                
+                self._notebook.ShowPage( page )
+                
+                management_panel = page.GetManagementPanel()
+                
+                management_panel.PendURL( url, service_keys_to_tags = service_keys_to_tags )
+                
+                return ( url, '"{}" URL added successfully.'.format( match_name ) )
+                
+            
+        
+        raise HydrusExceptions.DataMissing( '"{}" URL was not added successfully--could not find/generate a new downloader page for it.'.format( match_name ) )
+        
+    
     def _InitialiseMenubar( self ):
         
         self._menubar = wx.MenuBar()
@@ -2282,14 +2364,14 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         for name in MENU_ORDER:
             
-            ( menu, label, show ) = self._GenerateMenuInfo( name )
+            ( menu_or_none, label, show ) = self._GenerateMenuInfo( name )
             
             if show:
                 
+                menu = menu_or_none
+                
                 self._menubar.Append( menu, label )
                 
-            
-            self._menus[ name ] = ( menu, label, show )
             
         
     
@@ -2605,7 +2687,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                     
                     try:
                         
-                        controller.CallBlockingToWX( wx_do_it )
+                        controller.CallBlockingToWX( self, wx_do_it )
                         
                     except HydrusExceptions.WXDeadWindowException:
                         
@@ -3294,6 +3376,216 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         frame.SetPanel( panel )
         
     
+    def _RunUITest( self ):
+        
+        def wx_open_pages():
+            
+            page_of_pages = self._notebook.NewPagesNotebook( on_deepest_notebook = False, select_page = True )
+            
+            t = 0.25
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self._notebook.NewPageQuery, CC.LOCAL_FILE_SERVICE_KEY, page_name = 'test', on_deepest_notebook = True )
+            
+            t += 0.25
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.ProcessApplicationCommand, ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'new_page_of_pages' ) )
+            
+            t += 0.25
+            
+            HG.client_controller.CallLaterWXSafe( self, t, page_of_pages.NewPageQuery, CC.LOCAL_FILE_SERVICE_KEY, page_name = 'test', on_deepest_notebook = False )
+            
+            t += 0.25
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.ProcessApplicationCommand, ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'new_duplicate_filter_page' ) )
+            
+            t += 0.25
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.ProcessApplicationCommand, ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'new_gallery_downloader_page' ) )
+            
+            t += 0.25
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.ProcessApplicationCommand, ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'new_simple_downloader_page' ) )
+            
+            t += 0.25
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.ProcessApplicationCommand, ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'new_url_downloader_page' ) )
+            
+            t += 0.25
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.ProcessApplicationCommand, ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'new_watcher_downloader_page' ) )
+            
+            return page_of_pages
+            
+        
+        def wx_close_unclose_one_page():
+            
+            self._notebook.CloseCurrentPage()
+            
+            HG.client_controller.CallLaterWXSafe( self, 0.5, self._UnclosePage )
+            
+        
+        def wx_close_pages( page_of_pages ):
+            
+            indices = list( range( page_of_pages.GetPageCount() ) )
+            
+            indices.reverse()
+            
+            t = 0.0
+            
+            for i in indices:
+                
+                HG.client_controller.CallLaterWXSafe( self, t, page_of_pages._ClosePage, i )
+                
+                t += 0.25
+                
+            
+            t += 1
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self._notebook.CloseCurrentPage )
+            
+            t += 1
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.DeleteAllClosedPages )
+            
+        
+        def wx_test_ac():
+            
+            page = self._notebook.NewPageQuery( CC.LOCAL_FILE_SERVICE_KEY, page_name = 'test', select_page = True )
+            
+            t = 0.5
+            
+            HG.client_controller.CallLaterWXSafe( self, t, page.SetSearchFocus )
+            
+            t += 0.5
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.ProcessApplicationCommand, ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'set_media_focus' ) )
+            
+            t += 0.5
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self.ProcessApplicationCommand, ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'set_search_focus' ) )
+            
+            t += 0.5
+            
+            uias = wx.UIActionSimulator()
+            
+            for c in 'the colour of her hair':
+                
+                HG.client_controller.CallLaterWXSafe( self, t, uias.Char, ord( c ) )
+                
+                t += 0.05
+                
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
+            
+            t += 0.5
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
+            
+            t += 0.5
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_DOWN )
+            
+            t += 0.05
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
+            
+            t += 0.5
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_DOWN )
+            
+            t += 0.05
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
+            
+            t += 0.5
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
+            
+            for i in range( 16 ):
+                
+                t += 0.5
+                
+                HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_DOWN )
+                
+                t += 0.05
+                
+                HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
+                
+                t += 0.5
+                
+                HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
+                
+            
+            t += 0.5
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_DOWN )
+            
+            t += 0.05
+            
+            HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
+            
+            t += 1.0
+            
+            HG.client_controller.CallLaterWXSafe( self, t, self._notebook.CloseCurrentPage )
+            
+        
+        def wx_dialog_choose_page():
+            
+            #self._notebook.ChooseNewPageForDeepestNotebook()
+            pass
+            
+        
+        def wx_dialog_options():
+            
+            pass
+            
+        
+        def wx_dialog_import_folders():
+            
+            pass
+            
+        
+        def wx_dialog_export_folders():
+            
+            pass
+            
+        
+        def wx_dialog_manage_services():
+            
+            pass
+            
+        
+        def wx_dialog_review_services():
+            
+            pass
+            
+        
+        def do_it():
+            
+            # pages
+            
+            page_of_pages = HG.client_controller.CallBlockingToWX( self, wx_open_pages )
+            
+            time.sleep( 4 )
+            
+            HG.client_controller.CallBlockingToWX( self, wx_close_unclose_one_page )
+            
+            time.sleep( 1.5 )
+            
+            HG.client_controller.CallBlockingToWX( self, wx_close_pages, page_of_pages )
+            
+            time.sleep( 5 )
+            
+            del page_of_pages
+            
+            # a/c
+            
+            HG.client_controller.CallBlockingToWX( self, wx_test_ac )
+            
+        
+        HG.client_controller.CallToThread( do_it )
+        
+    
     def _SaveSplitterPositions( self ):
         
         page = self._notebook.GetCurrentMediaPage()
@@ -3545,6 +3837,10 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             HG.shortcut_report_mode = not HG.shortcut_report_mode
             
+        elif name == 'subprocess_report_mode':
+            
+            HG.subprocess_report_mode = not HG.subprocess_report_mode
+            
         elif name == 'subscription_report_mode':
             
             HG.subscription_report_mode = not HG.subscription_report_mode
@@ -3552,6 +3848,10 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         elif name == 'thumbnail_debug_mode':
             
             HG.thumbnail_debug_mode = not HG.thumbnail_debug_mode
+            
+        elif name == 'thumbnail_experiment_mode':
+            
+            HG.thumbnail_experiment_mode = not HG.thumbnail_experiment_mode
             
         elif name == 'ui_timer_profile_mode':
             
@@ -3967,7 +4267,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             self._DestroyPages( deletee_pages )
             
-            self._focus_holder.SetFocus()
+            self._notebook.SetFocus()
             
             self._controller.pub( 'notify_new_undo' )
             
@@ -4122,7 +4422,9 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         
         if not HG.emergency_exit:
             
-            if HC.options[ 'confirm_client_exit' ]:
+            able_to_close_statement = self._notebook.GetTestAbleToCloseStatement()
+            
+            if HC.options[ 'confirm_client_exit' ] or able_to_close_statement is not None:
                 
                 if restart:
                     
@@ -4131,6 +4433,12 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
                 else:
                     
                     text = 'Are you sure you want to exit the client? (Will auto-yes in 15 seconds)'
+                    
+                
+                if able_to_close_statement is not None:
+                    
+                    text += os.linesep * 2
+                    text += able_to_close_statement
                     
                 
                 with ClientGUIDialogs.DialogYesNo( self, text ) as dlg:
@@ -4149,15 +4457,6 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
                         job.Cancel()
                         
                     
-                
-            
-            try:
-                
-                self._notebook.TestAbleToClose()
-                
-            except HydrusExceptions.VetoException:
-                
-                return False
                 
             
         
@@ -4320,55 +4619,31 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         self._ImportFiles( paths )
         
     
-    def ImportURL( self, url ):
+    def ImportURLFromAPI( self, url, service_keys_to_tags, destination_page_name ):
         
-        url = HG.client_controller.network_engine.domain_manager.NormaliseURL( url )
-        
-        ( url_type, match_name, can_parse ) = self._controller.network_engine.domain_manager.GetURLParseCapability( url )
-        
-        if url_type in ( HC.URL_TYPE_GALLERY, HC.URL_TYPE_POST, HC.URL_TYPE_WATCHABLE ) and not can_parse:
+        try:
             
-            message = 'This URL was recognised as a "' + match_name + '" but this URL class does not yet have a parsing script linked to it!'
-            message += os.linesep * 2
-            message += 'Since this URL cannot be parsed, a downloader cannot be created for it! Please check your url class links under the \'networking\' menu.'
+            ( normalised_url, result_text ) = self._ImportURL( url, service_keys_to_tags = service_keys_to_tags, destination_page_name = destination_page_name )
             
-            wx.MessageBox( message )
+            return ( normalised_url, result_text )
             
-            return
+        except Exception as e:
+            
+            HydrusData.PrintException( e )
+            
+            raise HydrusExceptions.InsufficientCredentialsException( str( e ) )
             
         
-        if url_type in ( HC.URL_TYPE_UNKNOWN, HC.URL_TYPE_FILE, HC.URL_TYPE_POST, HC.URL_TYPE_GALLERY ):
+    
+    def ImportURLFromDragAndDrop( self, url ):
+        
+        try:
             
-            page = self._notebook.GetOrMakeURLImportPage()
+            self._ImportURL( url )
             
-            if page is not None:
-                
-                self._notebook.ShowPage( page )
-                
-                page_key = page.GetPageKey()
-                
-                HG.client_controller.pub( 'pend_url', page_key, url )
-                
+        except Exception as e:
             
-        else:
-            
-            # watchable url (thread url) -> open new watcher, set it
-                # at some point, append it to existing multiple-thread-supporting-page
-            # gallery url -> open gallery page for the respective parser for import options, but no query input stuff, queue up gallery page to be parsed for page urls
-            
-            if url_type == HC.URL_TYPE_WATCHABLE:
-                
-                page = self._notebook.GetOrMakeMultipleWatcherPage()
-                
-                if page is not None:
-                    
-                    self._notebook.ShowPage( page )
-                    
-                    page_key = page.GetPageKey()
-                    
-                    HG.client_controller.pub( 'pend_url', page_key, url )
-                    
-                
+            HydrusData.ShowException( e )
             
         
     
@@ -4386,9 +4661,9 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
         
     
-    def NewPageImportHDD( self, paths, file_import_options, paths_to_tags, delete_after_success ):
+    def NewPageImportHDD( self, paths, file_import_options, paths_to_service_keys_to_tags, delete_after_success ):
         
-        management_controller = ClientGUIManagement.CreateManagementControllerImportHDD( paths, file_import_options, paths_to_tags, delete_after_success )
+        management_controller = ClientGUIManagement.CreateManagementControllerImportHDD( paths, file_import_options, paths_to_service_keys_to_tags, delete_after_success )
         
         self._notebook.NewPage( management_controller, on_deepest_notebook = True )
         
@@ -4418,7 +4693,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         
         if self._notebook.GetNumPages() == 0:
             
-            self._focus_holder.SetFocus()
+            self._notebook.SetFocus()
             
         
         self._DirtyMenu( 'pages' )
@@ -4430,7 +4705,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         
         if self._notebook.GetNumPages() == 0:
             
-            self._focus_holder.SetFocus()
+            self._notebook.SetFocus()
             
         
         self._DestroyPages( ( page, ) )
@@ -4642,44 +4917,29 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             name = self._dirty_menus.pop()
             
-            ( menu, label, show ) = self._GenerateMenuInfo( name )
+            ( menu_or_none, label, show ) = self._GenerateMenuInfo( name )
             
-            if HC.PLATFORM_OSX:
-                
-                menu.SetTitle( label ) # causes bugs in os x if this is not here
-                
+            old_menu_index = self._FindMenuBarIndex( name )
             
-            ( old_menu, old_label, old_show ) = self._menus[ name ]
-            
-            if old_show:
-                
-                old_menu_index = self._FindMenuBarIndex( old_menu )
+            if old_menu_index == wx.NOT_FOUND:
                 
                 if show:
                     
-                    self._menubar.Replace( old_menu_index, menu, label )
-                    
-                else:
-                    
-                    self._menubar.Remove( old_menu_index )
-                    
-                
-            else:
-                
-                if show:
+                    menu = menu_or_none
                     
                     insert_index = 0
                     
-                    for temp_name in MENU_ORDER:
+                    # for every menu that may display, if it is displayed now, bump up insertion index up one
+                    for possible_name in MENU_ORDER:
                         
-                        if temp_name == name:
+                        if possible_name == name:
                             
                             break
                             
                         
-                        ( temp_menu, temp_label, temp_show ) = self._menus[ temp_name ]
+                        possible_menu_index = self._FindMenuBarIndex( possible_name )
                         
-                        if temp_show:
+                        if possible_menu_index != wx.NOT_FOUND:
                             
                             insert_index += 1
                             
@@ -4688,10 +4948,23 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
                     self._menubar.Insert( insert_index, menu, label )
                     
                 
-            
-            self._menus[ name ] = ( menu, label, show )
-            
-            ClientGUIMenus.DestroyMenu( self, old_menu )
+            else:
+                
+                old_menu = self._menubar.GetMenu( old_menu_index )
+                
+                if show:
+                    
+                    menu = menu_or_none
+                    
+                    self._menubar.Replace( old_menu_index, menu, label )
+                    
+                else:
+                    
+                    self._menubar.Remove( old_menu_index )
+                    
+                
+                ClientGUIMenus.DestroyMenu( self, old_menu )
+                
             
         
         if len( self._dirty_menus ) > 0:

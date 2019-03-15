@@ -6,6 +6,7 @@ from . import ClientImportFileSeeds
 from . import ClientImportGallerySeeds
 from . import ClientNetworkingJobs
 from . import ClientParsing
+from . import ClientTags
 import collections
 from . import HydrusConstants as HC
 from . import HydrusData
@@ -197,7 +198,7 @@ class MultipleWatcherImport( HydrusSerialisable.SerialisableBase ):
             
         
     
-    def AddURL( self, url ):
+    def AddURL( self, url, service_keys_to_tags = None ):
         
         if url == '':
             
@@ -223,6 +224,11 @@ class MultipleWatcherImport( HydrusSerialisable.SerialisableBase ):
             watcher = WatcherImport()
             
             watcher.SetURL( url )
+            
+            if service_keys_to_tags is not None:
+                
+                watcher.SetFixedServiceKeysToTags( service_keys_to_tags )
+                
             
             watcher.SetCheckerOptions( self._checker_options )
             watcher.SetFileImportOptions( self._file_import_options )
@@ -494,7 +500,7 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
     
     SERIALISABLE_TYPE = HydrusSerialisable.SERIALISABLE_TYPE_WATCHER_IMPORT
     SERIALISABLE_NAME = 'Watcher'
-    SERIALISABLE_VERSION = 6
+    SERIALISABLE_VERSION = 7
     
     MIN_CHECK_PERIOD = 30
     
@@ -510,8 +516,8 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
         self._gallery_seed_log = ClientImportGallerySeeds.GallerySeedLog()
         self._file_seed_cache = ClientImportFileSeeds.FileSeedCache()
         
-        self._urls_to_filenames = {}
-        self._urls_to_md5_base64 = {}
+        self._fixed_service_keys_to_tags = ClientTags.ServiceKeysToTags()
+        
         self._checker_options = HG.client_controller.new_options.GetDefaultWatcherCheckerOptions()
         self._file_import_options = HG.client_controller.new_options.GetDefaultFileImportOptions( 'loud' )
         self._tag_import_options = ClientImportOptions.TagImportOptions( is_default = True )
@@ -534,7 +540,7 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
         self._creation_time = HydrusData.GetNow()
         
         self._file_velocity_status = ''
-        self._current_action = ''
+        self._file_status = ''
         self._watcher_status = ''
         
         self._watcher_key = HydrusData.GenerateKey()
@@ -594,6 +600,8 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
             
         
         gallery_seed = ClientImportGallerySeeds.GallerySeed( self._url, can_generate_more_pages = False )
+        
+        gallery_seed.SetFixedServiceKeysToTags( self._fixed_service_keys_to_tags )
         
         self._gallery_seed_log.AddGallerySeeds( ( gallery_seed, ) )
         
@@ -724,11 +732,13 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
         serialisable_gallery_seed_log = self._gallery_seed_log.GetSerialisableTuple()
         serialisable_file_seed_cache = self._file_seed_cache.GetSerialisableTuple()
         
+        serialisable_fixed_service_keys_to_tags = self._fixed_service_keys_to_tags.GetSerialisableTuple()
+        
         serialisable_checker_options = self._checker_options.GetSerialisableTuple()
         serialisable_file_import_options = self._file_import_options.GetSerialisableTuple()
         serialisable_tag_import_options = self._tag_import_options.GetSerialisableTuple()
         
-        return ( self._url, serialisable_gallery_seed_log, serialisable_file_seed_cache, self._urls_to_filenames, self._urls_to_md5_base64, serialisable_checker_options, serialisable_file_import_options, serialisable_tag_import_options, self._last_check_time, self._files_paused, self._checking_paused, self._checking_status, self._subject, self._no_work_until, self._no_work_until_reason, self._creation_time )
+        return ( self._url, serialisable_gallery_seed_log, serialisable_file_seed_cache, serialisable_fixed_service_keys_to_tags, serialisable_checker_options, serialisable_file_import_options, serialisable_tag_import_options, self._last_check_time, self._files_paused, self._checking_paused, self._checking_status, self._subject, self._no_work_until, self._no_work_until_reason, self._creation_time )
         
     
     def _HasURL( self ):
@@ -738,7 +748,9 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
     
     def _InitialiseFromSerialisableInfo( self, serialisable_info ):
         
-        ( self._url, serialisable_gallery_seed_log, serialisable_file_seed_cache, self._urls_to_filenames, self._urls_to_md5_base64, serialisable_checker_options, serialisable_file_import_options, serialisable_tag_import_options, self._last_check_time, self._files_paused, self._checking_paused, self._checking_status, self._subject, self._no_work_until, self._no_work_until_reason, self._creation_time ) = serialisable_info
+        ( self._url, serialisable_gallery_seed_log, serialisable_file_seed_cache, serialisable_fixed_service_keys_to_tags, serialisable_checker_options, serialisable_file_import_options, serialisable_tag_import_options, self._last_check_time, self._files_paused, self._checking_paused, self._checking_status, self._subject, self._no_work_until, self._no_work_until_reason, self._creation_time ) = serialisable_info
+        
+        self._fixed_service_keys_to_tags = HydrusSerialisable.CreateFromSerialisableTuple( serialisable_fixed_service_keys_to_tags )
         
         self._gallery_seed_log = HydrusSerialisable.CreateFromSerialisableTuple( serialisable_gallery_seed_log )
         self._file_seed_cache = HydrusSerialisable.CreateFromSerialisableTuple( serialisable_file_seed_cache )
@@ -853,6 +865,19 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
             return ( 6, new_serialisable_info )
             
         
+        if version == 6:
+            
+            ( url, serialisable_gallery_seed_log, serialisable_file_seed_cache, urls_to_filenames, urls_to_md5_base64, serialisable_checker_options, serialisable_file_import_options, serialisable_tag_import_options, last_check_time, files_paused, checking_paused, checking_status, subject, no_work_until, no_work_until_reason, creation_time ) = old_serialisable_info
+            
+            fixed_service_keys_to_tags = ClientTags.ServiceKeysToTags()
+            
+            serialisable_fixed_service_keys_to_tags = fixed_service_keys_to_tags.GetSerialisableTuple()
+            
+            new_serialisable_info = ( url, serialisable_gallery_seed_log, serialisable_file_seed_cache, serialisable_fixed_service_keys_to_tags, serialisable_checker_options, serialisable_file_import_options, serialisable_tag_import_options, last_check_time, files_paused, checking_paused, checking_status, subject, no_work_until, no_work_until_reason, creation_time )
+            
+            return ( 7, new_serialisable_info )
+            
+        
     
     def _WorkOnFiles( self ):
         
@@ -869,7 +894,7 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
             
             with self._lock:
                 
-                self._current_action = text
+                self._file_status = text
                 
             
         
@@ -891,7 +916,7 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
         
         with self._lock:
             
-            self._current_action = ''
+            self._file_status = ''
             
         
         if did_substantial_work:
@@ -1072,7 +1097,7 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
         
         with self._lock:
             
-            current_action = self._current_action
+            file_status = self._file_status
             
             if self._checking_status == ClientImporting.CHECKER_STATUS_404:
                 
@@ -1086,7 +1111,7 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
                 
                 no_work_text = self._no_work_until_reason + ' - ' + 'next check ' + HydrusData.TimestampToPrettyTimeDelta( self._next_check_time )
                 
-                current_action = no_work_text
+                file_status = no_work_text
                 watcher_status = no_work_text
                 
             else:
@@ -1094,7 +1119,7 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
                 watcher_status = self._watcher_status
                 
             
-            return ( current_action, self._files_paused, self._file_velocity_status, self._next_check_time, watcher_status, self._subject, self._checking_status, self._check_now, self._checking_paused )
+            return ( file_status, self._files_paused, self._file_velocity_status, self._next_check_time, watcher_status, self._subject, self._checking_status, self._check_now, self._checking_paused )
             
         
     
@@ -1244,6 +1269,14 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
         with self._lock:
             
             self._file_import_options = file_import_options
+            
+        
+    
+    def SetFixedServiceKeysToTags( self, service_keys_to_tags ):
+        
+        with self._lock:
+            
+            self._fixed_service_keys_to_tags = ClientTags.ServiceKeysToTags( service_keys_to_tags )
             
         
     

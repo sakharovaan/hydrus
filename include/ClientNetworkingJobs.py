@@ -8,6 +8,7 @@ from . import HydrusExceptions
 from . import HydrusGlobals as HG
 from . import HydrusNetworking
 from . import HydrusThreading
+from . import HydrusText
 import os
 import requests
 import threading
@@ -17,14 +18,7 @@ import urllib
 
 def ConvertStatusCodeAndDataIntoExceptionInfo( status_code, data, is_hydrus_service = False ):
     
-    try:
-        
-        error_text = str( data, 'utf-8' )
-        
-    except UnicodeDecodeError:
-        
-        error_text = repr( data )
-        
+    ( error_text, encoding ) = HydrusText.NonFailingUnicodeDecode( data, 'utf-8' )
     
     print_long_error_text = True
     
@@ -34,13 +28,17 @@ def ConvertStatusCodeAndDataIntoExceptionInfo( status_code, data, is_hydrus_serv
         
         eclass = HydrusExceptions.NotModifiedException
         
+    elif status_code == 400:
+        
+        eclass = HydrusExceptions.BadRequestException
+        
     elif status_code == 401:
         
-        eclass = HydrusExceptions.PermissionException
+        eclass = HydrusExceptions.MissingCredentialsException
         
     elif status_code == 403:
         
-        eclass = HydrusExceptions.ForbiddenException
+        eclass = HydrusExceptions.InsufficientCredentialsException
         
     elif status_code == 404:
         
@@ -135,6 +133,7 @@ class NetworkJob( object ):
         self._content_type = None
         
         self._encoding = 'utf-8'
+        self._encoding_confirmed = False
         
         self._stream_io = io.BytesIO()
         
@@ -636,14 +635,7 @@ class NetworkJob( object ):
         
         data = self.GetContentBytes()
         
-        try:
-            
-            text = str( data, self._encoding )
-            
-        except UnicodeDecodeError:
-            
-            raise Exception( 'Could not convert the downloaded data to unicode!' )
-            
+        ( text, self._encoding ) = HydrusText.NonFailingUnicodeDecode( data, self._encoding )
         
         return text
         
@@ -951,7 +943,15 @@ class NetworkJob( object ):
                         
                         if response.encoding is not None:
                             
-                            self._encoding = response.encoding
+                            encoding = response.encoding
+                            
+                            # we'll default to utf-8 rather than ISO-8859-1
+                            we_got_lame_iso_default_from_requests = encoding == 'ISO-8859-1' and ( self._content_type is None or encoding not in self._content_type )
+                            
+                            if not we_got_lame_iso_default_from_requests:
+                                
+                                self._encoding = encoding
+                                
                             
                         
                         if self._temp_path is None:

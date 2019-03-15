@@ -91,6 +91,7 @@ SERIALISABLE_TYPE_LOGIN_SCRIPT_DOMAIN = 73
 SERIALISABLE_TYPE_LOGIN_STEP = 74
 SERIALISABLE_TYPE_CLIENT_API_MANAGER = 75
 SERIALISABLE_TYPE_CLIENT_API_PERMISSIONS = 76
+SERIALISABLE_TYPE_SERVICE_KEYS_TO_TAGS = 77
 
 SERIALISABLE_TYPES_TO_OBJECT_TYPES = {}
 
@@ -206,7 +207,19 @@ class SerialisableBase( object ):
     
     def GetSerialisableTuple( self ):
         
-        return ( self.SERIALISABLE_TYPE, self.SERIALISABLE_VERSION, self._GetSerialisableInfo() )
+        if hasattr( self, '_lock' ):
+            
+            with getattr( self, '_lock' ):
+                
+                serialisable_info = self._GetSerialisableInfo()
+                
+            
+        else:
+            
+            serialisable_info = self._GetSerialisableInfo()
+            
+        
+        return ( self.SERIALISABLE_TYPE, self.SERIALISABLE_VERSION, serialisable_info )
         
     
     def InitialiseFromSerialisableInfo( self, version, serialisable_info ):

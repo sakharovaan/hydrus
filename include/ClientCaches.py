@@ -1,3 +1,4 @@
+from . import ClientImageHandling
 from . import ClientParsing
 from . import ClientPaths
 from . import ClientRendering
@@ -7,6 +8,7 @@ from . import ClientThreading
 from . import HydrusConstants as HC
 from . import HydrusExceptions
 from . import HydrusFileHandling
+from . import HydrusImageHandling
 from . import HydrusPaths
 from . import HydrusSerialisable
 from . import HydrusThreading
@@ -266,6 +268,8 @@ class ClientFilesManager( object ):
     
     def _GenerateExpectedFilePath( self, hash, mime ):
         
+        self._WaitOnWakeup()
+        
         hash_encoded = hash.hex()
         
         prefix = 'f' + hash_encoded[:2]
@@ -278,6 +282,8 @@ class ClientFilesManager( object ):
         
     
     def _GenerateExpectedFullSizeThumbnailPath( self, hash ):
+        
+        self._WaitOnWakeup()
         
         hash_encoded = hash.hex()
         
@@ -292,6 +298,8 @@ class ClientFilesManager( object ):
     
     def _GenerateExpectedResizedThumbnailPath( self, hash ):
         
+        self._WaitOnWakeup()
+        
         hash_encoded = hash.hex()
         
         prefix = 'r' + hash_encoded[:2]
@@ -303,24 +311,13 @@ class ClientFilesManager( object ):
         return path
         
     
-    def _GenerateFullSizeThumbnail( self, hash, mime = None ):
+    def _GenerateFullSizeThumbnail( self, hash, mime ):
         
-        if mime is None:
+        file_path = self._GenerateExpectedFilePath( hash, mime )
+        
+        if not os.path.exists( file_path ):
             
-            try:
-                
-                file_path = self._LookForFilePath( hash )
-                
-            except HydrusExceptions.FileMissingException:
-                
-                raise HydrusExceptions.FileMissingException( 'The thumbnail for file ' + hash.hex() + ' was missing. It could not be regenerated because the original file was also missing. This event could indicate hard drive corruption or an unplugged external drive. Please check everything is ok.' )
-                
-            
-            mime = HydrusFileHandling.GetMime( file_path )
-            
-        else:
-            
-            file_path = self._GenerateExpectedFilePath( hash, mime )
+            raise HydrusExceptions.FileMissingException( 'The thumbnail for file ' + hash.hex() + ' was missing. It could not be regenerated from the original file because the original file is missing! This event could indicate hard drive corruption. Please check everything is ok.')
             
         
         try:
@@ -368,7 +365,7 @@ class ClientFilesManager( object ):
         
         try:
             
-            thumbnail_resized = HydrusFileHandling.GenerateThumbnailFromStaticImage( full_size_path, thumbnail_dimensions, fullsize_thumbnail_mime )
+            thumbnail_resized = HydrusFileHandling.GenerateThumbnailFileBytesFromStaticImagePath( full_size_path, thumbnail_dimensions, fullsize_thumbnail_mime )
             
         except:
             
@@ -383,7 +380,7 @@ class ClientFilesManager( object ):
             
             self._GenerateFullSizeThumbnail( hash, mime )
             
-            thumbnail_resized = HydrusFileHandling.GenerateThumbnailFromStaticImage( full_size_path, thumbnail_dimensions, fullsize_thumbnail_mime )
+            thumbnail_resized = HydrusFileHandling.GenerateThumbnailFileBytesFromStaticImagePath( full_size_path, thumbnail_dimensions, fullsize_thumbnail_mime )
             
         
         resized_path = self._GenerateExpectedResizedThumbnailPath( hash )
@@ -613,7 +610,7 @@ class ClientFilesManager( object ):
             
             if os.path.exists( potential_path ):
                 
-                return potential_path
+                return ( potential_path, potential_mime )
                 
             
         
@@ -641,7 +638,7 @@ class ClientFilesManager( object ):
                 
                 text = 'Attempting to create the database\'s client_files folder structure failed!'
                 
-                wx.MessageBox( text )
+                wx.SafeShowMessage( 'unable to create file structure', text )
                 
                 raise
                 
@@ -703,7 +700,7 @@ class ClientFilesManager( object ):
                     text += os.linesep * 2
                     text += 'If this is happening on client boot, you should now be presented with a dialog to correct this manually!'
                     
-                    wx.MessageBox( text )
+                    wx.SafeShowMessage( 'missing locations', text )
                     
                     HydrusData.DebugPrint( text )
                     HydrusData.DebugPrint( 'Missing locations follow:' )
@@ -717,9 +714,22 @@ class ClientFilesManager( object ):
                     text += os.linesep * 2
                     text += 'If this is happening on client boot, you should now be presented with a dialog to correct this manually!'
                     
-                    wx.MessageBox( text )
+                    wx.SafeShowMessage( 'missing locations', text )
                     HydrusData.DebugPrint( text )
                     
+                
+            
+        
+    
+    def _WaitOnWakeup( self ):
+        
+        if HG.client_controller.new_options.GetBoolean( 'file_system_waits_on_wakeup' ):
+            
+            while HG.client_controller.JustWokeFromSleep():
+                
+                HydrusThreading.CheckIfThreadShuttingDown()
+                
+                time.sleep( 1.0 )
                 
             
         
@@ -1017,7 +1027,7 @@ class ClientFilesManager( object ):
                     
                     try:
                         
-                        path = self._LookForFilePath( hash )
+                        ( path, mime ) = self._LookForFilePath( hash )
                         
                     except HydrusExceptions.FileMissingException:
                         
@@ -1115,6 +1125,41 @@ class ClientFilesManager( object ):
         return ( import_status, hash, note )
         
     
+    def LocklessChangeFileExt( self, hash, old_mime, mime ):
+        
+        old_path = self._GenerateExpectedFilePath( hash, old_mime )
+        new_path = self._GenerateExpectedFilePath( hash, mime )
+        
+        if HG.file_report_mode:
+            
+            HydrusData.ShowText( 'Changing file ext: ' + str( ( old_path, new_path ) ) )
+            
+        
+        if HydrusPaths.PathIsFree( old_path ):
+            
+            try:
+                
+                HydrusPaths.MergeFile( old_path, new_path )
+                
+                needed_to_copy_file = False
+                
+            except:
+                
+                HydrusPaths.MirrorFile( old_path, new_path )
+                
+                needed_to_copy_file = True
+                
+            
+        else:
+            
+            HydrusPaths.MirrorFile( old_path, new_path )
+            
+            needed_to_copy_file = True
+            
+        
+        return needed_to_copy_file
+        
+    
     def LocklessGetFilePath( self, hash, mime = None, check_file_exists = True ):
         
         if HG.file_report_mode:
@@ -1124,21 +1169,34 @@ class ClientFilesManager( object ):
         
         if mime is None:
             
-            path = self._LookForFilePath( hash )
+            ( path, mime ) = self._LookForFilePath( hash )
             
         else:
             
             path = self._GenerateExpectedFilePath( hash, mime )
             
+            if check_file_exists and not os.path.exists( path ):
+                
+                try:
+                    
+                    # let's see if the file exists, but with the wrong ext!
+                    
+                    ( actual_path, old_mime ) = self._LookForFilePath( hash )
+                    
+                except HydrusExceptions.FileMissingException:
+                    
+                    raise HydrusExceptions.FileMissingException( 'No file found at path + ' + path + '!' )
+                    
+                
+                self.LocklessChangeFileExt( hash, old_mime, mime )
+                
+                # we have now fixed the path, it is good to return
+                
+            
         
         if HG.file_report_mode:
             
             HydrusData.ShowText( 'File path request success: ' + path )
-            
-        
-        if check_file_exists and not os.path.exists( path ):
-            
-            raise HydrusExceptions.FileMissingException( 'No file found at path + ' + path + '!' )
             
         
         return path
@@ -1290,22 +1348,30 @@ class ClientFilesManager( object ):
             
         
     
+    def RegenerateFullSizeThumbnail( self, hash, mime ):
+        
+        with self._lock:
+            
+            if HG.file_report_mode:
+                
+                HydrusData.ShowText( 'Thumbnail regen request: ' + str( ( hash, mime ) ) )
+                
+            
+            self._GenerateFullSizeThumbnail( hash, mime )
+            
+        
+    
     def RegenerateResizedThumbnail( self, hash, mime ):
         
         with self._lock:
             
-            self.LocklessRegenerateResizedThumbnail( hash, mime )
+            if HG.file_report_mode:
+                
+                HydrusData.ShowText( 'Thumbnail regen request: ' + str( ( hash, mime ) ) )
+                
             
-        
-    
-    def LocklessRegenerateResizedThumbnail( self, hash, mime ):
-        
-        if HG.file_report_mode:
+            self._GenerateResizedThumbnail( hash, mime )
             
-            HydrusData.ShowText( 'Thumbnail regen request: ' + str( ( hash, mime ) ) )
-            
-        
-        self._GenerateResizedThumbnail( hash, mime )
         
     
     def RegenerateThumbnails( self, only_do_missing = False ):
@@ -1672,7 +1738,7 @@ class LocalBooruCache( object ):
         
         if not self._local_booru_service.BandwidthOK():
             
-            raise HydrusExceptions.ForbiddenException( 'This booru has used all its monthly data. Please try again next month.' )
+            raise HydrusExceptions.InsufficientCredentialsException( 'This booru has used all its monthly data. Please try again next month.' )
             
         
     
@@ -1698,7 +1764,7 @@ class LocalBooruCache( object ):
         
         if timeout is not None and HydrusData.TimeHasPassed( timeout ):
             
-            raise HydrusExceptions.ForbiddenException( 'This share has expired.' )
+            raise HydrusExceptions.InsufficientCredentialsException( 'This share has expired.' )
             
         
     
@@ -2225,6 +2291,87 @@ class ThumbnailCache( object ):
         self._controller.sub( self, 'ClearThumbnails', 'clear_thumbnails' )
         
     
+    def _GetResizedHydrusBitmap( self, display_media ):
+        
+        if not HG.thumbnail_experiment_mode:
+            
+            return self._GetResizedHydrusBitmapFromHardDrive( display_media )
+            
+        else:
+            
+            return self._GetResizedHydrusBitmapFromFullSize( display_media )
+            
+        
+    
+    def _GetResizedHydrusBitmapFromFullSize( self, display_media ):
+        
+        thumbnail_dimensions = self._controller.options[ 'thumbnail_dimensions' ]
+        
+        hash = display_media.GetHash()
+        mime = display_media.GetMime()
+        
+        locations_manager = display_media.GetLocationsManager()
+        
+        try:
+            
+            path = self._controller.client_files_manager.GetFullSizeThumbnailPath( hash, mime )
+            
+        except HydrusExceptions.FileMissingException as e:
+            
+            if locations_manager.IsLocal():
+                
+                HydrusData.ShowException( e )
+                
+            
+            return self._special_thumbs[ 'hydrus' ]
+            
+        
+        try:
+            
+            numpy_image = ClientImageHandling.GenerateNumpyImage( path, mime )
+            
+        except Exception as e:
+            
+            try:
+                
+                # file is malformed, let's force a regen
+                self._controller.client_files_manager.RegenerateResizedThumbnail( hash, mime )
+                
+                try:
+                    
+                    numpy_image = ClientImageHandling.GenerateNumpyImage( path, mime )
+                    
+                except Exception as e:
+                    
+                    HydrusData.ShowException( e )
+                    
+                    raise HydrusExceptions.FileMissingException( 'The thumbnail for file ' + hash.hex() + ' was broken. It was regenerated, but the new file would not render for the above reason. Please inform the hydrus developer what has happened.' )
+                    
+                
+            except Exception as e:
+                
+                HydrusData.ShowException( e )
+                
+                return self._special_thumbs[ 'hydrus' ]
+                
+            
+        
+        ( fullsize_x, fullsize_y ) = ClientImageHandling.GetNumPyImageResolution( numpy_image )
+        
+        ( resized_x, resized_y ) = HydrusImageHandling.GetThumbnailResolution( ( fullsize_x, fullsize_y ), thumbnail_dimensions )
+        
+        already_correct = fullsize_x == resized_x and fullsize_y == resized_y
+        
+        if not already_correct:
+            
+            numpy_image = ClientImageHandling.EfficientlyThumbnailNumpyImage( numpy_image, ( resized_x, resized_y ) )
+            
+        
+        hydrus_bitmap = ClientRendering.GenerateHydrusBitmapFromNumPyImage( numpy_image )
+        
+        return hydrus_bitmap
+        
+    
     def _GetResizedHydrusBitmapFromHardDrive( self, display_media ):
         
         thumbnail_dimensions = self._controller.options[ 'thumbnail_dimensions' ]
@@ -2264,8 +2411,6 @@ class ThumbnailCache( object ):
             return self._special_thumbs[ 'hydrus' ]
             
         
-        mime = display_media.GetMime()
-        
         try:
             
             hydrus_bitmap = ClientRendering.GenerateHydrusBitmap( path, mime )
@@ -2274,7 +2419,8 @@ class ThumbnailCache( object ):
             
             try:
                 
-                self._controller.client_files_manager.RegenerateResizedThumbnail( hash, mime )
+                # file is malformed, let's force a regen
+                self._controller.client_files_manager.RegenerateFullSizeThumbnail( hash, mime )
                 
                 try:
                     
@@ -2361,7 +2507,7 @@ class ThumbnailCache( object ):
                     
                     thumbnail_dimensions = self._controller.options[ 'thumbnail_dimensions' ]
                     
-                    thumbnail_bytes = HydrusFileHandling.GenerateThumbnailFromStaticImage( path, thumbnail_dimensions, HC.IMAGE_PNG )
+                    thumbnail_bytes = HydrusFileHandling.GenerateThumbnailFileBytesFromStaticImagePath( path, thumbnail_dimensions, HC.IMAGE_PNG )
                     
                     with open( temp_path, 'wb' ) as f:
                         
@@ -2427,24 +2573,13 @@ class ThumbnailCache( object ):
                 
                 if result is None:
                     
-                    if locations_manager.ShouldDefinitelyHaveThumbnail():
+                    try:
                         
-                        # local file, should be able to regen if needed
+                        hydrus_bitmap = self._GetResizedHydrusBitmap( display_media )
                         
-                        hydrus_bitmap = self._GetResizedHydrusBitmapFromHardDrive( display_media )
+                    except:
                         
-                    else:
-                        
-                        # repository file, maybe not actually available yet
-                        
-                        try:
-                            
-                            hydrus_bitmap = self._GetResizedHydrusBitmapFromHardDrive( display_media )
-                            
-                        except:
-                            
-                            hydrus_bitmap = self._special_thumbs[ 'hydrus' ]
-                            
+                        hydrus_bitmap = self._special_thumbs[ 'hydrus' ]
                         
                     
                     self._data_cache.AddData( hash, hydrus_bitmap )
@@ -2652,6 +2787,22 @@ class ServicesManager( object ):
         with self._lock:
             
             return self._GetService( service_key ).GetServiceType()
+            
+        
+    
+    def GetServiceKeyFromName( self, allowed_types, service_name ):
+        
+        with self._lock:
+            
+            for service in self._services_sorted:
+                
+                if service.GetServiceType() in allowed_types and service.GetName() == service_name:
+                    
+                    return service.GetServiceKey()
+                    
+                
+            
+            raise HydrusExceptions.DataMissing()
             
         
     
