@@ -23,6 +23,7 @@ import json
 import yaml
 import binascii
 import uuid
+import glob
 from . import HydrusConstants as HC
 from . import HydrusData
 from . import HydrusDB
