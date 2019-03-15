@@ -13,7 +13,6 @@ from . import HydrusTags
 import threading
 import traceback
 import os
-import sqlite3
 import sys
 import time
 import wx
@@ -629,8 +628,7 @@ class Booru( HydrusData.HydrusYAMLBase ):
     def GetName( self ): return self._name
     
     def GetNamespaces( self ): return list(self._tag_classnames_to_namespaces.values())
-    
-sqlite3.register_adapter( Booru, yaml.safe_dump )
+
 
 class Credentials( HydrusData.HydrusYAMLBase ):
     
@@ -676,7 +674,7 @@ class Credentials( HydrusData.HydrusYAMLBase ):
     def HasAccessKey( self ): return self._access_key is not None and self._access_key is not ''
     
     def SetAccessKey( self, access_key ): self._access_key = access_key
-    
+
 class Imageboard( HydrusData.HydrusYAMLBase ):
     
     yaml_tag = '!Imageboard'
@@ -700,5 +698,3 @@ class Imageboard( HydrusData.HydrusYAMLBase ):
     def GetBoardInfo( self ): return ( self._post_url, self._flood_time, self._form_fields, self._restrictions )
     
     def GetName( self ): return self._name
-    
-sqlite3.register_adapter( Imageboard, yaml.safe_dump )

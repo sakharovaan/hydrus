@@ -74,14 +74,13 @@ class HydrusRatingArchive( object ):
     
     def BeginBigJob( self ):
         
-        self._c.execute( 'BEGIN IMMEDIATE;' )
+        self._c.execute( 'BEGIN;' )
         
     
     def CommitBigJob( self ):
         
         self._c.execute( 'COMMIT;' )
-        self._c.execute( 'VACUUM;' )
-        
+
     
     def DeleteRating( self, hash ):
         

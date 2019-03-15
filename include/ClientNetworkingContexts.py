@@ -51,9 +51,10 @@ class NetworkContext( HydrusSerialisable.SerialisableBase ):
                 serialisable_context_data = self.context_data
                 
             else:
-                
-                serialisable_context_data = self.context_data.hex()
-                
+                if type(self.context_data) is bytes:
+                    serialisable_context_data = self.context_data.hex()
+                else:
+                    serialisable_context_data = bytes(self.context_data).hex()
             
         
         return ( self.context_type, serialisable_context_data )

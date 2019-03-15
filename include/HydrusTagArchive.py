@@ -66,14 +66,14 @@ class HydrusTagArchive( object ):
     
     def _AddMappings( self, hash_id, tag_ids ):
         
-        self._c.executemany( 'INSERT OR IGNORE INTO mappings ( hash_id, tag_id ) VALUES ( ?, ? );', ( ( hash_id, tag_id ) for tag_id in tag_ids ) )
+        self._c.executemany( 'INSERT IGNORE INTO mappings ( hash_id, tag_id ) VALUES ( ?, ? );', ( ( hash_id, tag_id ) for tag_id in tag_ids ) )
         
     
     def _InitDB( self ):
         
         self._c.execute( 'CREATE TABLE hash_type ( hash_type INTEGER );', )
         
-        self._c.execute( 'CREATE TABLE hashes ( hash_id INTEGER PRIMARY KEY, hash BLOB_BYTES );' )
+        self._c.execute( 'CREATE TABLE hashes ( hash_id INTEGER PRIMARY KEY, hash JSON );' )
         self._c.execute( 'CREATE UNIQUE INDEX hashes_hash_index ON hashes ( hash );' )
         
         self._c.execute( 'CREATE TABLE mappings ( hash_id INTEGER, tag_id INTEGER, PRIMARY KEY ( hash_id, tag_id ) );' )
@@ -144,21 +144,19 @@ class HydrusTagArchive( object ):
     
     def BeginBigJob( self ):
         
-        self._c.execute( 'BEGIN IMMEDIATE;' )
+        self._c.execute( 'BEGIN;' )
         
     
     def CommitBigJob( self ):
         
         self._c.execute( 'COMMIT;' )
-        self._c.execute( 'VACUUM;' )
-        
     
     def AddMapping( self, hash, tag ):
         
         hash_id = self._GetHashId( hash )
         tag_id = self._GetTagId( tag )
         
-        self._c.execute( 'INSERT OR IGNORE INTO mappings ( hash_id, tag_id ) VALUES ( ?, ? );', ( hash_id, tag_id ) )
+        self._c.execute( 'INSERT IGNORE INTO mappings ( hash_id, tag_id ) VALUES ( ?, ? );', ( hash_id, tag_id ) )
         
     
     def AddMappings( self, hash, tags ):

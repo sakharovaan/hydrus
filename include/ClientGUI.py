@@ -52,7 +52,6 @@ from . import HydrusVideoHandling
 import os
 import PIL
 import re
-import sqlite3
 import ssl
 import subprocess
 import sys
@@ -211,7 +210,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         library_versions.append( ( 'python', v ) )
         
-        library_versions.append( ( 'sqlite', sqlite3.sqlite_version ) )
         library_versions.append( ( 'wx', wx.version() ) )
         library_versions.append( ( 'temp dir', ClientPaths.GetCurrentTempDir() ) )
         
