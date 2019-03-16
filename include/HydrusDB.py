@@ -89,7 +89,6 @@ class HydrusDB( object ):
         self._jobs = queue.Queue()
         self._pubsubs = []
         
-        self._currently_doing_job = False
         self._current_status = ''
         self._current_job_name = ''
         
@@ -364,9 +363,7 @@ class HydrusDB( object ):
             if job_type in ( 'read_write', 'write' ):
                 
                 self._current_status = 'db writing'
-                
-                self._transaction_contains_writes = True
-                
+
             else:
                 
                 self._current_status = 'db reading'
@@ -383,7 +380,7 @@ class HydrusDB( object ):
                 result = self._Write( action, *args, **kwargs )
                 
             
-            if self._transaction_contains_writes and HydrusData.TimeHasPassed( self._transaction_started + self.TRANSACTION_COMMIT_TIME ):
+            if HydrusData.TimeHasPassed( self._transaction_started + self.TRANSACTION_COMMIT_TIME ):
                 
                 self._current_status = 'db committing'
                 
@@ -392,8 +389,6 @@ class HydrusDB( object ):
                 self._Commit()
                 
                 self._BeginImmediate()
-                
-                self._transaction_contains_writes = False
 
             else:
                 
@@ -585,7 +580,7 @@ class HydrusDB( object ):
     
     def CurrentlyDoingJob( self ):
         
-        return self._currently_doing_job
+        return False
         
     
     def GetApproxTotalFileSize( self ):
@@ -656,7 +651,6 @@ class HydrusDB( object ):
                 
                 job = self._jobs.get( timeout = 1 )
                 
-                self._currently_doing_job = True
                 self._current_job_name = job.ToString()
                 
                 self.publish_status_update()
@@ -697,22 +691,18 @@ class HydrusDB( object ):
                     self._jobs.put( job ) # couldn't lock db; put job back on queue
                     
                     time.sleep( 5 )
-                    
-                
-                self._currently_doing_job = False
+
                 self._current_job_name = ''
                 
                 self.publish_status_update()
                 
             except queue.Empty:
                 
-                if self._transaction_contains_writes and HydrusData.TimeHasPassed( self._transaction_started + self.TRANSACTION_COMMIT_TIME ):
+                if HydrusData.TimeHasPassed( self._transaction_started + self.TRANSACTION_COMMIT_TIME ):
                     
                     self._Commit()
                     
                     self._BeginImmediate()
-                    
-                    self._transaction_contains_writes = False
 
 
             

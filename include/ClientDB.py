@@ -2419,6 +2419,12 @@ class DB( HydrusDB.HydrusDB ):
         self._CreateIndex( cache_current_mappings_table_name, [ 'tag_id', 'hash_id' ], unique = True )
         self._CreateIndex( cache_deleted_mappings_table_name, [ 'tag_id', 'hash_id' ], unique = True )
         self._CreateIndex( cache_pending_mappings_table_name, [ 'tag_id', 'hash_id' ], unique = True )
+        self._CreateIndex( cache_current_mappings_table_name, [ 'tag_id' ], unique = False )
+        self._CreateIndex( cache_deleted_mappings_table_name, [ 'tag_id' ], unique = False )
+        self._CreateIndex( cache_pending_mappings_table_name, [ 'tag_id' ], unique = False )
+        self._CreateIndex( cache_current_mappings_table_name, [ 'hash_id' ], unique = False )
+        self._CreateIndex( cache_deleted_mappings_table_name, [ 'hash_id' ], unique = False )
+        self._CreateIndex( cache_pending_mappings_table_name, [ 'hash_id' ], unique = False )
         
     
     def _CacheSpecificMappingsGetAutocompleteCounts( self, file_service_id, tag_service_id, tag_ids ):
@@ -3417,9 +3423,8 @@ class DB( HydrusDB.HydrusDB ):
                         if result is None:
                             
                             continue
-                            
-                        
-                        ( archive_hash, ) = result
+
+                        archive_hash = binascii.a2b_hex(result[0])
                         
                     
                     tag_ids = self._STL( self._c.execute( 'SELECT tag_id FROM ' + current_mappings_table_name + ' WHERE hash_id = %s;', ( hash_id, ) ) )
@@ -3591,15 +3596,23 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + current_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) );' )
         self._CreateIndex( current_mappings_table_name, [ 'hash_id', 'tag_id' ], unique = True )
+        self._CreateIndex(current_mappings_table_name, ['tag_id'], unique=False)
+        self._CreateIndex(current_mappings_table_name, ['hash_id'], unique=False)
         
         self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + deleted_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) );' )
         self._CreateIndex( deleted_mappings_table_name, [ 'hash_id', 'tag_id' ], unique = True )
+        self._CreateIndex(deleted_mappings_table_name, ['tag_id'], unique=False)
+        self._CreateIndex(deleted_mappings_table_name, ['hash_id'], unique=False)
         
         self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + pending_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) );' )
         self._CreateIndex( pending_mappings_table_name, [ 'hash_id', 'tag_id' ], unique = True )
+        self._CreateIndex(pending_mappings_table_name, ['tag_id'], unique=False)
+        self._CreateIndex(pending_mappings_table_name, ['hash_id'], unique=False)
         
         self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + petitioned_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, reason_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) );' )
         self._CreateIndex( petitioned_mappings_table_name, [ 'hash_id', 'tag_id' ], unique = True )
+        self._CreateIndex(petitioned_mappings_table_name, ['tag_id'], unique=False)
+        self._CreateIndex(petitioned_mappings_table_name, ['hash_id'], unique=False)
         
     
     def _GetAutocompleteCounts( self, tag_service_id, file_service_id, tag_ids, include_current, include_pending ):
@@ -3759,16 +3772,21 @@ class DB( HydrusDB.HydrusDB ):
                 possible_namespace_ids = self._STL( self._c.execute( 'SELECT namespace_id FROM namespaces WHERE namespace LIKE %s;', ( like_param, ) ) )
                 
                 possible_subtag_ids = GetPossibleSubtagIds( half_complete_subtag )
-                
-                predicates_phrase = 'namespace_id IN ' + HydrusData.SplayListForDB( possible_namespace_ids ) + ' OR subtag_id IN ' + HydrusData.SplayListForDB( possible_subtag_ids )
-                
+
+                if possible_namespace_ids and possible_subtag_ids:
+                    predicates_phrase = 'namespace_id IN ' + HydrusData.SplayListForDB( possible_namespace_ids ) + ' OR subtag_id IN ' + HydrusData.SplayListForDB( possible_subtag_ids )
+                elif possible_namespace_ids and not possible_subtag_ids:
+                    predicates_phrase = 'namespace_id IN ' + HydrusData.SplayListForDB( possible_namespace_ids )
+                elif not possible_namespace_ids and possible_subtag_ids:
+                    predicates_phrase = 'subtag_id IN ' + HydrusData.SplayListForDB( possible_subtag_ids )
+                else:
+                    predicates_phrase = 'tag_id IN (NULL)'
             
         
         tag_ids = set()
+        self._c.execute( 'SELECT tag_id FROM tags WHERE ' + predicates_phrase + ';' )
 
-        cursor = self._c.execute( 'SELECT tag_id FROM tags WHERE ' + predicates_phrase + ';' )
-
-        group_of_tag_id_tuples = cursor.fetchmany( 1000 )
+        group_of_tag_id_tuples = self._c.fetchmany( 1000 )
 
         while len( group_of_tag_id_tuples ) > 0:
 
@@ -3779,7 +3797,7 @@ class DB( HydrusDB.HydrusDB ):
 
             tag_ids.update( ( tag_id for ( tag_id, ) in group_of_tag_id_tuples ) )
 
-            group_of_tag_id_tuples = cursor.fetchmany( 1000 )
+            group_of_tag_id_tuples = self._c.fetchmany( 1000 )
 
         
         # now fetch siblings, add to set
@@ -3941,7 +3959,7 @@ class DB( HydrusDB.HydrusDB ):
                     continue
                     
                 
-                self._c.execute( 'SELECT hash_id FROM local_hashes WHERE ' + given_hash_type + ' = %s;', ( given_hash , ) ); result = self._c.fetchone()
+                self._c.execute( 'SELECT hash_id FROM local_hashes WHERE ' + given_hash_type + ' = %s;', ( binascii.b2a_hex(given_hash) , ) ); result = self._c.fetchone()
                 
                 if result is not None:
                     
@@ -3960,7 +3978,7 @@ class DB( HydrusDB.HydrusDB ):
             self._c.execute(
                 'SELECT ' + desired_hash_type + ' FROM local_hashes WHERE hash_id IN ' + HydrusData.SplayListForDB(
                     hash_ids) + ';')
-            desired_hashes = [ desired_hash for ( desired_hash, ) in  self._c.fetchall()]
+            desired_hashes = [ binascii.a2b_hex(desired_hash) for ( desired_hash, ) in  self._c.fetchall()]
             
         
         return desired_hashes
@@ -5333,11 +5351,13 @@ class DB( HydrusDB.HydrusDB ):
         
         if hash_ids is None:
             
-            query = self._c.execute( 'SELECT hash_id, url FROM url_map NATURAL JOIN urls;' )
+            self._c.execute( 'SELECT hash_id, url FROM url_map NATURAL JOIN urls;' )
+            query = self._c.fetchmany()
             
         else:
             
-            query = self._SelectFromList( 'SELECT hash_id, url FROM url_map NATURAL JOIN urls WHERE hash_id in %s;', hash_ids )
+            self._SelectFromList( 'SELECT hash_id, url FROM url_map NATURAL JOIN urls WHERE hash_id in %s;', hash_ids )
+            query = self._c.fetchmany()
             
         
         result_hash_ids = set()
@@ -5640,15 +5660,15 @@ class DB( HydrusDB.HydrusDB ):
             
             if hash_type == 'md5':
                 
-                self._c.execute( 'SELECT hash_id FROM local_hashes WHERE md5 = %s;', ( hash , ) ); result = self._c.fetchone()
+                self._c.execute( 'SELECT hash_id FROM local_hashes WHERE md5 = %s;', ( binascii.b2a_hex(hash) , ) ); result = self._c.fetchone()
                 
             elif hash_type == 'sha1':
                 
-                self._c.execute( 'SELECT hash_id FROM local_hashes WHERE sha1 = %s;', ( hash , ) ); result = self._c.fetchone()
+                self._c.execute( 'SELECT hash_id FROM local_hashes WHERE sha1 = %s;', ( binascii.b2a_hex(hash) , ) ); result = self._c.fetchone()
                 
             elif hash_type == 'sha512':
                 
-                self._c.execute( 'SELECT hash_id FROM local_hashes WHERE sha512 = %s;', ( hash , ) ); result = self._c.fetchone()
+                self._c.execute( 'SELECT hash_id FROM local_hashes WHERE sha512 = %s;', ( binascii.b2a_hex(hash) , ) ); result = self._c.fetchone()
                 
             
             if result is None:
@@ -5701,9 +5721,7 @@ class DB( HydrusDB.HydrusDB ):
 
                     self._BeginImmediate()
 
-
-                DealWithBrokenJSONDump( self._db_dir, dump, 'dump_type {}'.format( dump_type ) )
-
+                raise
 
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, version, serialisable_info ) )
             
@@ -5717,7 +5735,7 @@ class DB( HydrusDB.HydrusDB ):
             
             objs = []
             
-            for ( dump_name, version, dump, object_timestamp ) in results:
+            for ( dump_name, version, dump, timestamp ) in results:
                 
                 try:
 
@@ -5732,7 +5750,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 except:
 
-                    self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = ? AND dump_name = ? AND timestamp = ?;', ( dump_type, dump_name, object_timestamp ) )
+                    self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s AND timestamp = %s;', ( dump_type, dump_name, timestamp ) )
 
                     if self._in_transaction:
 
@@ -5740,10 +5758,7 @@ class DB( HydrusDB.HydrusDB ):
 
                         self._BeginImmediate()
 
-
-                    DealWithBrokenJSONDump( self._db_dir, dump, 'dump_type {} dump_name {} timestamp {}'.format( dump_type, dump_name[:10], timestamp ) )
-
-                
+                    raise
             
             return objs
             
@@ -5751,11 +5766,11 @@ class DB( HydrusDB.HydrusDB ):
             
             if timestamp is None:
                 
-                self._c.execute( 'SELECT version, dump, timestamp FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s ORDER BY timestamp DESC;', ( dump_type, dump_name ) ); (dump_type, dump_name ) = self._c.fetchone()
+                self._c.execute( 'SELECT version, dump, timestamp FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s ORDER BY timestamp DESC;', ( dump_type, dump_name ) ); (version, dump, timestamp  ) = self._c.fetchone()
                 
             else:
                 
-                self._c.execute( 'SELECT version, dump, timestamp FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s AND timestamp = %s;', ( dump_type, dump_name, timestamp ) ); ( ump_type, dump_name, timestamp ) = self._c.fetchone()
+                self._c.execute( 'SELECT version, dump, timestamp FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s AND timestamp = %s;', ( dump_type, dump_name, timestamp ) ); ( version, dump, timestamp  ) = self._c.fetchone()
                 
             
             try:
@@ -5769,7 +5784,7 @@ class DB( HydrusDB.HydrusDB ):
 
             except:
 
-                self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = ? AND dump_name = ? AND timestamp = ?;', ( dump_type, dump_name, object_timestamp ) )
+                self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s AND timestamp = %s;', ( dump_type, dump_name, timestamp ) )
 
                 if self._in_transaction:
 
@@ -5777,8 +5792,7 @@ class DB( HydrusDB.HydrusDB ):
 
                     self._BeginImmediate()
 
-
-                DealWithBrokenJSONDump( self._db_dir, dump, 'dump_type {} dump_name {} timestamp {}'.format( dump_type, dump_name[:10], object_timestamp ) )
+                raise
 
             
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, dump_name, version, serialisable_info ) )
@@ -7179,7 +7193,7 @@ class DB( HydrusDB.HydrusDB ):
     
     def _HashExists( self, hash ):
         
-        self._c.execute( 'SELECT 1 FROM hashes WHERE hash = %s;', ( hash , ) ); result = self._c.fetchone()
+        self._c.execute( 'SELECT 1 FROM hashes WHERE hash = %s;', ( binascii.b2a_hex(hash) , ) ); result = self._c.fetchone()
         
         if result is None:
             
@@ -7224,7 +7238,7 @@ class DB( HydrusDB.HydrusDB ):
             
             ( md5, sha1, sha512 ) = file_import_job.GetExtraHashes()
             
-            self._c.execute( 'INSERT IGNORE INTO local_hashes ( hash_id, md5, sha1, sha512 ) VALUES ( %s, %s, %s, %s );', ( hash_id, md5 , sha1 , sha512  ) )
+            self._c.execute( 'INSERT IGNORE INTO local_hashes ( hash_id, md5, sha1, sha512 ) VALUES ( %s, %s, %s, %s );', ( hash_id, binascii.b2a_hex(md5) , binascii.b2a_hex(sha1) , binascii.b2a_hex(sha512)  ) )
             
             file_import_options = file_import_job.GetFileImportOptions()
             
@@ -8290,25 +8304,25 @@ class DB( HydrusDB.HydrusDB ):
 
                         if action == 'delete_for_deleted_files':
 
-                            self._c.execute( 'DELETE FROM local_ratings WHERE local_ratings.service_id = ? and hash_id IN ( SELECT hash_id FROM deleted_files WHERE deleted_files.service_id = ? );', ( service_id, self._combined_local_file_service_id ) )
+                            self._c.execute( 'DELETE FROM local_ratings WHERE local_ratings.service_id = %s and hash_id IN ( SELECT hash_id FROM deleted_files WHERE deleted_files.service_id = %s );', ( service_id, self._combined_local_file_service_id ) )
 
                             ratings_deleted = self._GetRowCount()
 
-                            self._c.execute( 'UPDATE service_info SET info = info - ? WHERE service_id = ? AND info_type = ?;', ( ratings_deleted, service_id, HC.SERVICE_INFO_NUM_FILES ) )
+                            self._c.execute( 'UPDATE service_info SET info = info - ? WHERE service_id = %s AND info_type = %s;', ( ratings_deleted, service_id, HC.SERVICE_INFO_NUM_FILES ) )
 
                         elif action == 'delete_for_non_local_files':
 
-                            self._c.execute( 'DELETE FROM local_ratings WHERE local_ratings.service_id = ? and hash_id NOT IN ( SELECT hash_id FROM current_files WHERE current_files.service_id = ? );', ( service_id, self._combined_local_file_service_id ) )
+                            self._c.execute( 'DELETE FROM local_ratings WHERE local_ratings.service_id = %s and hash_id NOT IN ( SELECT hash_id FROM current_files WHERE current_files.service_id = %s );', ( service_id, self._combined_local_file_service_id ) )
 
                             ratings_deleted = self._GetRowCount()
 
-                            self._c.execute( 'UPDATE service_info SET info = info - ? WHERE service_id = ? AND info_type = ?;', ( ratings_deleted, service_id, HC.SERVICE_INFO_NUM_FILES ) )
+                            self._c.execute( 'UPDATE service_info SET info = info - ? WHERE service_id = %s AND info_type = %s;', ( ratings_deleted, service_id, HC.SERVICE_INFO_NUM_FILES ) )
 
                         elif action == 'delete_for_all_files':
 
-                            self._c.execute( 'DELETE FROM local_ratings WHERE service_id = ?;', ( service_id, ) )
+                            self._c.execute( 'DELETE FROM local_ratings WHERE service_id = %s;', ( service_id, ) )
 
-                            self._c.execute( 'UPDATE service_info SET info = ? WHERE service_id = ? AND info_type = ?;', ( 0, service_id, HC.SERVICE_INFO_NUM_FILES ) )
+                            self._c.execute( 'UPDATE service_info SET info = %s WHERE service_id = %s AND info_type = %s;', ( 0, service_id, HC.SERVICE_INFO_NUM_FILES ) )
 
 
 
@@ -9354,7 +9368,7 @@ class DB( HydrusDB.HydrusDB ):
                         
                         ( md5, sha1, sha512 ) = HydrusFileHandling.GetExtraHashesFromPath( path )
                         
-                        self._c.execute( 'INSERT IGNORE INTO local_hashes ( hash_id, md5, sha1, sha512 ) VALUES ( %s, %s, %s, %s );', ( hash_id, md5 , sha1 , sha512  ) )
+                        self._c.execute( 'INSERT IGNORE INTO local_hashes ( hash_id, md5, sha1, sha512 ) VALUES ( %s, %s, %s, %s );', ( hash_id, binascii.b2a_hex(md5) , binascii.b2a_hex(sha1) , binascii.b2a_hex(sha512)  ) )
                         
                     
                     self._controller.pub( 'new_file_info', { hash } )
@@ -9718,8 +9732,8 @@ class DB( HydrusDB.HydrusDB ):
                 
                 try: self._c.execute( 'SELECT ' + h + ' FROM local_hashes WHERE hash_id = %s;', ( hash_id, ) ); ( archive_hash, ) = self._c.fetchone()
                 except: return
-                
-            
+
+            archive_hash = binascii.a2b_hex(archive_hash)
             tags = HydrusTags.CleanTags( hta.GetTags( archive_hash ) )
             
             desired_tags = HydrusTags.FilterNamespaces( tags, namespaces )
@@ -9995,9 +10009,9 @@ class DB( HydrusDB.HydrusDB ):
         
         self._c.executemany( 'INSERT INTO ' + temp_tag_ids_name + ' ( tag_id ) VALUES ( %s );', list( ( tag_id, ) for tag_id in tag_ids_to_search_for ) )
         self._c.executemany( 'INSERT INTO ' + temp_hash_ids_name + ' ( hash_id ) VALUES ( %s );', list( ( hash_id, ) for hash_id in hash_ids_to_search_for ) )
-        
-        pre_existing_tag_ids = self._STS( self._c.execute( 'SELECT tmp.tag_id as t FROM ' + temp_tag_ids_name + ' as tmp LEFT JOIN ' + current_mappings_table_name + ' AS cmt ON cmt.tag_id = tmp.tag_id WHERE cmt.hash_id IS NOT null;' ) )
-        pre_existing_hash_ids = self._STS( self._c.execute( 'SELECT tmp.hash_id as h FROM ' + temp_hash_ids_name + ' as tmp LEFT JOIN ' + current_mappings_table_name + ' AS cmt ON cmt.hash_id = tmp.hash_id WHERE cmt.hash_id IS NOT null;' ) )
+
+        pre_existing_tag_ids = self._STS( self._c.execute( 'SELECT tag_id FROM ' + temp_tag_ids_name + ' as tmp WHERE EXISTS ( SELECT 1 FROM ' + current_mappings_table_name + ' WHERE tag_id = tmp.tag_id );' ) )
+        pre_existing_hash_ids = self._STS( self._c.execute( 'SELECT hash_id FROM ' + temp_hash_ids_name + ' as tmp WHERE EXISTS ( SELECT 1 FROM ' + current_mappings_table_name + ' WHERE hash_id = tmp.hash_id );' ) )
         
         num_tags_added = len( tag_ids_being_added.difference( pre_existing_tag_ids ) )
         num_files_added = len( hash_ids_being_added.difference( pre_existing_hash_ids ) )
@@ -10127,8 +10141,8 @@ class DB( HydrusDB.HydrusDB ):
         
         self._CacheCombinedFilesMappingsUpdate( tag_service_id, combined_files_counts )
 
-        post_existing_tag_ids = self._STS(self._c.execute('SELECT tmp.tag_id as t FROM ' + temp_tag_ids_name + ' as tmp LEFT JOIN ' + current_mappings_table_name + ' AS cmt ON cmt.tag_id = tmp.tag_id WHERE cmt.hash_id IS NOT null;'))
-        post_existing_hash_ids = self._STS(self._c.execute('SELECT tmp.hash_id as h FROM ' + temp_hash_ids_name + ' as tmp LEFT JOIN ' + current_mappings_table_name + ' AS cmt ON cmt.hash_id = tmp.hash_id WHERE cmt.hash_id IS NOT null;'))
+        post_existing_tag_ids = self._STS(self._c.execute('SELECT tag_id FROM ' + temp_tag_ids_name + ' as tmp WHERE EXISTS ( SELECT 1 FROM ' + current_mappings_table_name + ' WHERE tag_id = tmp.tag_id );'))
+        post_existing_hash_ids = self._STS(self._c.execute('SELECT hash_id FROM ' + temp_hash_ids_name + ' as tmp WHERE EXISTS ( SELECT 1 FROM ' + current_mappings_table_name + ' WHERE hash_id = tmp.hash_id );'))
 
         self._c.execute( 'DROP TABLE ' + temp_tag_ids_name + ';' )
         self._c.execute( 'DROP TABLE ' + temp_hash_ids_name + ';' )

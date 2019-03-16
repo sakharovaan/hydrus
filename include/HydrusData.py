@@ -1017,10 +1017,12 @@ def RestartProcess():
     
     os.execv( exe, args )
     
-def SplayListForDB( xs ):
-    
-    return '(' + ','.join( ( str( x ) for x in xs ) ) + ')'
-    
+def SplayListForDB( xs, escape=False ):
+    if not escape:
+        return '(' + ','.join( ( str( x ) for x in xs ) ) + ')'
+    else:
+        return '(' + ','.join(("'" + str(x) + "'" for x in xs)) + ')'
+
 def SplitIteratorIntoChunks( iterator, n ):
     
     chunk = []
