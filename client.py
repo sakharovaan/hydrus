@@ -28,6 +28,9 @@ try:
     from include import HydrusGlobals as HG
     from include import HydrusLogger
     import traceback
+    import faulthandler
+
+    faulthandler.enable()
     
     try:
         

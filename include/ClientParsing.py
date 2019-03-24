@@ -362,7 +362,8 @@ def GetTitleFromAllParseResults( all_parse_results ):
     
     for results in all_parse_results:
         
-        for ( ( name, content_type, additional_info ), parsed_text ) in results:
+        for ( data, parsed_text ) in results:
+            (name, content_type, additional_info) = data
             
             if content_type == HC.CONTENT_TYPE_TITLE:
                 
@@ -2121,7 +2122,7 @@ class PageParser( HydrusSerialisable.SerialisableBaseNamed ):
         
     
     def Parse( self, parsing_context, parsing_text ):
-        
+
         try:
             
             converted_parsing_text = self._string_converter.Convert( parsing_text )

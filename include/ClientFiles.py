@@ -27,7 +27,7 @@ def GetAllPaths( raw_paths, do_human_sort = True ):
                 
                 next_paths_to_process.extend( subpaths )
                 
-            else:
+            elif os.path.splitext(path)[1] != '.txt':
                 
                 file_paths.append( path )
                 

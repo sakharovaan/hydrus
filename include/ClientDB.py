@@ -2780,8 +2780,8 @@ class DB( HydrusDB.HydrusDB ):
 
         for file in glob.iglob(HC.JSON_PATH + '*'):
             if os.path.split(file)[1].endswith('.json'):
-                if not os.path.split(file)[1] in dump_names:
-                        os.unlink(file)
+                if os.path.split(file)[1] not in dump_names:
+                    os.unlink(file)
 
     def _CreateDB( self ):
         self._c.execute( 'CREATE DATABASE hydrus;')
