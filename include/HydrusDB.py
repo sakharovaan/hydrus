@@ -312,6 +312,8 @@ class HydrusDB( object ):
                 user=HC.MYSQL_USER,
                 password=HC.MYSQL_PASSWORD,
                 buffered=True,
+                pool_name="hydrus",
+                pool_size=10,
                 charset=charset[0]
             )
         elif not self._db:
@@ -321,6 +323,8 @@ class HydrusDB( object ):
                 password=HC.MYSQL_PASSWORD,
                 database='hydrus',
                 buffered=True,
+                pool_name="hydrus",
+                pool_size=10,
                 charset=charset[0]
             )
 
