@@ -56,11 +56,11 @@ def GenerateHydrusBitmap( path, mime, compressed = True, desired_dimensions = No
         
         if do_thumbnail_resize:
             
-            numpy_image = ClientImageHandling.EfficientlyThumbnailNumpyImage( numpy_image, desired_dimensions )
+            numpy_image = ClientImageHandling.ThumbnailNumpyImage( numpy_image, desired_dimensions )
             
         else:
             
-            numpy_image = ClientImageHandling.EfficientlyResizeNumpyImage( numpy_image, desired_dimensions )
+            numpy_image = ClientImageHandling.ResizeNumpyImage( numpy_image, desired_dimensions )
             
         
     
@@ -141,7 +141,7 @@ class ImageRenderer( object ):
             
         else:
             
-            wx_numpy_image = ClientImageHandling.ResizeNumpyImage( self._media.GetMime(), self._numpy_image, target_resolution )
+            wx_numpy_image = ClientImageHandling.ResizeNumpyImageForMediaViewer( self._media.GetMime(), self._numpy_image, target_resolution )
             
         
         ( wx_height, wx_width, wx_depth ) = wx_numpy_image.shape
@@ -599,6 +599,18 @@ class RasterContainerVideo( RasterContainer ):
         return self._target_resolution
         
     
+    def GetTimestampMS( self, frame_index ):
+        
+        if self._media.GetMime() == HC.IMAGE_GIF:
+            
+            return sum( self._durations[ : frame_index ] )
+            
+        else:
+            
+            return self._average_frame_duration * frame_index
+            
+        
+    
     def GetTotalDuration( self ):
         
         if self._media.GetMime() == HC.IMAGE_GIF:
@@ -616,6 +628,14 @@ class RasterContainerVideo( RasterContainer ):
         with self._lock:
             
             return self._HasFrame( index )
+            
+        
+    
+    def CanHaveVariableFramerate( self ):
+        
+        with self._lock:
+            
+            return self._media.GetMime() == HC.IMAGE_GIF
             
         
     

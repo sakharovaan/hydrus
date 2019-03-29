@@ -31,6 +31,8 @@ header_and_mime = [
     ( 0, b'ZWS', HC.APPLICATION_FLASH ),
     ( 0, b'FLV', HC.VIDEO_FLV ),
     ( 0, b'%PDF', HC.APPLICATION_PDF ),
+    ( 0, b'8BPS\x00\x01', HC.APPLICATION_PSD ),
+    ( 0, b'8BPS\x00\x02', HC.APPLICATION_PSD ), # PSB, which is basically PSD v2 and does giganto resolution
     ( 0, b'PK\x03\x04', HC.APPLICATION_ZIP ),
     ( 0, b'PK\x05\x06', HC.APPLICATION_ZIP ),
     ( 0, b'PK\x07\x08', HC.APPLICATION_ZIP ),
@@ -51,7 +53,7 @@ header_and_mime = [
     ( 0, b'\x30\x26\xB2\x75\x8E\x66\xCF\x11\xA6\xD9\x00\xAA\x00\x62\xCE\x6C', HC.UNDETERMINED_WM )
     ]
 
-def SaveThumbnailToStreamPIL( pil_image, dimensions, f ):
+def SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f ):
     
     # when the palette is limited, the thumbnail antialias won't add new colours, so you get nearest-neighbour-like behaviour
     
@@ -59,7 +61,7 @@ def SaveThumbnailToStreamPIL( pil_image, dimensions, f ):
     
     pil_image = HydrusImageHandling.Dequantize( pil_image )
     
-    HydrusImageHandling.EfficientlyThumbnailPILImage( pil_image, dimensions )
+    HydrusImageHandling.ThumbnailPILImage( pil_image, bounding_dimensions )
     
     if original_file_was_png or pil_image.mode == 'RGBA':
         
@@ -70,11 +72,11 @@ def SaveThumbnailToStreamPIL( pil_image, dimensions, f ):
         pil_image.save( f, 'JPEG', quality = 92 )
         
     
-def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS, percentage_in = 35 ):
+def GenerateThumbnailBytes( path, bounding_dimensions, mime, percentage_in = 35 ):
     
     if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF ):
         
-        thumbnail = GenerateThumbnailFileBytesFromStaticImagePath( path, dimensions, mime )
+        thumbnail_bytes = GenerateThumbnailBytesFromStaticImagePath( path, bounding_dimensions, mime )
         
     else:
         
@@ -90,7 +92,7 @@ def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS
                 
                 pil_image = HydrusImageHandling.GeneratePILImage( temp_path )
                 
-                SaveThumbnailToStreamPIL( pil_image, dimensions, f )
+                SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f )
                 
             except:
                 
@@ -98,7 +100,7 @@ def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS
                 
                 pil_image = HydrusImageHandling.GeneratePILImage( flash_default_path )
                 
-                SaveThumbnailToStreamPIL( pil_image, dimensions, f )
+                SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f )
                 
             finally:
                 
@@ -111,7 +113,7 @@ def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS
             
             ( size, mime, width, height, duration, num_frames, num_words ) = GetFileInfo( path )
             
-            cropped_dimensions = HydrusImageHandling.GetThumbnailResolution( ( width, height ), dimensions )
+            cropped_dimensions = HydrusImageHandling.GetThumbnailResolution( ( width, height ), bounding_dimensions )
             
             renderer = HydrusVideoHandling.VideoRendererFFMPEG( path, mime, duration, num_frames, cropped_dimensions )
             
@@ -130,7 +132,7 @@ def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS
             
             pil_image = HydrusImageHandling.GeneratePILImageFromNumpyImage( numpy_image )
             
-            SaveThumbnailToStreamPIL( pil_image, dimensions, f )
+            SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f )
             
             renderer.Stop()
             
@@ -139,30 +141,34 @@ def GenerateThumbnail( path, mime, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS
         
         f.seek( 0 )
         
-        thumbnail = f.read()
+        thumbnail_bytes = f.read()
         
         f.close()
         
     
-    return thumbnail
+    return thumbnail_bytes
     
-def GenerateThumbnailFileBytesFromStaticImagePathPIL( path, dimensions = HC.UNSCALED_THUMBNAIL_DIMENSIONS, mime = None ):
+def GenerateThumbnailBytesFromPIL( pil_image, bounding_dimensions, mime ):
     
     f = io.BytesIO()
     
-    pil_image = HydrusImageHandling.GeneratePILImage( path )
-    
-    SaveThumbnailToStreamPIL( pil_image, dimensions, f )
+    SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f )
     
     f.seek( 0 )
     
-    thumbnail = f.read()
+    thumbnail_bytes = f.read()
     
     f.close()
     
-    return thumbnail
+    return thumbnail_bytes
     
-GenerateThumbnailFileBytesFromStaticImagePath = GenerateThumbnailFileBytesFromStaticImagePathPIL
+def GenerateThumbnailBytesFromStaticImagePathPIL( path, bounding_dimensions, mime ):
+    
+    pil_image = HydrusImageHandling.GeneratePILImage( path )
+    
+    return GenerateThumbnailBytesFromPIL( pil_image, bounding_dimensions, mime )
+    
+GenerateThumbnailBytesFromStaticImagePath = GenerateThumbnailBytesFromStaticImagePathPIL
 
 def GetExtraHashesFromPath( path ):
     
@@ -237,6 +243,10 @@ def GetFileInfo( path, mime = None ):
     elif mime == HC.APPLICATION_PDF:
         
         num_words = HydrusDocumentHandling.GetPDFNumWords( path ) # this now give None until a better solution can be found
+        
+    elif mime == HC.APPLICATION_PSD:
+        
+        ( width, height ) = HydrusImageHandling.GetPSDResolution( path )
         
     elif mime in HC.AUDIO:
         

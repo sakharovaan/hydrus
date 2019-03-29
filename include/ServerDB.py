@@ -91,7 +91,7 @@ class DB( HydrusDB.HydrusDB ):
     
     TRANSACTION_COMMIT_TIME = 120
     
-    def __init__( self, controller, db_dir, db_name, no_wal = False ):
+    def __init__( self, controller, db_dir, db_name ):
         
         self._files_dir = os.path.join( db_dir, 'server_files' )
         
@@ -103,7 +103,7 @@ class DB( HydrusDB.HydrusDB ):
         
         self._account_type_cache = {}
         
-        HydrusDB.HydrusDB.__init__( self, controller, db_dir, db_name, no_wal = no_wal )
+        HydrusDB.HydrusDB.__init__( self, controller, db_dir, db_name )
         
     
     def _AddAccountType( self, service_id, account_type ):
@@ -157,11 +157,11 @@ class DB( HydrusDB.HydrusDB ):
                 
                 thumbnail_dest_path = ServerFiles.GetExpectedThumbnailPath( hash )
                 
-                thumbnail = file_dict[ 'thumbnail' ]
+                thumbnail_bytes = file_dict[ 'thumbnail' ]
                 
                 with open( thumbnail_dest_path, 'wb' ) as f:
                     
-                    f.write( thumbnail )
+                    f.write( thumbnail_bytes )
                     
                 
             
