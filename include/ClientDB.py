@@ -2778,8 +2778,8 @@ class DB( HydrusDB.HydrusDB ):
         self._c.execute('SELECT dump FROM json_dumps_named;'); result =self._c.fetchall()
         dump_names.extend([x[0] for x in result])
 
-        for file in glob.iglob(HC.JSON_PATH + '*'):
-            if os.path.split(file)[1].endswith('.json'):
+        for file in glob.iglob(os.path.join(HC.JSON_PATH, '*')):
+            if file.endswith('.json'):
                 if os.path.split(file)[1] not in dump_names:
                     os.unlink(file)
 
