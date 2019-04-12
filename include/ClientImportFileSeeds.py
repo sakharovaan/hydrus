@@ -41,13 +41,13 @@ def GenerateFileSeedCachesStatus( file_seed_caches ):
     
 def GenerateStatusesToCountsStatus( statuses_to_counts ):
     
-    num_successful_and_new = statuses_to_counts[ CC.STATUS_SUCCESSFUL_AND_NEW ]
-    num_successful_but_redundant = statuses_to_counts[ CC.STATUS_SUCCESSFUL_BUT_REDUNDANT ]
-    num_ignored = statuses_to_counts[ CC.STATUS_VETOED ]
-    num_deleted = statuses_to_counts[ CC.STATUS_DELETED ]
-    num_failed = statuses_to_counts[ CC.STATUS_ERROR ]
-    num_skipped = statuses_to_counts[ CC.STATUS_SKIPPED ]
-    num_unknown = statuses_to_counts[ CC.STATUS_UNKNOWN ]
+    num_successful_and_new = statuses_to_counts.get( CC.STATUS_SUCCESSFUL_AND_NEW , 0)
+    num_successful_but_redundant = statuses_to_counts.get( CC.STATUS_SUCCESSFUL_BUT_REDUNDANT , 0)
+    num_ignored = statuses_to_counts.get( CC.STATUS_VETOED , 0)
+    num_deleted = statuses_to_counts.get( CC.STATUS_DELETED , 0)
+    num_failed = statuses_to_counts.get( CC.STATUS_ERROR , 0)
+    num_skipped = statuses_to_counts.get( CC.STATUS_SKIPPED , 0)
+    num_unknown = statuses_to_counts.get( CC.STATUS_UNKNOWN , 0)
     
     status_strings = []
     
@@ -1445,13 +1445,14 @@ class FileSeedCache( HydrusSerialisable.SerialisableBase ):
     
     def _GetStatusesToCounts( self ):
         
-        statuses_to_counts = collections.Counter()
+        statuses_to_counts = dict()
         
         for file_seed in self._file_seeds:
-            
-            statuses_to_counts[ file_seed.status ] += 1
-            
-        
+            if file_seed.status not in statuses_to_counts:
+                statuses_to_counts[file_seed.status] = 1
+            else:
+                statuses_to_counts[file_seed.status] += 1
+
         return statuses_to_counts
         
     
@@ -1987,15 +1988,13 @@ class FileSeedCache( HydrusSerialisable.SerialisableBase ):
         
     
     def GetStatus( self ):
-        
-        with self._lock:
-            
-            if self._status_dirty:
-                
-                self._GenerateStatus()
-                
-            
-            return self._status_cache
+
+        if self._status_dirty:
+
+            self._GenerateStatus()
+
+
+        return self._status_cache
             
         
     
@@ -2013,10 +2012,7 @@ class FileSeedCache( HydrusSerialisable.SerialisableBase ):
         
     
     def GetStatusesToCounts( self ):
-        
-        with self._lock:
-            
-            return self._GetStatusesToCounts()
+        return self._GetStatusesToCounts()
             
         
     

@@ -20,7 +20,7 @@ requests = "*"
 lz4 = "*"
 matplotlib = "*"
 PyYAML = "*"
-Pillow = "*"
+Pillow-SIMD = {file = "https://download.lfd.uci.edu/pythonlibs/u2hcgva4/Pillow_SIMD-5.3.0.post0-cp36-cp36m-win_amd64.whl"}
 pyOpenSSL = "*"
 Send2Trash = "*"
 service_identity = "*"

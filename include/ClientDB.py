@@ -6175,7 +6175,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name ) = GenerateMappingsTableNames( service_id )
                 self._c.execute(
-                    'SELECT tag_id, hash_id FROM ' + pending_mappings_table_name + ' ORDER BY tag_id LIMIT 100;')
+                    'SELECT tag_id, hash_id FROM ' + pending_mappings_table_name + ' ORDER BY tag_id LIMIT 500;')
                 pending_dict = HydrusData.BuildKeyToListDict( self._c.fetchall())
 
                 for ( tag_id, hash_ids ) in list(pending_dict.items()):
@@ -6187,7 +6187,7 @@ class DB( HydrusDB.HydrusDB ):
 
                     client_to_server_update.AddContent( HC.CONTENT_UPDATE_PEND, content )
 
-                self._c.execute('SELECT tag_id, hash_id, reason_id FROM ' + petitioned_mappings_table_name + ' ORDER BY reason_id LIMIT 100;')
+                self._c.execute('SELECT tag_id, hash_id, reason_id FROM ' + petitioned_mappings_table_name + ' ORDER BY reason_id LIMIT 500;')
                 petitioned_dict = HydrusData.BuildKeyToListDict( [ ( ( tag_id, reason_id ), hash_id ) for ( tag_id, hash_id, reason_id ) in  self._c.fetchall()] )
 
                 for ( ( tag_id, reason_id ), hash_ids ) in list(petitioned_dict.items()):
@@ -6218,7 +6218,7 @@ class DB( HydrusDB.HydrusDB ):
                     client_to_server_update.AddContent( HC.CONTENT_UPDATE_PEND, content, reason )
 
 
-                self._c.execute( 'SELECT child_tag_id, parent_tag_id, reason_id FROM tag_parent_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 100;', ( service_id, HC.CONTENT_STATUS_PETITIONED ) ); petitioned = self._c.fetchall()
+                self._c.execute( 'SELECT child_tag_id, parent_tag_id, reason_id FROM tag_parent_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 500;', ( service_id, HC.CONTENT_STATUS_PETITIONED ) ); petitioned = self._c.fetchall()
 
                 for ( child_tag_id, parent_tag_id, reason_id ) in petitioned:
 
@@ -6234,7 +6234,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 # tag siblings
 
-                self._c.execute( 'SELECT bad_tag_id, good_tag_id, reason_id FROM tag_sibling_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 100;', ( service_id, HC.CONTENT_STATUS_PENDING ) ); pending = self._c.fetchall()
+                self._c.execute( 'SELECT bad_tag_id, good_tag_id, reason_id FROM tag_sibling_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 500;', ( service_id, HC.CONTENT_STATUS_PENDING ) ); pending = self._c.fetchall()
 
                 for ( bad_tag_id, good_tag_id, reason_id ) in pending:
 
@@ -6248,7 +6248,7 @@ class DB( HydrusDB.HydrusDB ):
                     client_to_server_update.AddContent( HC.CONTENT_UPDATE_PEND, content, reason )
 
 
-                self._c.execute( 'SELECT bad_tag_id, good_tag_id, reason_id FROM tag_sibling_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 100;', ( service_id, HC.CONTENT_STATUS_PETITIONED ) ); petitioned = self._c.fetchall()
+                self._c.execute( 'SELECT bad_tag_id, good_tag_id, reason_id FROM tag_sibling_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 500;', ( service_id, HC.CONTENT_STATUS_PETITIONED ) ); petitioned = self._c.fetchall()
 
                 for ( bad_tag_id, good_tag_id, reason_id ) in petitioned:
 
@@ -6275,7 +6275,7 @@ class DB( HydrusDB.HydrusDB ):
                     return media_result
 
                 self._c.execute(
-                    'SELECT reason_id, hash_id FROM file_petitions WHERE service_id = %s ORDER BY reason_id LIMIT 100;',
+                    'SELECT reason_id, hash_id FROM file_petitions WHERE service_id = %s ORDER BY reason_id LIMIT 500;',
                     (service_id,))
                 petitioned = list(HydrusData.BuildKeyToListDict( self._c.fetchall()).items())
 
