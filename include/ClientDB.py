@@ -245,7 +245,7 @@ class DB( HydrusDB.HydrusDB ):
 
             select_statement = 'SELECT COUNT( * ) FROM files_info WHERE mime IN ' + HydrusData.SplayListForDB( HC.SEARCHABLE_MIMES ) + ' AND hash_id IN %s;'
 
-            num_viewable_files = sum( self._STL( self._SelectFromList( select_statement, valid_hash_ids ) ) )
+            num_viewable_files = sum( self._STL(  raw_data = self._SelectFromList( select_statement, valid_hash_ids ) ) )
 
             service_info_updates.append( ( num_viewable_files, service_id, HC.SERVICE_INFO_NUM_VIEWABLE_FILES ) )
 
@@ -644,7 +644,7 @@ class DB( HydrusDB.HydrusDB ):
 
         select_statement = 'SELECT hash_id FROM ' + hash_id_map_table_name + ' WHERE service_hash_id IN %s;'
 
-        hash_ids = self._STL( self._SelectFromList( select_statement, service_hash_ids ) )
+        hash_ids = self._STL(  raw_data = self._SelectFromList( select_statement, service_hash_ids ) )
 
         if len( hash_ids ) != len( service_hash_ids ):
 
@@ -1734,7 +1734,7 @@ class DB( HydrusDB.HydrusDB ):
 
         select_statement = 'SELECT phash_id FROM shape_perceptual_hash_map WHERE phash_id IN %s;'
 
-        useful_phash_ids = self._STS( self._SelectFromList( select_statement, unbalanced_phash_ids ) )
+        useful_phash_ids = self._STS( raw_data = self._SelectFromList( select_statement, unbalanced_phash_ids ) )
 
         orphan_phash_ids = unbalanced_phash_ids.difference( useful_phash_ids )
 
@@ -1932,7 +1932,7 @@ class DB( HydrusDB.HydrusDB ):
 
             select_statement = 'SELECT hash_id FROM shape_perceptual_hash_map WHERE phash_id IN %s;'
 
-            similar_hash_ids = self._STL( self._SelectFromList( select_statement, similar_phash_ids ) )
+            similar_hash_ids = self._STL(  raw_data = self._SelectFromList( select_statement, similar_phash_ids ) )
 
 
         return similar_hash_ids
@@ -2390,7 +2390,7 @@ class DB( HydrusDB.HydrusDB ):
 
         select_statement = 'SELECT hash_id FROM ' + cache_files_table_name + ' WHERE hash_id IN %s;'
 
-        return self._STL( self._SelectFromList( select_statement, hash_ids ) )
+        return self._STL(  raw_data = self._SelectFromList( select_statement, hash_ids ) )
 
 
     def _CacheSpecificMappingsGenerate( self, file_service_id, tag_service_id ):
@@ -3029,7 +3029,7 @@ class DB( HydrusDB.HydrusDB ):
 
         service_type = service.GetServiceType()
 
-        existing_hash_ids = self._STS( self._SelectFromList( 'SELECT hash_id FROM current_files WHERE service_id = ' + str( service_id ) + ' AND hash_id IN %s;', hash_ids ) )
+        existing_hash_ids = self._STS( raw_data = self._SelectFromList( 'SELECT hash_id FROM current_files WHERE service_id = ' + str( service_id ) + ' AND hash_id IN %s;', hash_ids ) )
 
         service_info_updates = []
 
@@ -3055,7 +3055,7 @@ class DB( HydrusDB.HydrusDB ):
 
             select_statement = 'SELECT COUNT( * ) FROM files_info WHERE mime IN ' + HydrusData.SplayListForDB( HC.SEARCHABLE_MIMES ) + ' AND hash_id IN %s;'
 
-            num_viewable_files = sum( self._STL( self._SelectFromList( select_statement, existing_hash_ids ) ) )
+            num_viewable_files = sum( self._STL(  raw_data = self._SelectFromList( select_statement, existing_hash_ids ) ) )
 
             service_info_updates.append( ( -num_viewable_files, service_id, HC.SERVICE_INFO_NUM_VIEWABLE_FILES ) )
 
@@ -3516,7 +3516,7 @@ class DB( HydrusDB.HydrusDB ):
 
         ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name ) = GenerateMappingsTableNames( service_id )
 
-        child_hash_ids = self._STS( self._SelectFromList( 'SELECT hash_id FROM ' + current_mappings_table_name + ' WHERE tag_id IN %s;', sibling_tag_ids ) )
+        child_hash_ids = self._STS( raw_data = self._SelectFromList( 'SELECT hash_id FROM ' + current_mappings_table_name + ' WHERE tag_id IN %s;', sibling_tag_ids ) )
 
         for parent_tag_id in parent_tag_ids:
 
@@ -4870,13 +4870,13 @@ class DB( HydrusDB.HydrusDB ):
 
                 if file_service_key == CC.COMBINED_FILE_SERVICE_KEY:
 
-                    update_qhi( query_hash_ids, self._STI( self._SelectFromList( 'SELECT hash_id FROM files_info WHERE ' + ' AND '.join( files_info_predicates ) + ';', query_hash_ids ) ) )
+                    update_qhi( query_hash_ids, self._STI(  raw_data = self._SelectFromList( 'SELECT hash_id FROM files_info WHERE ' + ' AND '.join( files_info_predicates ) + ';', query_hash_ids ) ) )
 
                 else:
 
                     files_info_predicates.insert( 0, 'service_id = ' + str( file_service_id ) )
 
-                    update_qhi( query_hash_ids, self._STI( self._SelectFromList( 'SELECT hash_id FROM current_files NATURAL JOIN files_info WHERE ' + ' AND '.join( files_info_predicates ) + ';', query_hash_ids ) ) )
+                    update_qhi( query_hash_ids, self._STI(  raw_data = self._SelectFromList( 'SELECT hash_id FROM current_files NATURAL JOIN files_info WHERE ' + ' AND '.join( files_info_predicates ) + ';', query_hash_ids ) ) )
 
 
 
@@ -4900,7 +4900,7 @@ class DB( HydrusDB.HydrusDB ):
 
                     statement = 'SELECT hash_id FROM current_files NATURAL JOIN files_info WHERE ' + ' AND '.join( files_info_predicates ) + ';'
 
-                    query_hash_ids = self._STS( self._SelectFromList( statement, query_hash_ids ) )
+                    query_hash_ids = self._STS( raw_data = self._SelectFromList( statement, query_hash_ids ) )
 
 
 
@@ -5398,7 +5398,7 @@ class DB( HydrusDB.HydrusDB ):
 
             for select in selects:
 
-                hash_ids.update( self._STI( self._SelectFromList( select, allowed_hash_ids ) ) )
+                hash_ids.update( self._STI(  raw_data = self._SelectFromList( select, allowed_hash_ids ) ) )
 
 
 
@@ -5413,9 +5413,7 @@ class DB( HydrusDB.HydrusDB ):
             query = self._c.fetchmany()
 
         else:
-
-            self._SelectFromList( 'SELECT hash_id, url FROM url_map NATURAL JOIN urls WHERE hash_id in %s;', hash_ids )
-            query = self._c.fetchmany()
+            query = list(self._SelectFromList( 'SELECT hash_id, url FROM url_map NATURAL JOIN urls WHERE hash_id in %s;', hash_ids ))
 
 
         result_hash_ids = set()
@@ -7073,8 +7071,8 @@ class DB( HydrusDB.HydrusDB ):
 
         while len( search_tag_ids ) > 0:
 
-            goods = self._STS( self._SelectFromList( good_select, search_tag_ids ) )
-            bads = self._STS( self._SelectFromList( bad_select, search_tag_ids ) )
+            goods = self._STS( raw_data = self._SelectFromList( good_select, search_tag_ids ) )
+            bads = self._STS( raw_data = self._SelectFromList( bad_select, search_tag_ids ) )
 
             searched_tag_ids.update( search_tag_ids )
 
@@ -8800,7 +8798,7 @@ class DB( HydrusDB.HydrusDB ):
 
             select_statement = 'SELECT hash_id FROM current_files WHERE service_id = ' + str( self._local_update_service_id ) + ' and hash_id IN %s;'
 
-            local_hash_ids = self._STS( self._SelectFromList( select_statement, unprocessed_hash_ids ) )
+            local_hash_ids = self._STS( raw_data = self._SelectFromList( select_statement, unprocessed_hash_ids ) )
 
             if unprocessed_hash_ids == local_hash_ids:
 
@@ -8843,7 +8841,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 select_statement = 'SELECT hash_id FROM files_info WHERE mime = ' + str( HC.APPLICATION_HYDRUS_UPDATE_DEFINITIONS ) + ' AND hash_id IN %s;'
 
-                definition_hash_ids = self._STL( self._SelectFromList( select_statement, hash_ids_i_can_process ) )
+                definition_hash_ids = self._STL( raw_data = self._SelectFromList( select_statement, hash_ids_i_can_process ) )
 
                 if len( definition_hash_ids ) > 0:
 
@@ -8930,7 +8928,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 select_statement = 'SELECT hash_id FROM files_info WHERE mime = ' + str( HC.APPLICATION_HYDRUS_UPDATE_CONTENT ) + ' AND hash_id IN %s;'
 
-                content_hash_ids = self._STL( self._SelectFromList( select_statement, hash_ids_i_can_process ) )
+                content_hash_ids = self._STL( raw_data =self._SelectFromList( select_statement, hash_ids_i_can_process ) )
 
                 if len( content_hash_ids ) > 0:
 
@@ -9497,8 +9495,6 @@ class DB( HydrusDB.HydrusDB ):
     def _ResetRepository( self, service ):
 
         self._Commit()
-
-        self._c.execute( 'PRAGMA foreign_keys = ON;' )
 
         self._BeginImmediate()
 
@@ -10265,7 +10261,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 select_statement = 'SELECT hash_id FROM ' + current_mappings_table_name + ' WHERE tag_id = ' + str( tag_id ) + ' AND hash_id IN %s;'
 
-                existing_current_hash_ids = self._STS( self._SelectFromList( select_statement, hash_ids ) )
+                existing_current_hash_ids = self._STS( raw_data = self._SelectFromList( select_statement, hash_ids ) )
 
                 valid_hash_ids = set( hash_ids ).difference( existing_current_hash_ids )
 

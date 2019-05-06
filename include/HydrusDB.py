@@ -37,7 +37,10 @@ def ReadLargeIdQueryInSeparateChunks( cursor, select_statement, chunk_size ):
 
     while i < num_to_do:
 
-        chunk = [ temp_id for ( temp_id, ) in cursor.execute( 'SELECT temp_id FROM ' + table_name + ' WHERE job_id BETWEEN %s AND %s;', ( i, i + chunk_size - 1 ) ) ]
+        cursor.execute('SELECT temp_id FROM ' + table_name + ' WHERE job_id BETWEEN %s AND %s;',
+                       (i, i + chunk_size - 1))
+
+        chunk = [ temp_id for ( temp_id, ) in cursor.fetchall()  ]
 
         yield chunk
 
@@ -520,37 +523,49 @@ class HydrusDB( object ):
 
     def _SelectFromListFetchAll( self, select_statement, xs ):
 
-        return [ row for row in self._SelectFromList( select_statement, xs ) ]
+        return list(self._SelectFromList( select_statement, xs ))
 
 
     def _ShrinkMemory( self ):
         pass
 
-    def _STI( self, iterable_cursor ):
-
-        # strip singleton tuples to an iterator
-        try:
-            return ( item for ( item, ) in self._c.fetchall() )
-        except mysql.connector.errors.InterfaceError:
-            return ()
+    def _STI( self, raw_data = None ):
 
 
-    def _STL( self, iterable_cursor ):
+        if not raw_data:
+            # strip singleton tuples to an iterator
+            try:
+                return ( item for ( item, ) in self._c.fetchall() )
+            except mysql.connector.errors.InterfaceError:
+                return ()
+        else:
+            return (item for (item,) in raw_data)
 
-        # strip singleton tuples to a list
-        try:
-            return [ item for ( item, ) in self._c.fetchall() ]
-        except mysql.connector.errors.InterfaceError:
-            return []
+    def _STL( self, raw_data = None ):
+
+        if not raw_data:
+            # strip singleton tuples to a list
+            try:
+                return [ item for ( item, ) in self._c.fetchall() ]
+            except mysql.connector.errors.InterfaceError:
+                return []
+
+        else:
+            return [ item for ( item, ) in raw_data ]
 
 
-    def _STS( self, iterable_cursor ):
+    def _STS( self, raw_data = None ):
 
-        # strip singleton tuples to a set
-        try:
-            return { item for ( item, ) in self._c.fetchall()  }
-        except mysql.connector.errors.InterfaceError:
-            return {}
+        if not raw_data:
+
+            # strip singleton tuples to a set
+            try:
+                return { item for ( item, ) in self._c.fetchall()  }
+            except mysql.connector.errors.InterfaceError:
+                return {}
+
+        else:
+            return {item for (item,) in raw_data}
 
 
     def _UpdateDB( self, version ):
