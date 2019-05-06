@@ -20,7 +20,7 @@ def CanVacuum( db_path, stop_time = None ):
 
 def ReadLargeIdQueryInSeparateChunks( cursor, select_statement, chunk_size ):
 
-    table_name = 'tempbigread' + os.urandom( 32 ).hex()
+    table_name = 'tempbigread' + os.urandom( 10 ).hex()
 
     cursor.execute( 'CREATE TEMPORARY TABLE ' + table_name + ' ( job_id INTEGER PRIMARY KEY AUTO_INCREMENT, temp_id INTEGER  );' )
 
@@ -279,7 +279,7 @@ class HydrusDB( object ):
 
         self._InitDBCursor()
 
-        self._c.execute( "SHOW DATABASES LIKE 'hydrus';"); result = self._c.fetchone()
+        self._c.execute( "SHOW DATABASES LIKE '" + HC.MYSQL_DB + "';"); result = self._c.fetchone()
 
         create_db = not result
 
@@ -294,7 +294,7 @@ class HydrusDB( object ):
             self._BeginImmediate()
         else:
 
-            self._c.execute("USE hydrus;")
+            self._c.execute("USE " + HC.MYSQL_DB + ";")
 
 
 
@@ -320,7 +320,7 @@ class HydrusDB( object ):
                 host=HC.MYSQL_HOST,
                 user=HC.MYSQL_USER,
                 password=HC.MYSQL_PASSWORD,
-                database='hydrus',
+                database=HC.MYSQL_DB,
                 buffered=True,
                 pool_name="hydrus",
                 pool_size=10,

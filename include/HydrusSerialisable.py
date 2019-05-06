@@ -100,7 +100,7 @@ def CreateFromNetworkBytes( network_string ):
     try:
         
         obj_bytes = zlib.decompress( network_string )
-        
+
     except zlib.error:
         
         if LZ4_OK:

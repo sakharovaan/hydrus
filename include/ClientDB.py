@@ -2784,8 +2784,8 @@ class DB( HydrusDB.HydrusDB ):
                     os.unlink(file)
 
     def _CreateDB( self ):
-        self._c.execute( 'CREATE DATABASE hydrus;')
-        self._c.execute( 'USE hydrus;')
+        self._c.execute( 'CREATE DATABASE %s;' % HC.MYSQL_DB)
+        self._c.execute( 'USE %s;' % HC.MYSQL_DB)
 
         self._c.execute( 'CREATE TABLE services ( service_id INTEGER PRIMARY KEY AUTO_INCREMENT, service_key VARCHAR(255) UNIQUE, service_type INTEGER, name TEXT, dictionary_string LONGTEXT );' )
 
@@ -2940,7 +2940,7 @@ class DB( HydrusDB.HydrusDB ):
 
         self._c.executemany( 'INSERT INTO yaml_dumps VALUES ( %s, %s, %s );', list( ( YAML_DUMP_ID_IMAGEBOARD, name, yaml.safe_dump(imageboards) ) for ( name, imageboards ) in ClientDefaults.GetDefaultImageboards() ) )
 
-        new_options = ClientOptions.ClientOptions( self._db_dir )
+        new_options = ClientOptions.ClientOptions()
 
         new_options.SetSimpleDownloaderFormulae( ClientDefaults.GetDefaultSimpleDownloaderFormulae() )
 
@@ -6175,7 +6175,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name ) = GenerateMappingsTableNames( service_id )
                 self._c.execute(
-                    'SELECT tag_id, hash_id FROM ' + pending_mappings_table_name + ' ORDER BY tag_id LIMIT 500;')
+                    'SELECT tag_id, hash_id FROM ' + pending_mappings_table_name + ' ORDER BY tag_id LIMIT 1000;')
                 pending_dict = HydrusData.BuildKeyToListDict( self._c.fetchall())
 
                 for ( tag_id, hash_ids ) in list(pending_dict.items()):
@@ -6187,7 +6187,7 @@ class DB( HydrusDB.HydrusDB ):
 
                     client_to_server_update.AddContent( HC.CONTENT_UPDATE_PEND, content )
 
-                self._c.execute('SELECT tag_id, hash_id, reason_id FROM ' + petitioned_mappings_table_name + ' ORDER BY reason_id LIMIT 500;')
+                self._c.execute('SELECT tag_id, hash_id, reason_id FROM ' + petitioned_mappings_table_name + ' ORDER BY reason_id LIMIT 1000;')
                 petitioned_dict = HydrusData.BuildKeyToListDict( [ ( ( tag_id, reason_id ), hash_id ) for ( tag_id, hash_id, reason_id ) in  self._c.fetchall()] )
 
                 for ( ( tag_id, reason_id ), hash_ids ) in list(petitioned_dict.items()):
@@ -6218,7 +6218,7 @@ class DB( HydrusDB.HydrusDB ):
                     client_to_server_update.AddContent( HC.CONTENT_UPDATE_PEND, content, reason )
 
 
-                self._c.execute( 'SELECT child_tag_id, parent_tag_id, reason_id FROM tag_parent_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 500;', ( service_id, HC.CONTENT_STATUS_PETITIONED ) ); petitioned = self._c.fetchall()
+                self._c.execute( 'SELECT child_tag_id, parent_tag_id, reason_id FROM tag_parent_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 1000;', ( service_id, HC.CONTENT_STATUS_PETITIONED ) ); petitioned = self._c.fetchall()
 
                 for ( child_tag_id, parent_tag_id, reason_id ) in petitioned:
 
@@ -6234,7 +6234,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 # tag siblings
 
-                self._c.execute( 'SELECT bad_tag_id, good_tag_id, reason_id FROM tag_sibling_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 500;', ( service_id, HC.CONTENT_STATUS_PENDING ) ); pending = self._c.fetchall()
+                self._c.execute( 'SELECT bad_tag_id, good_tag_id, reason_id FROM tag_sibling_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 1000;', ( service_id, HC.CONTENT_STATUS_PENDING ) ); pending = self._c.fetchall()
 
                 for ( bad_tag_id, good_tag_id, reason_id ) in pending:
 
@@ -6248,7 +6248,7 @@ class DB( HydrusDB.HydrusDB ):
                     client_to_server_update.AddContent( HC.CONTENT_UPDATE_PEND, content, reason )
 
 
-                self._c.execute( 'SELECT bad_tag_id, good_tag_id, reason_id FROM tag_sibling_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 500;', ( service_id, HC.CONTENT_STATUS_PETITIONED ) ); petitioned = self._c.fetchall()
+                self._c.execute( 'SELECT bad_tag_id, good_tag_id, reason_id FROM tag_sibling_petitions WHERE service_id = %s AND status = %s ORDER BY reason_id LIMIT 1000;', ( service_id, HC.CONTENT_STATUS_PETITIONED ) ); petitioned = self._c.fetchall()
 
                 for ( bad_tag_id, good_tag_id, reason_id ) in petitioned:
 
@@ -6275,7 +6275,7 @@ class DB( HydrusDB.HydrusDB ):
                     return media_result
 
                 self._c.execute(
-                    'SELECT reason_id, hash_id FROM file_petitions WHERE service_id = %s ORDER BY reason_id LIMIT 500;',
+                    'SELECT reason_id, hash_id FROM file_petitions WHERE service_id = %s ORDER BY reason_id LIMIT 1000;',
                     (service_id,))
                 petitioned = list(HydrusData.BuildKeyToListDict( self._c.fetchall()).items())
 
@@ -7549,7 +7549,6 @@ class DB( HydrusDB.HydrusDB ):
 
 
     def _LoadIntoDiskCache( self, stop_time = None, caller_limit = None ):
-        self._InitDBCursor(started=True)
         return True
 
 
@@ -8769,23 +8768,6 @@ class DB( HydrusDB.HydrusDB ):
 
 
     def _ProcessRepositoryUpdates( self, service_key, only_when_idle = False, stop_time = None ):
-
-        db_path = os.path.join( self._db_dir, 'client.mappings.db' )
-
-        db_size = os.path.getsize( db_path )
-
-        size_needed = min( db_size // 10, 400 * 1024 * 1024 )
-
-        ( has_space, reason ) = HydrusPaths.HasSpaceForDBTransaction( self._db_dir, size_needed )
-
-        if not has_space:
-
-            message = 'Not enough free disk space to guarantee a safe repository processing job. Full text: ' + os.linesep * 2 + reason
-
-            HydrusData.ShowText( message )
-
-            raise Exception( message )
-
 
         service_id = self._GetServiceId( service_key )
 
