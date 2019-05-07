@@ -1,21 +1,18 @@
-## Hydrus Network (Client and Server)
+## Hydrus Network (mysql port)
+This is an experimental port of Hydrus Network from it's own sqlite databases to mysql. Also, I tried to remove all limitations (mostly network and threading ones) I've encountered.
 
-The hydrus network client is an application written for Anon and other internet-fluent media nerds who have large image/swf/webm collections. It browses with tags instead of folders, a little like a *booru on your desktop. Tags and files can be anonymously shared through custom servers that any user may run. Everything is free, and the source code is included with the release. It is developed for Windows, but fairly functional builds for Linux and OS X are released at the same time.
+Installation:
+* Tested on Windows 7
+* Install mysql 8 (not tested on mariadb) and it's bundled python connector (pure python connector is too slow)
+* Install requirements from the Pipfile system-wide (you may need to correct the links)
+* Create user (not the db) in mysql
+* Rename config.example.yaml to config.yaml and correct it as needed. json_path is folder where large json blobs are stored and should be backed up with the db.
+* Copy ffmpeg.exe to bin directory.
+* Run python client.py.
 
-I am continually working on the software and try to put out a new release every Wednesday by 8pm Eastern.
-
-This github repository is currently a weekly sync with my home dev environment, where I work on hydrus by myself. Feel free to fork, but please don't make pull requests at this time. I am also not active on Github, so if you have feedback of any sort, please email me, post on my 8chan board, or message me on tumblr or twitter or the discord.
-
-The client can do quite a lot! Please check out the help inside the release or [here](https://sakharovaan.github.io/hydrus/help/), which includes a comprehensive getting started guide.
-
-* [homepage](https://sakharovaan.github.io/hydrus/help/)
-* [email](mailto:hydrus.admin@gmail.com)
-* [8chan board](https://8ch.net/hydrus/index.html)
-* [twitter](https://twitter.com/hydrusnetwork)
-* [tumblr](http://hydrus.tumblr.com/)
-* [discord](https://discord.gg/3H8UTpb)
-* [patreon](https://www.patreon.com/hydrus_dev)
-
-## Attribution
-
-I use a number of the Silk Icons by Mark James at famfamfam.com.
+Not tested:
+* Server is not ported yet and should be broken for now.
+* Similar file search.
+* Client API
+* Migration from existing sqlite db is possible (I did it myself), but easy migration scripts are not yet written.
+* Multiple clients conections to single DB should not work.

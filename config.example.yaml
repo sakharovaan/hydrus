@@ -1,0 +1,9 @@
+---
+
+mysql_db:
+  host: '127.0.0.1'
+  user: 'hydrus'
+  password: ''
+  database: 'hydrus'
+
+json_path: 'D:\hydrus_json'
