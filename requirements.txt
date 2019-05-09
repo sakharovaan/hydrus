@@ -6,7 +6,7 @@ nose
 numpy
 opencv-python
 six
-pillow
+pillow-simd
 psutil
 pycryptodome
 pylzma
