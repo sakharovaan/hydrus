@@ -15,6 +15,7 @@ import threading
 import traceback
 import time
 import urllib
+import random
 
 def ConvertStatusCodeAndDataIntoExceptionInfo( status_code, data, is_hydrus_service = False ):
     
@@ -213,6 +214,8 @@ class NetworkJob( object ):
         
     
     def _SendRequestAndGetResponse( self ):
+
+        time.sleep(random.randint(2, 20))
         
         with self._lock:
             

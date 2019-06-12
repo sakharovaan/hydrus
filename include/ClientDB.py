@@ -305,6 +305,7 @@ class DB( HydrusDB.HydrusDB ):
 
 
         dictionary_string = dictionary.DumpToString()
+        dictionary_string = self._SaveNamedDump(dictionary_string, json_dump=False)
 
         self._c.execute( 'INSERT INTO services ( service_key, service_type, name, dictionary_string ) VALUES ( %s, %s, %s, %s );', ( binascii.b2a_hex( service_key ) , service_type, name, dictionary_string ) )
 
@@ -2753,21 +2754,27 @@ class DB( HydrusDB.HydrusDB ):
 
             self._c.execute( 'DROP table ' + table_name + ';' )
 
-    def _SaveNamedDump(self, dump):
+    def _SaveNamedDump(self, dump, json_dump=True):
         self._PurgeNamedDumps()
         gen_uuid = str(uuid.uuid4())
         path = os.path.join(HC.JSON_PATH , gen_uuid + '.json')
 
         with open(path, mode='w') as f:
-            f.write(json.dumps(dump))
+            if json_dump:
+                f.write(json.dumps(dump))
+            else:
+                f.write(dump)
 
         return gen_uuid + '.json'
 
-    def _LoadNamedDump(self, dump):
+    def _LoadNamedDump(self, dump, json_load=True):
         dump_loaded = None
 
         with open(os.path.join(HC.JSON_PATH , dump), mode='r') as f:
-            dump_loaded = json.loads(f.read())
+            if json_load:
+                dump_loaded = json.loads(f.read())
+            else:
+                dump_loaded = f.read()
 
         return dump_loaded
 
@@ -2776,6 +2783,8 @@ class DB( HydrusDB.HydrusDB ):
         self._c.execute('SELECT dump FROM json_dumps;'); result = self._c.fetchall()
         dump_names.extend([x[0] for x in result])
         self._c.execute('SELECT dump FROM json_dumps_named;'); result =self._c.fetchall()
+        dump_names.extend([x[0] for x in result])
+        self._c.execute('SELECT dictionary_string FROM services;'); result =self._c.fetchall()
         dump_names.extend([x[0] for x in result])
 
         for file in glob.iglob(os.path.join(HC.JSON_PATH, '*')):
@@ -6556,6 +6565,7 @@ class DB( HydrusDB.HydrusDB ):
             ( service_key, service_type, name, dictionary_string ) = result
             service_key = binascii.a2b_hex(service_key)
 
+            dictionary_string = self._LoadNamedDump(dictionary_string, json_load=False)
             dictionary = HydrusSerialisable.CreateFromString( dictionary_string )
 
             service = ClientServices.GenerateService( service_key, service_type, name, dictionary )
@@ -9549,6 +9559,7 @@ class DB( HydrusDB.HydrusDB ):
             ( service_key, service_type, name, dictionary ) = service.ToTuple()
 
             dictionary_string = dictionary.DumpToString()
+            dictionary_string = self._SaveNamedDump(dictionary_string, json_dump=False)
 
             self._c.execute( 'UPDATE services SET dictionary_string = %s WHERE service_key = %s;', ( dictionary_string, binascii.b2a_hex(service_key)  ) )
 
@@ -10463,6 +10474,7 @@ class DB( HydrusDB.HydrusDB ):
 
         self._c.execute( 'SELECT dictionary_string FROM services WHERE service_id = %s;', ( service_id, ) ); ( old_dictionary_string, ) = self._c.fetchone()
 
+        old_dictionary_string = self._LoadNamedDump(old_dictionary_string, json_load=False)
         old_dictionary = HydrusSerialisable.CreateFromString( old_dictionary_string )
 
         if service_type in HC.TAG_SERVICES:
@@ -10503,6 +10515,7 @@ class DB( HydrusDB.HydrusDB ):
 
 
         dictionary_string = dictionary.DumpToString()
+        dictionary_string = self._SaveNamedDump(dictionary_string, json_dump=False)
 
         self._c.execute( 'UPDATE services SET name = %s, dictionary_string = %s WHERE service_id = %s;', ( name, dictionary_string, service_id ) )
 

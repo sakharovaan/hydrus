@@ -4,15 +4,16 @@ from multiprocessing import Pool
 
 def convert_pillow(paths):
     import PIL.Image, PIL.ImageFile
-    import os
+    import os, stat
 
     for file in paths:
         try:
             print(file)
-            PIL.Image.open(file).save(file.lower().replace('bmp', 'png'), optimize=True)
+            PIL.Image.open(file).save(file[:-3] + 'png', optimize=True)
         except Exception as e:
             print(e)
         else:
+            os.chmod(file, stat.S_IWRITE)
             os.unlink(file)
 
 def convert_magick(paths):
@@ -23,7 +24,7 @@ def convert_magick(paths):
             print(file)
             with Image(filename=file) as img:
                 img.format = 'png'
-                img.save(filename=file.lower().replace('bmp', 'png'))
+                img.save(filename=file[:-3] + 'png')
 
         except Exception as e:
             print(e)
@@ -52,3 +53,5 @@ if __name__ == '__main__':
                 for line in lines:
                     print(line)
                 chunks = []
+    with Pool(5) as p:
+        lines = p.map(convert_pillow, chunks)

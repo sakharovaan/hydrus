@@ -181,15 +181,7 @@ class HydrusDB( object ):
 
 
     def _BeginImmediate( self ):
-
-        if not self._db.in_transaction:
-
-            self._db.start_transaction()
-
-            self._transaction_started = HydrusData.GetNow()
-            self._in_transaction = True
-
-
+        pass
 
     def _CleanUpCaches( self ):
 
@@ -197,27 +189,11 @@ class HydrusDB( object ):
 
 
     def _CloseDBCursor( self ):
-
-        if self._db is not None:
-
-            if self._db.in_transaction:
-
-                self._Commit()
-
-            self._c.close()
-            self._c = None
-
+        self._c.close()
 
 
     def _Commit( self ):
-
-        if self._db.in_transaction:
-
-            self._db.commit()
-
-        else:
-
-            HydrusData.Print( 'Received a call to commit, but was not in a transaction!' )
+        pass
 
 
 
@@ -330,6 +306,7 @@ class HydrusDB( object ):
                 charset=charset[0]
             )
 
+        self._db.autocommit = True
         self._connection_timestamp = HydrusData.GetNow()
 
         self._c = self._db.cursor()
@@ -384,21 +361,6 @@ class HydrusDB( object ):
             elif job_type in ( 'write' ):
 
                 result = self._Write( action, *args, **kwargs )
-
-
-            if HydrusData.TimeHasPassed( self._transaction_started + self.TRANSACTION_COMMIT_TIME ):
-
-                self._current_status = 'db committing'
-
-                self.publish_status_update()
-
-                self._Commit()
-
-                self._BeginImmediate()
-
-            else:
-
-                self._Save()
 
 
             for ( topic, args, kwargs ) in self._pubsubs:
@@ -478,10 +440,7 @@ class HydrusDB( object ):
 
 
     def _Save( self ):
-
-        self._db.commit()
-        self._db.start_transaction()
-
+        pass
 
     def _SelectFromList( self, select_statement, xs ):
 
@@ -715,18 +674,7 @@ class HydrusDB( object ):
                 self.publish_status_update()
 
             except queue.Empty:
-
-                if HydrusData.TimeHasPassed( self._transaction_started + self.TRANSACTION_COMMIT_TIME ):
-
-                    self._Commit()
-
-                    self._BeginImmediate()
-
-
-
-            if HydrusData.TimeHasPassed( self._connection_timestamp + CONNECTION_REFRESH_TIME ): # just to clear out the journal files
-
-                self._InitDBCursor(started=True)
+                pass
 
 
 
