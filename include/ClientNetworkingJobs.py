@@ -215,8 +215,8 @@ class NetworkJob( object ):
     
     def _SendRequestAndGetResponse( self ):
 
-        time.sleep(random.randint(2, 20))
-        
+        time.sleep(random.randint(1, 5))
+
         with self._lock:
             
             ncs = list( self._network_contexts )
