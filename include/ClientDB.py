@@ -200,7 +200,7 @@ class DB( HydrusDB.HydrusDB ):
 
         if overwrite:
 
-            insert_phrase = 'REPLACE INTO'
+            insert_phrase = 'INSERT IGNORE INTO'
 
         else:
 
@@ -5805,14 +5805,6 @@ class DB( HydrusDB.HydrusDB ):
 
             except:
 
-                self._c.execute( 'DELETE FROM json_dumps WHERE dump_type = %s;', ( dump_type, ) )
-
-                if self._in_transaction:
-
-                    self._Commit()
-
-                    self._BeginImmediate()
-
                 raise
 
             return HydrusSerialisable.CreateFromSerialisableTuple( ( dump_type, version, serialisable_info ) )
@@ -5844,12 +5836,6 @@ class DB( HydrusDB.HydrusDB ):
 
                     self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s AND timestamp = %s;', ( dump_type, dump_name, timestamp ) )
 
-                    if self._in_transaction:
-
-                        self._Commit()
-
-                        self._BeginImmediate()
-
                     raise
 
             return objs
@@ -5877,12 +5863,6 @@ class DB( HydrusDB.HydrusDB ):
             except:
 
                 self._c.execute( 'DELETE FROM json_dumps_named WHERE dump_type = %s AND dump_name = %s AND timestamp = %s;', ( dump_type, dump_name, timestamp ) )
-
-                if self._in_transaction:
-
-                    self._Commit()
-
-                    self._BeginImmediate()
 
                 raise
 
