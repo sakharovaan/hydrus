@@ -1,5 +1,5 @@
 2016/09/18 13:47:09: Profiling write content_updates
-2016/09/18 13:47:09: Stats
+2016/09/18 13:47:09: Stats
          278 function calls in 0.164 seconds
 
    Ordered by: internal time
@@ -110,7 +110,7 @@
 
 
 
-2016/09/18 13:47:09: Callers
+2016/09/18 13:47:09: Callers
    Ordered by: internal time
 
 Function                                                      was called by...
@@ -248,7 +248,7 @@ collections.py:479(__missing__)                               <-       2    0.00
 
 
 
-2016/09/18 13:47:09: Callees
+2016/09/18 13:47:09: Callees
    Ordered by: internal time
 
 Function                                                      called...

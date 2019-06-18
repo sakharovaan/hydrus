@@ -511,7 +511,7 @@ class DB( HydrusDB.HydrusDB ):
 
         ac_cache_table_name = GenerateCombinedFilesMappingsCacheTableName( service_id )
 
-        self._c.execute( 'CREATE TABLE ' + ac_cache_table_name + ' ( tag_id INTEGER PRIMARY KEY, current_count INTEGER, pending_count INTEGER );' )
+        self._c.execute( 'CREATE TABLE ' + ac_cache_table_name + ' ( tag_id INTEGER PRIMARY KEY, current_count INTEGER, pending_count INTEGER ) ENGINE=RocksDB;' )
 
         #
 
@@ -687,8 +687,8 @@ class DB( HydrusDB.HydrusDB ):
 
         ( hash_id_map_table_name, tag_id_map_table_name ) = GenerateRepositoryMasterCacheTableNames( service_id )
 
-        self._c.execute( 'CREATE TABLE ' + hash_id_map_table_name + ' ( service_hash_id INTEGER PRIMARY KEY, hash_id INTEGER );' )
-        self._c.execute( 'CREATE TABLE ' + tag_id_map_table_name + ' ( service_tag_id INTEGER PRIMARY KEY, tag_id INTEGER );' )
+        self._c.execute( 'CREATE TABLE ' + hash_id_map_table_name + ' ( service_hash_id INTEGER PRIMARY KEY, hash_id INTEGER ) ENGINE=RocksDB;' )
+        self._c.execute( 'CREATE TABLE ' + tag_id_map_table_name + ' ( service_tag_id INTEGER PRIMARY KEY, tag_id INTEGER ) ENGINE=RocksDB;' )
 
 
     def _CacheSimilarFilesAddLeaf( self, phash_id, phash ):
@@ -2398,15 +2398,15 @@ class DB( HydrusDB.HydrusDB ):
 
         ( cache_files_table_name, cache_current_mappings_table_name, cache_deleted_mappings_table_name, cache_pending_mappings_table_name, ac_cache_table_name ) = GenerateSpecificMappingsCacheTableNames( file_service_id, tag_service_id )
 
-        self._c.execute( 'CREATE TABLE ' + cache_files_table_name + ' ( hash_id INTEGER PRIMARY KEY );' )
+        self._c.execute( 'CREATE TABLE ' + cache_files_table_name + ' ( hash_id INTEGER PRIMARY KEY ) ENGINE=RocksDB;' )
 
-        self._c.execute( 'CREATE TABLE ' + cache_current_mappings_table_name + ' ( hash_id INTEGER, tag_id INTEGER, PRIMARY KEY ( hash_id, tag_id ) );' )
+        self._c.execute( 'CREATE TABLE ' + cache_current_mappings_table_name + ' ( hash_id INTEGER, tag_id INTEGER, PRIMARY KEY ( hash_id, tag_id ) ) ENGINE=RocksDB;' )
 
-        self._c.execute( 'CREATE TABLE ' + cache_deleted_mappings_table_name + ' ( hash_id INTEGER, tag_id INTEGER, PRIMARY KEY ( hash_id, tag_id ) );' )
+        self._c.execute( 'CREATE TABLE ' + cache_deleted_mappings_table_name + ' ( hash_id INTEGER, tag_id INTEGER, PRIMARY KEY ( hash_id, tag_id ) ) ENGINE=RocksDB;' )
 
-        self._c.execute( 'CREATE TABLE ' + cache_pending_mappings_table_name + ' ( hash_id INTEGER, tag_id INTEGER, PRIMARY KEY ( hash_id, tag_id ) );' )
+        self._c.execute( 'CREATE TABLE ' + cache_pending_mappings_table_name + ' ( hash_id INTEGER, tag_id INTEGER, PRIMARY KEY ( hash_id, tag_id ) ) ENGINE=RocksDB;' )
 
-        self._c.execute( 'CREATE TABLE ' + ac_cache_table_name + ' ( tag_id INTEGER PRIMARY KEY, current_count INTEGER, pending_count INTEGER );' )
+        self._c.execute( 'CREATE TABLE ' + ac_cache_table_name + ' ( tag_id INTEGER PRIMARY KEY, current_count INTEGER, pending_count INTEGER ) ENGINE=RocksDB;' )
 
         #
 
@@ -2790,7 +2790,7 @@ class DB( HydrusDB.HydrusDB ):
         for file in glob.iglob(os.path.join(HC.JSON_PATH, '*')):
             if file.endswith('.json'):
                 if os.path.split(file)[1] not in dump_names:
-                    os.unlink(file)
+                    os.rename(file, file.replace('.json', '.bak'))
 
     def _CreateDB( self ):
         self._c.execute( 'CREATE DATABASE %s;' % HC.MYSQL_DB)
@@ -2997,23 +2997,23 @@ class DB( HydrusDB.HydrusDB ):
 
     def _CreateDBCaches( self ):
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_perceptual_hashes ( phash_id INTEGER PRIMARY KEY AUTO_INCREMENT, phash varchar(255) UNIQUE );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_perceptual_hashes ( phash_id INTEGER PRIMARY KEY AUTO_INCREMENT, phash varchar(255) UNIQUE ) ENGINE=RocksDB;' )
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_perceptual_hash_map ( phash_id INTEGER, hash_id INTEGER, PRIMARY KEY ( phash_id, hash_id ) );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_perceptual_hash_map ( phash_id INTEGER, hash_id INTEGER, PRIMARY KEY ( phash_id, hash_id ) ) ENGINE=RocksDB;' )
         self._CreateIndex( 'shape_perceptual_hash_map', [ 'hash_id' ] )
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_vptree ( phash_id INTEGER PRIMARY KEY, parent_id INTEGER, radius INTEGER, inner_id INTEGER, inner_population INTEGER, outer_id INTEGER, outer_population INTEGER );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_vptree ( phash_id INTEGER PRIMARY KEY, parent_id INTEGER, radius INTEGER, inner_id INTEGER, inner_population INTEGER, outer_id INTEGER, outer_population INTEGER ) ENGINE=RocksDB;' )
         self._CreateIndex( 'shape_vptree', [ 'parent_id' ] )
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_maintenance_phash_regen ( hash_id INTEGER PRIMARY KEY );' )
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_maintenance_branch_regen ( phash_id INTEGER PRIMARY KEY );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_maintenance_phash_regen ( hash_id INTEGER PRIMARY KEY ) ENGINE=RocksDB;' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_maintenance_branch_regen ( phash_id INTEGER PRIMARY KEY ) ENGINE=RocksDB;' )
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_search_cache ( hash_id INTEGER PRIMARY KEY, searched_distance INTEGER );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS shape_search_cache ( hash_id INTEGER PRIMARY KEY, searched_distance INTEGER ) ENGINE=RocksDB;' )
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS duplicate_pairs ( smaller_hash_id INTEGER, larger_hash_id INTEGER, duplicate_type INTEGER, PRIMARY KEY ( smaller_hash_id, larger_hash_id ) );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS duplicate_pairs ( smaller_hash_id INTEGER, larger_hash_id INTEGER, duplicate_type INTEGER, PRIMARY KEY ( smaller_hash_id, larger_hash_id ) ) ENGINE=RocksDB;' )
         self._CreateIndex( 'duplicate_pairs', [ 'larger_hash_id', 'smaller_hash_id' ], unique = True )
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS integer_subtags ( subtag_id INTEGER PRIMARY KEY, integer_subtag INTEGER );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS integer_subtags ( subtag_id INTEGER PRIMARY KEY, integer_subtag INTEGER ) ENGINE=RocksDB;' )
         self._CreateIndex( 'integer_subtags', [ 'integer_subtag' ] )
 
 
@@ -3607,22 +3607,22 @@ class DB( HydrusDB.HydrusDB ):
 
         ( current_mappings_table_name, deleted_mappings_table_name, pending_mappings_table_name, petitioned_mappings_table_name ) = GenerateMappingsTableNames( service_id )
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + current_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + current_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) ) ENGINE=RocksDB;' )
         self._CreateIndex( current_mappings_table_name, [ 'hash_id', 'tag_id' ], unique = True )
         self._CreateIndex(current_mappings_table_name, ['tag_id'], unique=False)
         self._CreateIndex(current_mappings_table_name, ['hash_id'], unique=False)
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + deleted_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + deleted_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) ) ENGINE=RocksDB;' )
         self._CreateIndex( deleted_mappings_table_name, [ 'hash_id', 'tag_id' ], unique = True )
         self._CreateIndex(deleted_mappings_table_name, ['tag_id'], unique=False)
         self._CreateIndex(deleted_mappings_table_name, ['hash_id'], unique=False)
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + pending_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + pending_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) ) ENGINE=RocksDB;' )
         self._CreateIndex( pending_mappings_table_name, [ 'hash_id', 'tag_id' ], unique = True )
         self._CreateIndex(pending_mappings_table_name, ['tag_id'], unique=False)
         self._CreateIndex(pending_mappings_table_name, ['hash_id'], unique=False)
 
-        self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + petitioned_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, reason_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) );' )
+        self._c.execute( 'CREATE TABLE IF NOT EXISTS ' + petitioned_mappings_table_name + ' ( tag_id INTEGER, hash_id INTEGER, reason_id INTEGER, PRIMARY KEY ( tag_id, hash_id ) ) ENGINE=RocksDB;' )
         self._CreateIndex( petitioned_mappings_table_name, [ 'hash_id', 'tag_id' ], unique = True )
         self._CreateIndex(petitioned_mappings_table_name, ['tag_id'], unique=False)
         self._CreateIndex(petitioned_mappings_table_name, ['hash_id'], unique=False)
