@@ -530,16 +530,7 @@ class GallerySeedLog( HydrusSerialisable.SerialisableBase ):
         
     
     def _GetStatusesToCounts( self ):
-        
-        statuses_to_counts = collections.Counter()
-        
-        for gallery_seed in self._gallery_seeds:
-            
-            statuses_to_counts[ gallery_seed.status ] += 1
-            
-        
-        return statuses_to_counts
-        
+        return collections.Counter(x.status for x in self._gallery_seeds)
     
     def _GetGallerySeeds( self, status = None ):
         
@@ -814,13 +805,9 @@ class GallerySeedLog( HydrusSerialisable.SerialisableBase ):
         
     
     def GetStatusesToCounts( self ):
-        
-        with self._lock:
+        return self._GetStatusesToCounts()
             
-            return self._GetStatusesToCounts()
-            
-        
-    
+
     def HasGallerySeed( self, gallery_seed ):
         
         with self._lock:

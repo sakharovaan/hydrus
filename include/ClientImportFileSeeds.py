@@ -1444,16 +1444,7 @@ class FileSeedCache( HydrusSerialisable.SerialisableBase ):
         
     
     def _GetStatusesToCounts( self ):
-        
-        statuses_to_counts = dict()
-        
-        for file_seed in self._file_seeds:
-            if file_seed.status not in statuses_to_counts:
-                statuses_to_counts[file_seed.status] = 1
-            else:
-                statuses_to_counts[file_seed.status] += 1
-
-        return statuses_to_counts
+        return collections.Counter(x.status for x in self._file_seeds)
         
     
     def _HasFileSeed( self, file_seed ):
