@@ -10,6 +10,7 @@ from . import HydrusPaths
 from . import HydrusSerialisable
 from . import HydrusTags
 import os
+from . import HydrusLocking
 import threading
 import wx
 
@@ -25,7 +26,7 @@ class ClientOptions( HydrusSerialisable.SerialisableBase ):
         
         self._dictionary = HydrusSerialisable.SerialisableDictionary()
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('ClientOptions')
         
         self._InitialiseDefaults()
         

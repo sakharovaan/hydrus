@@ -20,6 +20,7 @@ import shutil
 import sqlite3
 import stat
 import sys
+from . import HydrusLocking
 import threading
 import time
 import traceback

@@ -15,6 +15,7 @@ import os
 import json
 import requests
 import re
+from . import HydrusLocking
 import threading
 import time
 import urllib.parse
@@ -69,7 +70,7 @@ class NetworkLoginManager( HydrusSerialisable.SerialisableBase ):
         
         self._dirty = False
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('NetworkLoginManager')
         
         self._login_scripts = HydrusSerialisable.SerialisableList()
         self._domains_to_login_info = {}

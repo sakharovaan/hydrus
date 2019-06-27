@@ -10,6 +10,7 @@ from PIL import ImageFile as PILImageFile
 from PIL import Image as PILImage
 import shutil
 import struct
+from . import HydrusLocking
 import threading
 import time
 import traceback

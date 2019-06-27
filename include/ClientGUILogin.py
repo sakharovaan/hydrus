@@ -36,6 +36,7 @@ from . import HydrusText
 import itertools
 import os
 import re
+from . import HydrusLocking
 import threading
 import traceback
 import time

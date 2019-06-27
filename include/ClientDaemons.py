@@ -13,6 +13,7 @@ from . import HydrusSerialisable
 from . import HydrusThreading
 from . import ClientConstants as CC
 import random
+from . import HydrusLocking
 import threading
 import time
 import wx

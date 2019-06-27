@@ -4,6 +4,7 @@ from . import HydrusExceptions
 from . import HydrusGlobals as HG
 from . import HydrusSerialisable
 import os
+from . import HydrusLocking
 import threading
 
 CLIENT_API_PERMISSION_ADD_URLS = 0
@@ -45,7 +46,7 @@ class APIManager( HydrusSerialisable.SerialisableBase ):
         
         self._session_keys_to_access_keys_and_expirys = {}
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('APIManager')
         
         HG.client_controller.sub( self, 'MaintainMemory', 'memory_maintenance_pulse' )
         
@@ -228,7 +229,7 @@ class APIPermissions( HydrusSerialisable.SerialisableBaseNamed ):
         self._last_search_results = None
         self._search_results_timeout = 0
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('APIPermissions')
         
     
     def _GetSerialisableInfo( self ):

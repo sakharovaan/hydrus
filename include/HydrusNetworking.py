@@ -10,6 +10,7 @@ import json
 import psutil
 import socket
 import ssl
+from . import HydrusLocking
 import threading
 import time
 import urllib
@@ -186,7 +187,7 @@ class BandwidthRules( HydrusSerialisable.SerialisableBase ):
         
         HydrusSerialisable.SerialisableBase.__init__( self )
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('BandwidthRules')
         
         self._rules = set()
         
@@ -415,7 +416,7 @@ class BandwidthTracker( HydrusSerialisable.SerialisableBase ):
         
         HydrusSerialisable.SerialisableBase.__init__( self )
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('BandwidthTracker')
         
         self._next_cache_maintenance_timestamp = HydrusData.GetNow() + self.CACHE_MAINTENANCE_TIME_DELTA
         

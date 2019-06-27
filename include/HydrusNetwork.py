@@ -5,6 +5,7 @@ from . import HydrusExceptions
 from . import HydrusGlobals as HG
 from . import HydrusNetworking
 from . import HydrusSerialisable
+from . import HydrusLocking
 import threading
 import urllib
 
@@ -335,7 +336,7 @@ class Account( object ):
         
         HydrusSerialisable.SerialisableBase.__init__( self )
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('Account')
         
         self._account_key = account_key
         self._account_type = account_type
@@ -1636,7 +1637,7 @@ class Metadata( HydrusSerialisable.SerialisableBase ):
         
         HydrusSerialisable.SerialisableBase.__init__( self )
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('Metadata')
         
         now = HydrusData.GetNow()
         
@@ -2023,7 +2024,7 @@ class ServerService( object ):
         self._name = name
         self._port = port
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('ServerService')
         
         self._LoadFromDictionary( dictionary )
         

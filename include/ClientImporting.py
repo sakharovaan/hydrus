@@ -21,6 +21,7 @@ from . import HydrusSerialisable
 from . import HydrusThreading
 import os
 import random
+from . import HydrusLocking
 import threading
 import time
 import traceback

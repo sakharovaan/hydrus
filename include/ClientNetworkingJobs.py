@@ -11,6 +11,7 @@ from . import HydrusThreading
 from . import HydrusText
 import os
 import requests
+from . import HydrusLocking
 import threading
 import traceback
 import time
@@ -106,7 +107,7 @@ class NetworkJob( object ):
         
         self.engine = None
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('NetworkJob')
         
         self._method = method
         self._url = url

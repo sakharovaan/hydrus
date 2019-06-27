@@ -12,6 +12,7 @@ from . import HydrusExceptions
 from . import HydrusGlobals as HG
 from . import HydrusSerialisable
 import os
+from . import HydrusLocking
 import threading
 import time
 import urllib.parse
@@ -41,7 +42,7 @@ class SimpleDownloaderImport( HydrusSerialisable.SerialisableBase ):
         self._parser_status = ''
         self._current_action = ''
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('SimpleDownloaderImport')
         
         self._files_network_job = None
         self._page_network_job = None
@@ -661,7 +662,7 @@ class URLsImport( HydrusSerialisable.SerialisableBase ):
         
         self._downloader_key = HydrusData.GenerateKey()
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('URLsImport')
         
         self._files_network_job = None
         self._gallery_network_job = None

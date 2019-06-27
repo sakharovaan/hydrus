@@ -4,6 +4,7 @@ from . import HydrusConstants as HC
 from . import HydrusExceptions
 from . import HydrusGlobals as HG
 import os
+from . import HydrusLocking
 import threading
 import time
 import unittest

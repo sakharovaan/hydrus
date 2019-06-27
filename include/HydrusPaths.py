@@ -14,10 +14,11 @@ import stat
 import subprocess
 import sys
 import tempfile
+from . import HydrusLocking
 import threading
 import traceback
 
-TEMP_PATH_LOCK = threading.Lock()
+TEMP_PATH_LOCK = HydrusLocking.LogLock('TEMP_PATH_LOCK')
 IN_USE_TEMP_PATHS = set()
 
 def AppendPathUntilNoConflicts( path ):

@@ -5,6 +5,7 @@ from . import HydrusText
 import os
 import socket
 import subprocess
+from . import HydrusLocking
 import threading
 import traceback
 
@@ -226,7 +227,7 @@ class ServicesUPnPManager( object ):
     
     def __init__( self, services ):
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('ServicesUPnPManager')
         
         self._services = services
         

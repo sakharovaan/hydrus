@@ -15,6 +15,7 @@ from . import HydrusPaths
 from . import HydrusSerialisable
 from . import HydrusThreading
 import os
+from . import HydrusLocking
 import threading
 import time
 
@@ -70,7 +71,7 @@ class HDDImport( HydrusSerialisable.SerialisableBase ):
         self._current_action = ''
         self._paused = False
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('HDDImport')
         
         self._files_repeating_job = None
         

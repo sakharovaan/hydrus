@@ -2,6 +2,7 @@ from . import HydrusConstants as HC
 from . import HydrusData
 import os
 import sys
+from . import HydrusLocking
 import threading
 import time
 
@@ -13,7 +14,7 @@ class HydrusLogger( object ):
         self._prefix = prefix
         
         self._log_path_base = self._GetLogPathBase()
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('HydrusLogger')
         
     
     def __enter__( self ):

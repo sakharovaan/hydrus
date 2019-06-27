@@ -57,6 +57,7 @@ import re
 import ssl
 import subprocess
 import sys
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -268,9 +269,9 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         self._closed_pages = []
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('FrameGUI')
         
-        self._delayed_dialog_lock = threading.Lock()
+        self._delayed_dialog_lock = HydrusLocking.LogLock('FrameGUI_delayed_dialog_lock')
         
         self._notebook = ClientGUIPages.PagesNotebook( self, self._controller, 'top page notebook' )
         
@@ -5567,7 +5568,7 @@ class FrameSplashStatus( object ):
         self._controller = controller
         self._ui = ui
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('FrameSplashStatus')
         
         self._title_text = ''
         self._status_text = ''

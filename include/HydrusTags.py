@@ -2,6 +2,7 @@ import collections
 from . import HydrusConstants as HC
 import itertools
 import os
+from . import HydrusLocking
 import threading
 import time
 import traceback

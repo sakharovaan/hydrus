@@ -16,6 +16,7 @@ from . import HydrusThreading
 import json
 import os
 import random
+from . import HydrusLocking
 import threading
 import time
 import wx
@@ -433,7 +434,7 @@ class DataCache( object ):
         
         self._total_estimated_memory_footprint = 0
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('DataCache')
         
         self._controller.sub( self, 'MaintainCache', 'memory_maintenance_pulse' )
         
@@ -587,7 +588,7 @@ class FileViewingStatsManager( object ):
         
         self._controller = controller
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('FileViewingStatsManager')
         
         self._pending_updates = {}
         
@@ -731,7 +732,7 @@ class LocalBooruCache( object ):
         
         self._controller = controller
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('LocalBooruCache')
         
         self._RefreshShares()
         
@@ -882,7 +883,7 @@ class MediaResultCache( object ):
     
     def __init__( self ):
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('MediaResultCache')
         
         self._hash_ids_to_media_results = weakref.WeakValueDictionary()
         self._hashes_to_media_results = weakref.WeakValueDictionary()
@@ -1143,7 +1144,7 @@ class ParsingCache( object ):
         self._html_to_soups = {}
         self._json_to_jsons = {}
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('ParsingCache')
         
     
     def _CleanCache( self ):
@@ -1290,7 +1291,7 @@ class ServicesManager( object ):
         
         self._controller = controller
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('ServicesManager')
         self._keys_to_services = {}
         self._services_sorted = []
         
@@ -1592,7 +1593,7 @@ class TagParentsManager( object ):
         
         self._RefreshParents()
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('TagParentsManager')
         
         self._controller.sub( self, 'NotifyNewParents', 'notify_new_parents' )
         
@@ -1760,7 +1761,7 @@ class TagSiblingsManager( object ):
         
         self._RefreshSiblings()
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('TagSiblingsManager')
         
         self._controller.sub( self, 'NotifyNewSiblings', 'notify_new_siblings_data' )
         
@@ -2099,7 +2100,7 @@ class ThumbnailCache( object ):
         
         self._InitialiseMagicMimeScores()
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('ThumbnailCache')
         
         self._thumbnail_error_occurred = False
         
@@ -2693,7 +2694,7 @@ class UndoManager( object ):
         self._inverted_commands = []
         self._current_index = 0
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('UndoManager')
         
         self._controller.sub( self, 'Undo', 'undo' )
         self._controller.sub( self, 'Redo', 'redo' )

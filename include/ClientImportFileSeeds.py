@@ -17,6 +17,7 @@ from . import HydrusPaths
 from . import HydrusSerialisable
 from . import HydrusTags
 import os
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -1428,7 +1429,7 @@ class FileSeedCache( HydrusSerialisable.SerialisableBase ):
         
         self._status_dirty = True
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('FileSeedCache')
         
     
     def __len__( self ):

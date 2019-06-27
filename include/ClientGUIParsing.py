@@ -32,6 +32,7 @@ import itertools
 import json
 import os
 import sys
+from . import HydrusLocking
 import threading
 import traceback
 import time
@@ -4117,7 +4118,7 @@ class ScriptManagementControl( wx.Panel ):
         
         self._job_key = None
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('ScriptManagementControl')
         
         self._recent_urls = []
         

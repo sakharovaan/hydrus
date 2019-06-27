@@ -13,6 +13,7 @@ from . import HydrusData
 from . import HydrusExceptions
 from . import HydrusGlobals as HG
 from . import HydrusSerialisable
+from . import HydrusLocking
 import threading
 import time
 import wx
@@ -29,7 +30,7 @@ class MultipleWatcherImport( HydrusSerialisable.SerialisableBase ):
         
         HydrusSerialisable.SerialisableBase.__init__( self )
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('MultipleWatcherImport')
         
         self._page_key = 'initialising page key'
         
@@ -545,7 +546,7 @@ class WatcherImport( HydrusSerialisable.SerialisableBase ):
         
         self._watcher_key = HydrusData.GenerateKey()
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('WatcherImport')
         
         self._last_pubbed_page_name = ''
         

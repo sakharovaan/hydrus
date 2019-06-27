@@ -41,6 +41,7 @@ import queue
 import shutil
 import stat
 import string
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -50,6 +51,7 @@ import yaml
 from . import HydrusData
 from . import ClientSearch
 from . import HydrusGlobals as HG
+import threading
 
 # Option Enums
 
@@ -676,7 +678,7 @@ class FrameInputLocalFiles( wx.Frame ):
         
         self.SetInitialSize( ( x, y ) )
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('FrameInputLocalFiles')
         
         self._current_path_data = {}
         

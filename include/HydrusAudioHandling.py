@@ -1,5 +1,6 @@
 from . import HydrusConstants as HC
 import os
+from . import HydrusLocking
 import threading
 import time
 import traceback

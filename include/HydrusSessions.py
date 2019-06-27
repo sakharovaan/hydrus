@@ -6,6 +6,7 @@ import queue
 import re
 import sqlite3
 import sys
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -18,7 +19,7 @@ class HydrusSessionManagerServer( object ):
     
     def __init__( self ):
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('HydrusSessionManagerServer')
         
         self.RefreshAllAccounts()
         

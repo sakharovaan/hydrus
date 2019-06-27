@@ -1,3 +1,4 @@
+from . import HydrusLocking
 import threading
 
 controller = None
@@ -46,4 +47,4 @@ twisted_is_broke = False
 
 do_not_catch_char_hook = False
 
-dirty_object_lock = threading.Lock()
+dirty_object_lock = HydrusLocking.LogLock('dirty_object_lock')

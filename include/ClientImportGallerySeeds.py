@@ -12,6 +12,7 @@ from . import HydrusSerialisable
 from . import HydrusTags
 import itertools
 import os
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -511,7 +512,7 @@ class GallerySeedLog( HydrusSerialisable.SerialisableBase ):
         
         self._status_dirty = True
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('GallerySeedLog')
         
     
     def __len__( self ):

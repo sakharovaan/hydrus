@@ -46,6 +46,7 @@ from . import ClientGUIScrolledPanelsManagement
 from . import ClientGUITopLevelWindows
 import gc
 import psutil
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -76,7 +77,7 @@ class Controller( HydrusController.HydrusController ):
         
         HC.options = self.options
         
-        self._page_key_lock = threading.Lock()
+        self._page_key_lock = HydrusLocking.LogLock('_page_key_lock')
         
         self._thread_slots[ 'watcher_files' ] = ( 0, 15 )
         self._thread_slots[ 'watcher_check' ] = ( 0, 5 )

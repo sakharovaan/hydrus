@@ -16,6 +16,7 @@ from . import HydrusText
 import os
 import re
 import sys
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -3017,7 +3018,7 @@ class ThreadToGUIUpdater( object ):
         self._win = win
         self._func = func
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('ThreadToGUIUpdater')
         self._dirty_count = 0
         
         self._args = None

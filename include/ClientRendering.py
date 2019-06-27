@@ -9,6 +9,7 @@ from . import HydrusGlobals as HG
 from . import HydrusThreading
 from . import HydrusVideoHandling
 import os
+from . import HydrusLocking
 import threading
 import time
 import wx
@@ -264,7 +265,7 @@ class RasterContainerVideo( RasterContainer ):
         self._num_frames_backwards = frame_buffer_length * 2 // 3
         self._num_frames_forwards = frame_buffer_length // 3
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('RasterContainerVideo')
         
         self._last_index_rendered = -1
         self._next_render_index = -1

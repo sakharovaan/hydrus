@@ -13,6 +13,7 @@ from . import HydrusGlobals as HG
 from . import HydrusPaths
 from . import HydrusSerialisable
 import itertools
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -77,7 +78,7 @@ class GalleryImport( HydrusSerialisable.SerialisableBase ):
         self._no_work_until = 0
         self._no_work_until_reason = ''
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('GalleryImport')
         
         self._file_status = ''
         self._gallery_status = ''
@@ -861,7 +862,7 @@ class MultipleGalleryImport( HydrusSerialisable.SerialisableBase ):
         
         HydrusSerialisable.SerialisableBase.__init__( self )
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('MultipleGalleryImport')
         
         self._page_key = 'initialising page key'
         

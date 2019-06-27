@@ -17,6 +17,7 @@ import shutil
 import struct
 import subprocess
 import sys
+from . import HydrusLocking
 import threading
 import time
 import traceback

@@ -15,6 +15,7 @@ from . import HydrusText
 import json
 import os
 import re
+from . import HydrusLocking
 import threading
 import time
 import urllib.parse

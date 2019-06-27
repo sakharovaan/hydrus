@@ -13,6 +13,7 @@ from . import HydrusExceptions
 from . import HydrusNetworking
 import os
 from . import TestController
+from . import HydrusLocking
 import threading
 import time
 import unittest

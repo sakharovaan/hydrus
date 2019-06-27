@@ -1,5 +1,6 @@
 from . import HydrusExceptions
 import queue
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -44,7 +45,7 @@ class JobKey( object ):
         self._next_longer_pause = HydrusData.GetNow() + self._longer_pause_period
         
         self._urls = []
-        self._variable_lock = threading.Lock()
+        self._variable_lock = HydrusLocking.LogLock('JobKey')
         self._variables = dict()
         
     
@@ -470,7 +471,7 @@ class FileRWLock( object ):
         self.read = self.RLock( self )
         self.write = self.WLock( self )
         
-        self.lock = threading.Lock()
+        self.lock = HydrusLocking.LogLock('WLock')
         
         self.read_available_event = threading.Event()
         self.write_available_event = threading.Event()

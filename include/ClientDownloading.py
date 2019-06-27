@@ -11,6 +11,7 @@ import json
 import os
 import re
 import requests
+from . import HydrusLocking
 import threading
 import time
 from . import HydrusData

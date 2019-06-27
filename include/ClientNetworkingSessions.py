@@ -6,6 +6,7 @@ from . import HydrusData
 from . import HydrusSerialisable
 from . import HydrusGlobals as HG
 import requests
+from . import HydrusLocking
 import threading
 
 try:
@@ -36,7 +37,7 @@ class NetworkSessionManager( HydrusSerialisable.SerialisableBase ):
         
         self._dirty = False
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('NetworkSessionManager')
         
         self._network_contexts_to_sessions = {}
         

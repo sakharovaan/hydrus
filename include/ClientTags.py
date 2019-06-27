@@ -3,6 +3,7 @@ import collections
 from . import HydrusGlobals as HG
 from . import HydrusSerialisable
 from . import HydrusTags
+from . import HydrusLocking
 import threading
 
 def ConvertTagSliceToString( tag_slice ):
@@ -221,7 +222,7 @@ class TagFilter( HydrusSerialisable.SerialisableBase ):
         
         HydrusSerialisable.SerialisableBase.__init__( self )
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('TagFilter')
         
         self._tag_slices_to_rules = {}
         

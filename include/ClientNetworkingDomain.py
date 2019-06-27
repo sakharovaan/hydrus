@@ -11,6 +11,7 @@ from . import HydrusNetworking
 from . import HydrusSerialisable
 import os
 import re
+from . import HydrusLocking
 import threading
 import time
 import urllib.parse
@@ -377,7 +378,7 @@ class NetworkDomainManager( HydrusSerialisable.SerialisableBase ):
         
         self._dirty = False
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('NetworkDomainManager')
         
         self._RecalcCache()
         

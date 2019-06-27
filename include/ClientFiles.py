@@ -14,6 +14,7 @@ from . import HydrusPaths
 from . import HydrusThreading
 import os
 import random
+from . import HydrusLocking
 import threading
 import time
 import wx
@@ -1236,7 +1237,7 @@ class FilesMaintenanceManager( object ):
         
         self._ReInitialiseWorkRules()
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('FilesMaintenanceManager')
         
         self._controller.sub( self, 'NotifyNewOptions', 'notify_new_options' )
         

@@ -11,6 +11,7 @@ import re
 import subprocess
 import sys
 import traceback
+from . import HydrusLocking
 import threading
 import time
 

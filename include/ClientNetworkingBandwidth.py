@@ -7,6 +7,7 @@ from . import HydrusGlobals as HG
 from . import HydrusNetworking
 from . import HydrusThreading
 from . import HydrusSerialisable
+from . import HydrusLocking
 import threading
 
 class NetworkBandwidthManager( HydrusSerialisable.SerialisableBase ):
@@ -23,7 +24,7 @@ class NetworkBandwidthManager( HydrusSerialisable.SerialisableBase ):
         
         self._dirty = False
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('NetworkBandwidthManager')
         
         self._last_pages_gallery_query_timestamps = collections.defaultdict( lambda: 0 )
         self._last_subscriptions_gallery_query_timestamps = collections.defaultdict( lambda: 0 )

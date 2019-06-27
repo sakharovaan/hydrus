@@ -34,6 +34,7 @@ import itertools
 import json
 import os
 import random
+from . import HydrusLocking
 import threading
 import time
 import traceback

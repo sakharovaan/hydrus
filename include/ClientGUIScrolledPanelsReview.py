@@ -40,6 +40,7 @@ from . import HydrusSerialisable
 import os
 import stat
 import sys
+from . import HydrusLocking
 import threading
 import time
 import traceback

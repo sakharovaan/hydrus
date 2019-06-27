@@ -16,6 +16,7 @@ from . import HydrusNetworking
 from . import HydrusSerialisable
 import json
 import os
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -165,7 +166,7 @@ class Service( object ):
         self._name = name
         
         self._dirty = False
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('Service')
         
         self._LoadFromDictionary( dictionary )
         
@@ -1128,7 +1129,7 @@ class ServiceRepository( ServiceRestricted ):
         
         ServiceRestricted.__init__( self, service_key, service_type, name, dictionary = dictionary )
         
-        self._sync_lock = threading.Lock()
+        self._sync_lock = HydrusLocking.LogLock('ServiceRepository_sync_lock')
         
     
     def _CanSyncDownload( self ):

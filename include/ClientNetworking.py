@@ -13,6 +13,7 @@ import os
 import random
 import requests
 import urllib3
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -50,7 +51,7 @@ class NetworkEngine( object ):
         self.domain_manager.engine = self
         self.login_manager.engine = self
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('NetworkEngine')
         
         self.RefreshOptions()
         

@@ -2,6 +2,8 @@ from . import HydrusConstants as HC
 from . import HydrusData
 from . import HydrusExceptions
 import queue
+from . import HydrusLocking
+import threading
 import threading
 import traceback
 import weakref
@@ -19,7 +21,7 @@ class HydrusPubSub( object ):
         
         self._pub_event = threading.Event()
         
-        self._lock = threading.Lock()
+        self._lock = HydrusLocking.LogLock('HydrusPubSub')
         
         self._topics_to_objects = {}
         self._topics_to_method_names = {}

@@ -11,6 +11,7 @@ from . import HydrusPaths
 from . import HydrusText
 from . import HydrusVideoHandling
 import os
+from . import HydrusLocking
 import threading
 import traceback
 

@@ -12,6 +12,7 @@ from . import HydrusThreading
 import os
 import random
 import sys
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -44,7 +45,7 @@ class HydrusController( object ):
         
         self._thread_slots[ 'misc' ] = ( 0, 10 )
         
-        self._thread_slot_lock = threading.Lock()
+        self._thread_slot_lock = HydrusLocking.LogLock('HydrusController_thread_slot_lock')
         
         self._call_to_threads = []
         self._long_running_call_to_threads = []
@@ -52,7 +53,7 @@ class HydrusController( object ):
         self._thread_pool_busy_status_text = ''
         self._thread_pool_busy_status_text_new_check_time = 0
         
-        self._call_to_thread_lock = threading.Lock()
+        self._call_to_thread_lock = HydrusLocking.LogLock('HydrusController_call_to_thread_lock')
         
         self._timestamps = collections.defaultdict( lambda: 0 )
         
@@ -60,7 +61,7 @@ class HydrusController( object ):
         
         self._timestamps[ 'last_sleep_check' ] = HydrusData.GetNow()
         
-        self._sleep_lock = threading.Lock()
+        self._sleep_lock = HydrusLocking.LogLock('HydrusController_sleep_lock')
         
         self._just_woke_from_sleep = False
         

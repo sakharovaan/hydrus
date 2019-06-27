@@ -10,6 +10,7 @@ from . import HydrusGlobals as HG
 from . import HydrusPaths
 from . import HydrusSerialisable
 from . import HydrusTags
+from . import HydrusLocking
 import threading
 import traceback
 import os

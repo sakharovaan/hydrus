@@ -31,6 +31,7 @@ import sqlite3
 import stat
 from . import TestController
 import time
+from . import HydrusLocking
 import threading
 import unittest
 import wx

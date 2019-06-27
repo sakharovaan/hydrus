@@ -3,6 +3,7 @@ import collections
 from . import HydrusExceptions
 import queue
 import random
+from . import HydrusLocking
 import threading
 import time
 import traceback
@@ -13,7 +14,7 @@ import os
 NEXT_THREAD_CLEAROUT = 0
 
 THREADS_TO_THREAD_INFO = {}
-THREAD_INFO_LOCK = threading.Lock()
+THREAD_INFO_LOCK = HydrusLocking.LogLock('THREAD_INFO_LOCK')
 
 def CheckIfThreadShuttingDown():
     
@@ -379,7 +380,7 @@ class JobScheduler( threading.Thread ):
         
         self._waiting = []
         
-        self._waiting_lock = threading.Lock()
+        self._waiting_lock = HydrusLocking.LogLock('JobScheduler_waiting_lock')
         
         self._new_job_arrived = threading.Event()
         
@@ -631,7 +632,7 @@ class SchedulableJob( object ):
         
         self._thread_slot_type = None
         
-        self._work_lock = threading.Lock()
+        self._work_lock = HydrusLocking.LogLock('SchedulableJob')
         
         self._currently_working = threading.Event()
         self._is_cancelled = threading.Event()
