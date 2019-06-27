@@ -13,7 +13,7 @@ def GetClientDefaultOptions():
     options = {}
     
     options[ 'play_dumper_noises' ] = True
-    options[ 'default_collect' ] = None
+    options[ 'default_collect' ] = []
     options[ 'export_path' ] = None
     options[ 'hpos' ] = 400
     options[ 'vpos' ] = 700
@@ -25,7 +25,7 @@ def GetClientDefaultOptions():
     options[ 'num_autocomplete_chars' ] = 2
     options[ 'default_gui_session' ] = 'last session'
     options[ 'fetch_ac_results_automatically' ] = True
-    options[ 'ac_timings' ] = ( 3, 500, 250 )
+    options[ 'ac_timings' ] = ( 4, 300, 100 )
     options[ 'idle_period' ] = 60 * 30
     options[ 'idle_mouse_period' ] = 60 * 10
     options[ 'idle_cpu_max' ] = 50
@@ -37,7 +37,6 @@ def GetClientDefaultOptions():
     options[ 'trash_max_size' ] = 2048
     options[ 'remove_trashed_files' ] = False
     options[ 'remove_filtered_files' ] = False
-    options[ 'external_host' ] = None
     options[ 'gallery_file_limit' ] = 2000
     options[ 'always_embed_autocompletes' ] = HC.PLATFORM_LINUX or HC.PLATFORM_OSX
     options[ 'confirm_trash' ] = True
@@ -318,7 +317,7 @@ def GetDefaultShortcuts():
     
     shortcuts = []
     
-    archive_delete_filter = ClientGUIShortcuts.Shortcuts( 'archive_delete_filter' )
+    archive_delete_filter = ClientGUIShortcuts.ShortcutSet( 'archive_delete_filter' )
     
     archive_delete_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_MOUSE, CC.SHORTCUT_MOUSE_LEFT, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'archive_delete_filter_keep' ) )
     archive_delete_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_MOUSE, CC.SHORTCUT_MOUSE_RIGHT, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'archive_delete_filter_delete' ) )
@@ -334,19 +333,19 @@ def GetDefaultShortcuts():
     
     shortcuts.append( archive_delete_filter )
     
-    duplicate_filter = ClientGUIShortcuts.Shortcuts( 'duplicate_filter' )
+    duplicate_filter = ClientGUIShortcuts.ShortcutSet( 'duplicate_filter' )
     
-    duplicate_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_MOUSE, CC.SHORTCUT_MOUSE_LEFT, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'duplicate_filter_this_is_better' ) )
+    duplicate_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_MOUSE, CC.SHORTCUT_MOUSE_LEFT, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'duplicate_filter_this_is_better_and_delete_other' ) )
     duplicate_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_MOUSE, CC.SHORTCUT_MOUSE_RIGHT, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'duplicate_filter_alternates' ) )
     duplicate_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_MOUSE, CC.SHORTCUT_MOUSE_MIDDLE, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'duplicate_filter_back' ) )
     
-    duplicate_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_SPACE, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'duplicate_filter_this_is_better' ) )
+    duplicate_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_SPACE, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'duplicate_filter_this_is_better_and_delete_other' ) )
     duplicate_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_UP, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'duplicate_filter_skip' ) )
     duplicate_filter.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_NUMPAD_UP, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'duplicate_filter_skip' ) )
     
     shortcuts.append( duplicate_filter )
     
-    media = ClientGUIShortcuts.Shortcuts( 'media' )
+    media = ClientGUIShortcuts.ShortcutSet( 'media' )
     
     media.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_F4, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'manage_file_ratings' ) )
     media.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_F3, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'manage_file_tags' ) )
@@ -364,7 +363,7 @@ def GetDefaultShortcuts():
     
     shortcuts.append( media )
     
-    main_gui = ClientGUIShortcuts.Shortcuts( 'main_gui' )
+    main_gui = ClientGUIShortcuts.ShortcutSet( 'main_gui' )
     
     main_gui.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_F5, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'refresh' ) )
     main_gui.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_F9, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'new_page' ) )
@@ -381,7 +380,7 @@ def GetDefaultShortcuts():
     
     shortcuts.append( main_gui )
     
-    media_viewer_browser = ClientGUIShortcuts.Shortcuts( 'media_viewer_browser' )
+    media_viewer_browser = ClientGUIShortcuts.ShortcutSet( 'media_viewer_browser' )
     
     media_viewer_browser.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_UP, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'view_previous' ) )
     media_viewer_browser.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, wx.WXK_LEFT, [] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'view_previous' ) )
@@ -409,7 +408,7 @@ def GetDefaultShortcuts():
     
     shortcuts.append( media_viewer_browser )
     
-    media_viewer = ClientGUIShortcuts.Shortcuts( 'media_viewer' )
+    media_viewer = ClientGUIShortcuts.ShortcutSet( 'media_viewer' )
     
     media_viewer.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, ord( 'B' ), [ CC.SHORTCUT_MODIFIER_CTRL ] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'move_animation_to_previous_frame' ) )
     media_viewer.SetCommand( ClientGUIShortcuts.Shortcut( CC.SHORTCUT_TYPE_KEYBOARD, ord( 'N' ), [ CC.SHORTCUT_MODIFIER_CTRL ] ), ClientData.ApplicationCommand( CC.APPLICATION_COMMAND_TYPE_SIMPLE, 'move_animation_to_next_frame' ) )
@@ -442,13 +441,13 @@ def GetDefaultSimpleDownloaderFormulae():
     
     return GetDefaultObjectsFromPNGs( dir_path, ( ClientParsing.SimpleDownloaderParsingFormula, ) )
     
-def GetDefaultURLMatches():
+def GetDefaultURLClasses():
     
     dir_path = os.path.join( HC.STATIC_DIR, 'default', 'url_classes' )
     
     from . import ClientNetworkingDomain
     
-    return GetDefaultObjectsFromPNGs( dir_path, ( ClientNetworkingDomain.URLMatch, ) )
+    return GetDefaultObjectsFromPNGs( dir_path, ( ClientNetworkingDomain.URLClass, ) )
     
 def GetDefaultObjectsFromPNGs( dir_path, allowed_object_types ):
     
@@ -620,7 +619,7 @@ def SetDefaultDomainManagerData( domain_manager ):
     
     #
     
-    domain_manager.SetURLMatches( GetDefaultURLMatches() )
+    domain_manager.SetURLClasses( GetDefaultURLClasses() )
     
     #
     
@@ -628,7 +627,7 @@ def SetDefaultDomainManagerData( domain_manager ):
     
     #
     
-    domain_manager.TryToLinkURLMatchesAndParsers()
+    domain_manager.TryToLinkURLClassesAndParsers()
     
 def SetDefaultLoginManagerScripts( login_manager ):
     

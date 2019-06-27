@@ -13,7 +13,6 @@ from . import HydrusVideoHandling
 import os
 import threading
 import traceback
-import io
 
 # Mime
 
@@ -26,6 +25,8 @@ header_and_mime = [
     ( 0, b'II*\x00', HC.IMAGE_TIFF ),
     ( 0, b'MM\x00*', HC.IMAGE_TIFF ),
     ( 0, b'BM', HC.IMAGE_BMP ),
+    ( 0, b'\x00\x00\x01\x00', HC.IMAGE_ICON ),
+    ( 0, b'\x00\x00\x02\x00', HC.IMAGE_ICON ),
     ( 0, b'CWS', HC.APPLICATION_FLASH ),
     ( 0, b'FWS', HC.APPLICATION_FLASH ),
     ( 0, b'ZWS', HC.APPLICATION_FLASH ),
@@ -53,34 +54,13 @@ header_and_mime = [
     ( 0, b'\x30\x26\xB2\x75\x8E\x66\xCF\x11\xA6\xD9\x00\xAA\x00\x62\xCE\x6C', HC.UNDETERMINED_WM )
     ]
 
-def SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f ):
+def GenerateThumbnailBytes( path, target_resolution, mime, duration, num_frames, percentage_in = 35 ):
     
-    # when the palette is limited, the thumbnail antialias won't add new colours, so you get nearest-neighbour-like behaviour
-    
-    original_file_was_png = pil_image.format == 'PNG'
-    
-    pil_image = HydrusImageHandling.Dequantize( pil_image )
-    
-    HydrusImageHandling.ThumbnailPILImage( pil_image, bounding_dimensions )
-    
-    if original_file_was_png or pil_image.mode == 'RGBA':
+    if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF, HC.IMAGE_ICON ): # not apng atm
         
-        pil_image.save( f, 'PNG' )
+        thumbnail_bytes = HydrusImageHandling.GenerateThumbnailBytesFromStaticImagePath( path, target_resolution, mime )
         
     else:
-        
-        pil_image.save( f, 'JPEG', quality = 92 )
-        
-    
-def GenerateThumbnailBytes( path, bounding_dimensions, mime, percentage_in = 35 ):
-    
-    if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF ):
-        
-        thumbnail_bytes = GenerateThumbnailBytesFromStaticImagePath( path, bounding_dimensions, mime )
-        
-    else:
-        
-        f = io.BytesIO()
         
         if mime == HC.APPLICATION_FLASH:
             
@@ -90,32 +70,22 @@ def GenerateThumbnailBytes( path, bounding_dimensions, mime, percentage_in = 35 
                 
                 HydrusFlashHandling.RenderPageToFile( path, temp_path, 1 )
                 
-                pil_image = HydrusImageHandling.GeneratePILImage( temp_path )
-                
-                SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f )
+                thumbnail_bytes = HydrusImageHandling.GenerateThumbnailBytesFromStaticImagePath( temp_path, target_resolution, mime )
                 
             except:
                 
-                flash_default_path = os.path.join( HC.STATIC_DIR, 'flash.png' )
+                thumb_path = os.path.join( HC.STATIC_DIR, 'flash.png' )
                 
-                pil_image = HydrusImageHandling.GeneratePILImage( flash_default_path )
-                
-                SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f )
+                thumbnail_bytes = HydrusImageHandling.GenerateThumbnailBytesFromStaticImagePath( thumb_path, target_resolution, mime )
                 
             finally:
-                
-                del pil_image
                 
                 HydrusPaths.CleanUpTempPath( os_file_handle, temp_path )
                 
             
         else:
             
-            ( size, mime, width, height, duration, num_frames, num_words ) = GetFileInfo( path )
-            
-            cropped_dimensions = HydrusImageHandling.GetThumbnailResolution( ( width, height ), bounding_dimensions )
-            
-            renderer = HydrusVideoHandling.VideoRendererFFMPEG( path, mime, duration, num_frames, cropped_dimensions )
+            renderer = HydrusVideoHandling.VideoRendererFFMPEG( path, mime, duration, num_frames, target_resolution )
             
             renderer.read_frame() # this initialises the renderer and loads the first frame as a fallback
             
@@ -130,46 +100,18 @@ def GenerateThumbnailBytes( path, bounding_dimensions, mime, percentage_in = 35 
                 raise Exception( 'Could not create a thumbnail from that video!' )
                 
             
-            pil_image = HydrusImageHandling.GeneratePILImageFromNumpyImage( numpy_image )
+            numpy_image = HydrusImageHandling.ResizeNumPyImage( numpy_image, target_resolution ) # just in case ffmpeg doesn't deliver right
             
-            SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f )
+            thumbnail_bytes = HydrusImageHandling.GenerateThumbnailBytesNumPy( numpy_image, mime )
             
             renderer.Stop()
             
             del renderer
             
         
-        f.seek( 0 )
-        
-        thumbnail_bytes = f.read()
-        
-        f.close()
-        
     
     return thumbnail_bytes
     
-def GenerateThumbnailBytesFromPIL( pil_image, bounding_dimensions, mime ):
-    
-    f = io.BytesIO()
-    
-    SaveThumbnailToStreamPIL( pil_image, bounding_dimensions, f )
-    
-    f.seek( 0 )
-    
-    thumbnail_bytes = f.read()
-    
-    f.close()
-    
-    return thumbnail_bytes
-    
-def GenerateThumbnailBytesFromStaticImagePathPIL( path, bounding_dimensions, mime ):
-    
-    pil_image = HydrusImageHandling.GeneratePILImage( path )
-    
-    return GenerateThumbnailBytesFromPIL( pil_image, bounding_dimensions, mime )
-    
-GenerateThumbnailBytesFromStaticImagePath = GenerateThumbnailBytesFromStaticImagePathPIL
-
 def GetExtraHashesFromPath( path ):
     
     h_md5 = hashlib.md5()
@@ -228,7 +170,7 @@ def GetFileInfo( path, mime = None ):
     num_frames = None
     num_words = None
     
-    if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF ):
+    if mime in ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF, HC.IMAGE_ICON ):
         
         ( ( width, height ), duration, num_frames ) = HydrusImageHandling.GetImageProperties( path, mime )
         
@@ -252,9 +194,9 @@ def GetFileInfo( path, mime = None ):
         
         ffmpeg_lines = HydrusVideoHandling.GetFFMPEGInfoLines( path )
         
-        duration_in_s = HydrusVideoHandling.ParseFFMPEGDuration( ffmpeg_lines )
+        ( file_duration_in_s, stream_duration_in_s ) = HydrusVideoHandling.ParseFFMPEGDuration( ffmpeg_lines )
         
-        duration = int( duration_in_s * 1000 )
+        duration = int( file_duration_in_s * 1000 )
         
     
     if width is not None and width < 0:

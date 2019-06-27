@@ -6,6 +6,7 @@ from . import ClientGUICommon
 from . import ClientGUIControls
 from . import ClientGUIDialogs
 from . import ClientGUIDialogsQuick
+from . import ClientGUIFunctions
 from . import ClientGUIListBoxes
 from . import ClientGUIListCtrl
 from . import ClientGUITopLevelWindows
@@ -46,7 +47,7 @@ class EditTagFilterPanel( ClientGUIScrolledPanels.EditPanel ):
         
         #
         
-        self._notebook = wx.Notebook( self )
+        self._notebook = ClientGUICommon.BetterNotebook( self )
         
         #
         
@@ -82,22 +83,22 @@ class EditTagFilterPanel( ClientGUIScrolledPanels.EditPanel ):
         
         if prefer_blacklist:
             
-            selection_tests.append( ( blacklist_possible, 0 ) )
-            selection_tests.append( ( whitelist_possible, 1 ) )
-            selection_tests.append( ( True, 2 ) )
+            selection_tests.append( ( blacklist_possible, self._blacklist_panel ) )
+            selection_tests.append( ( whitelist_possible, self._whitelist_panel ) )
+            selection_tests.append( ( True, self._advanced_panel ) )
             
         else:
             
-            selection_tests.append( ( whitelist_possible, 0 ) )
-            selection_tests.append( ( blacklist_possible, 1 ) )
-            selection_tests.append( ( True, 2 ) )
+            selection_tests.append( ( whitelist_possible, self._whitelist_panel ) )
+            selection_tests.append( ( blacklist_possible, self._blacklist_panel ) )
+            selection_tests.append( ( True, self._advanced_panel ) )
             
         
-        for ( test, index ) in selection_tests:
+        for ( test, page ) in selection_tests:
             
             if test:
                 
-                self._notebook.SetSelection( index )
+                self._notebook.SelectPage( page )
                 
                 break
                 
@@ -1110,6 +1111,16 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
         return True
         
     
+    def CleanBeforeDestroy( self ):
+        
+        ClientGUIScrolledPanels.ManagePanel.CleanBeforeDestroy( self )
+        
+        for page in self._tag_repositories.GetPages():
+            
+            page.CleanBeforeDestroy()
+            
+        
+    
     def CommitChanges( self ):
         
         groups_of_service_keys_to_content_updates = self._GetGroupsOfServiceKeysToContentUpdates()
@@ -1157,6 +1168,11 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             return
             
         
+        if event.GetEventObject() != self._tag_repositories:
+            
+            return
+            
+        
         page = self._tag_repositories.GetCurrentPage()
         
         if page is not None:
@@ -1181,6 +1197,26 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             if action == 'manage_file_tags':
                 
                 self._OKParent()
+                
+            elif action == 'focus_media_viewer':
+                
+                tlps = ClientGUIFunctions.GetTLPParents( self )
+                
+                from . import ClientGUICanvas
+                
+                command_processed = False
+                
+                for tlp in tlps:
+                    
+                    if isinstance( tlp, ClientGUICanvas.CanvasFrame ):
+                        
+                        tlp.TakeFocusForUser()
+                        
+                        command_processed = True
+                        
+                        break
+                        
+                    
                 
             elif action == 'set_search_focus':
                 
@@ -1221,7 +1257,7 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._tags_box_sorter = ClientGUICommon.StaticBoxSorterForListBoxTags( self, 'tags' )
             
-            self._tags_box = ClientGUIListBoxes.ListBoxTagsSelectionTagsDialog( self._tags_box_sorter, self.AddTags, self.RemoveTags )
+            self._tags_box = ClientGUIListBoxes.ListBoxTagsSelectionTagsDialog( self._tags_box_sorter, self.EnterTags, self.RemoveTags )
             
             self._tags_box_sorter.SetTagsBox( self._tags_box )
             
@@ -1240,6 +1276,19 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._remove_tags = ClientGUICommon.BetterButton( self._tags_box_sorter, text, self._RemoveTagsButton )
             
+            menu_items = []
+            
+            call = HydrusData.Call( self._DoSiblingsAndParents, self._tag_service_key )
+            
+            menu_items.append( ( 'normal', 'Hard-replace all applicable tags with their siblings and add missing parents. (Just this service\'s siblings and parents)', 'Fix siblings and parents.', call ) )
+            
+            call = HydrusData.Call( self._DoSiblingsAndParents, CC.COMBINED_TAG_SERVICE_KEY )
+            
+            menu_items.append( ( 'normal', 'Hard-replace all applicable tags with their siblings and add missing parents. (All service siblings and parents)', 'Fix siblings and parents.', call ) )
+            
+            self._do_siblings_and_parents = ClientGUICommon.MenuBitmapButton( self._tags_box_sorter, CC.GlobalBMPs.family, menu_items )
+            self._do_siblings_and_parents.SetToolTip( 'Hard-replace all applicable tags with their siblings and add missing parents.' )
+            
             self._copy_button = ClientGUICommon.BetterBitmapButton( self._tags_box_sorter, CC.GlobalBMPs.copy, self._Copy )
             self._copy_button.SetToolTip( 'Copy selected tags to the clipboard. If none are selected, copies all.' )
             
@@ -1252,15 +1301,19 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             check_manager = ClientGUICommon.CheckboxManagerOptions( 'add_parents_on_manage_tags' )
             
-            menu_items.append( ( 'check', 'auto-add entered tags\' parents', 'If checked, adding any tag that has parents will also add those parents.', check_manager ) )
+            menu_items.append( ( 'check', 'auto-add entered tags\' parents on add/pend action', 'If checked, adding any tag that has parents will also add those parents.', check_manager ) )
             
             check_manager = ClientGUICommon.CheckboxManagerOptions( 'replace_siblings_on_manage_tags' )
             
-            menu_items.append( ( 'check', 'auto-replace entered siblings', 'If checked, adding any tag that has a sibling will instead add that sibling.', check_manager ) )
+            menu_items.append( ( 'check', 'auto-replace entered siblings on add/pend action', 'If checked, adding any tag that has a sibling will instead add that sibling.', check_manager ) )
+            
+            check_manager = ClientGUICommon.CheckboxManagerOptions( 'allow_remove_on_manage_tags_input' )
+            
+            menu_items.append( ( 'check', 'allow remove/petition result on tag input for already existing tag', 'If checked, inputting a tag that already exists will try to remove it.', check_manager ) )
             
             check_manager = ClientGUICommon.CheckboxManagerOptions( 'yes_no_on_remove_on_manage_tags' )
             
-            menu_items.append( ( 'check', 'confirm remove/petition tags', 'If checked, clicking the remove/petition tags button (or hitting the deleted key on the list) will first confirm the action with a yes/no dialog.', check_manager ) )
+            menu_items.append( ( 'check', 'confirm remove/petition tags on explicit delete actions', 'If checked, clicking the remove/petition tags button (or hitting the deleted key on the list) will first confirm the action with a yes/no dialog.', check_manager ) )
             
             check_manager = ClientGUICommon.CheckboxManagerCalls( self._FlipShowDeleted, lambda: self._show_deleted )
             
@@ -1286,7 +1339,7 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             expand_parents = True
             
-            self._add_tag_box = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.EnterTags, expand_parents, self._file_service_key, self._tag_service_key, null_entry_callable = self.OK )
+            self._add_tag_box = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.AddTags, expand_parents, self._file_service_key, self._tag_service_key, null_entry_callable = self.OK )
             
             self._tags_box.ChangeTagService( self._tag_service_key )
             
@@ -1297,6 +1350,7 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             button_hbox = wx.BoxSizer( wx.HORIZONTAL )
             
             button_hbox.Add( self._remove_tags, CC.FLAGS_VCENTER )
+            button_hbox.Add( self._do_siblings_and_parents, CC.FLAGS_VCENTER )
             button_hbox.Add( self._copy_button, CC.FLAGS_VCENTER )
             button_hbox.Add( self._paste_button, CC.FLAGS_VCENTER )
             button_hbox.Add( self._cog_button, CC.FLAGS_SIZER_CENTER )
@@ -1317,6 +1371,8 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             #
             
+            self._my_shortcut_handler = ClientGUIShortcuts.ShortcutsHandler( self, [ 'main_gui' ] )
+            
             self.SetSizer( hbox )
             
             if self._immediate_commit:
@@ -1325,7 +1381,7 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
                 
             
         
-        def _AddTags( self, tags, only_add = False, only_remove = False, forced_reason = None ):
+        def _EnterTags( self, tags, only_add = False, only_remove = False, forced_reason = None ):
             
             tags = HydrusTags.CleanTags( tags )
             
@@ -1491,6 +1547,8 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
                     
                 
             
+            reason = None
+            
             if choice_action == HC.CONTENT_UPDATE_PETITION:
                 
                 if forced_reason is None:
@@ -1530,7 +1588,7 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
                     
                     # if this above sub-dialog occurs, the 'default focus' reverts to the main gui when the manage tags frame closes, wew lad
                     
-                    ClientGUICommon.GetTLP( self ).GetParent().SetFocus()
+                    ClientGUIFunctions.GetTLP( self ).GetParent().SetFocus()
                     self.SetFocus()
                     
                 else:
@@ -1560,28 +1618,28 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
                     
                     content_updates = []
                     
-                    if choice_action == HC.CONTENT_UPDATE_PETITION:
-                        
-                        content_updates = [ HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, choice_action, ( tag, hashes, reason ) ) ]
-                        
-                    else:
-                        
-                        content_updates = [ HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, choice_action, ( tag, hashes ) ) ]
-                        
-                    
                     if choice_action in ( HC.CONTENT_UPDATE_ADD, HC.CONTENT_UPDATE_PEND ):
+                        
+                        if self._new_options.GetBoolean( 'replace_siblings_on_manage_tags' ):
+                            
+                            siblings_manager = HG.client_controller.tag_siblings_manager
+                            
+                            tag = siblings_manager.CollapseTag( self._tag_service_key, tag )
+                            
                         
                         recent_tags.add( tag )
                         
                         if self._new_options.GetBoolean( 'add_parents_on_manage_tags' ):
                             
-                            tag_parents_manager = HG.client_controller.GetManager( 'tag_parents' )
+                            tag_parents_manager = HG.client_controller.tag_parents_manager
                             
                             parents = tag_parents_manager.GetParents( self._tag_service_key, tag )
                             
                             content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, choice_action, ( parent, hashes ) ) for parent in parents ) )
                             
                         
+                    
+                    content_updates.append( HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, choice_action, ( tag, hashes ), reason = reason ) )
                     
                     if len( content_updates ) > 0:
                         
@@ -1673,6 +1731,161 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
                 
             
         
+        def _DoSiblingsAndParents( self, service_key ):
+            
+            try:
+                
+                tag_siblings_manager = HG.client_controller.tag_siblings_manager
+                
+                tag_parents_manager = HG.client_controller.tag_parents_manager
+                
+                removee_tags_to_hashes = collections.defaultdict( list )
+                addee_tags_to_hashes = collections.defaultdict( list )
+                
+                for m in self._media:
+                    
+                    hash = m.GetHash()
+                    
+                    tags_manager = m.GetTagsManager()
+                    
+                    tags = tags_manager.GetCurrent( self._tag_service_key ).union( tags_manager.GetPending( self._tag_service_key ) )
+                    
+                    sibling_correct_tags = tag_siblings_manager.CollapseTags( service_key, tags, service_strict = True )
+                    
+                    sibling_and_parent_correct_tags = tag_parents_manager.ExpandTags( service_key, sibling_correct_tags, service_strict = True )
+                    
+                    removee_tags = tags.difference( sibling_and_parent_correct_tags )
+                    addee_tags = sibling_and_parent_correct_tags.difference( tags )
+                    
+                    for tag in removee_tags:
+                        
+                        removee_tags_to_hashes[ tag ].append( hash )
+                        
+                    
+                    for tag in addee_tags:
+                        
+                        addee_tags_to_hashes[ tag ].append( hash )
+                        
+                    
+                
+                if len( removee_tags_to_hashes ) == 0 and len( addee_tags_to_hashes ) == 0:
+                    
+                    wx.MessageBox( 'No replacements seem to be needed.' )
+                    
+                    return
+                    
+                
+                summary_message = 'The following changes will be made:'
+                
+                if len( removee_tags_to_hashes ) > 0:
+                    
+                    removee_tags_to_counts = { tag : len( hashes ) for ( tag, hashes ) in removee_tags_to_hashes.items() }
+                    
+                    removee_tags = list( removee_tags_to_counts.keys() )
+                    
+                    ClientTags.SortTags( CC.SORT_BY_INCIDENCE_DESC, removee_tags, removee_tags_to_counts )
+                    
+                    removee_tag_statements = [ '{} ({})'.format( tag, removee_tags_to_counts[ tag ] ) for tag in removee_tags ]
+                    
+                    if len( removee_tag_statements ) > 10:
+                        
+                        removee_tag_statements = removee_tag_statements[:10]
+                        
+                        removee_tag_statements.append( 'and more' )
+                        
+                    
+                    summary_message += os.linesep * 2
+                    summary_message += 'REMOVE: ' + ', '.join( removee_tag_statements )
+                    
+                
+                if len( addee_tags_to_hashes ) > 0:
+                    
+                    addee_tags_to_counts = { tag : len( hashes ) for ( tag, hashes ) in addee_tags_to_hashes.items() }
+                    
+                    addee_tags = list( addee_tags_to_counts.keys() )
+                    
+                    ClientTags.SortTags( CC.SORT_BY_INCIDENCE_DESC, addee_tags, addee_tags_to_counts )
+                    
+                    addee_tag_statements = [ '{} ({})'.format( tag, addee_tags_to_counts[ tag ] ) for tag in addee_tags ]
+                    
+                    if len( addee_tag_statements ) > 10:
+                        
+                        addee_tag_statements = addee_tag_statements[:10]
+                        
+                        addee_tag_statements.append( 'and more' )
+                        
+                    
+                    summary_message += os.linesep * 2
+                    summary_message += 'ADD: ' + ', '.join( addee_tag_statements )
+                    
+                
+                with ClientGUIDialogs.DialogYesNo( self, summary_message, yes_label = 'do it', no_label = 'forget it' ) as dlg:
+                    
+                    if dlg.ShowModal() != wx.ID_YES:
+                        
+                        return
+                        
+                    
+                
+                if self._tag_service_key == CC.LOCAL_TAG_SERVICE_KEY:
+                    
+                    addee_action = HC.CONTENT_UPDATE_ADD
+                    removee_action = HC.CONTENT_UPDATE_DELETE
+                    reason = None
+                    
+                else:
+                    
+                    addee_action = HC.CONTENT_UPDATE_PEND
+                    removee_action = HC.CONTENT_UPDATE_PETITION
+                    reason = 'automatic sibling/parent replace from manage tags'
+                    
+                
+                content_updates = []
+                
+                for ( tag, hashes ) in removee_tags_to_hashes.items():
+                    
+                    content_updates.append( HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, removee_action, ( tag, hashes ), reason = reason ) )
+                    
+                
+                for ( tag, hashes ) in addee_tags_to_hashes.items():
+                    
+                    content_updates.append( HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, addee_action, ( tag, hashes ), reason = reason ) )
+                    
+                
+                if not self._immediate_commit:
+                    
+                    hashes_to_tag_managers = { m.GetHash() : m.GetTagsManager() for m in self._media }
+                    
+                    for content_update in content_updates:
+                        
+                        hashes = content_update.GetHashes()
+                        
+                        for hash in hashes:
+                            
+                            if hash in hashes_to_tag_managers:
+                                
+                                hashes_to_tag_managers[ hash ].ProcessContentUpdate( self._tag_service_key, content_update )
+                                
+                            
+                        
+                    
+                    self._groups_of_content_updates.append( content_updates )
+                    
+                else:
+                    
+                    service_keys_to_content_updates = { self._tag_service_key : content_updates }
+                    
+                    HG.client_controller.WriteSynchronous( 'content_updates', service_keys_to_content_updates )
+                    
+                
+                self._tags_box.SetTagsByMedia( self._media, force_reload = True )
+                
+            finally:
+                
+                self._add_tag_box.SetFocus()
+                
+            
+        
         def _FlipShowDeleted( self ):
             
             self._show_deleted = not self._show_deleted
@@ -1710,7 +1923,16 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         def _Paste( self ):
             
-            text = HG.client_controller.GetClipboardText()
+            try:
+                
+                text = HG.client_controller.GetClipboardText()
+                
+            except HydrusExceptions.DataMissing as e:
+                
+                wx.MessageBox( str( e ) )
+                
+                return
+                
             
             try:
                 
@@ -1718,7 +1940,7 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
                 
                 tags = HydrusTags.CleanTags( tags )
                 
-                self.EnterTags( tags, only_add = True )
+                self.AddTags( tags, only_add = True )
                 
             except Exception as e:
                 
@@ -1756,24 +1978,27 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         def AddTags( self, tags, only_add = False ):
             
+            if not self._new_options.GetBoolean( 'allow_remove_on_manage_tags_input' ):
+                
+                only_add = True
+                
+            
             if len( tags ) > 0:
                 
-                self._AddTags( tags, only_add = only_add )
+                self.EnterTags( tags, only_add = only_add )
                 
+            
+        
+        def CleanBeforeDestroy( self ):
+            
+            self._add_tag_box.CancelCurrentResultsFetchJob()
             
         
         def EnterTags( self, tags, only_add = False ):
             
-            if self._new_options.GetBoolean( 'replace_siblings_on_manage_tags' ):
-                
-                siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
-                
-                tags = siblings_manager.CollapseTags( self._tag_service_key, tags )
-                
-            
             if len( tags ) > 0:
                 
-                self._AddTags( tags, only_add = only_add )
+                self._EnterTags( tags, only_add = only_add )
                 
             
         
@@ -1794,6 +2019,38 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             # old call:
             # wx.QueueEvent( self.GetEventHandler(), ClientGUITopLevelWindows.OKEvent( -1 ) )
+            
+        
+        def ProcessApplicationCommand( self, command ):
+            
+            command_processed = True
+            
+            command_type = command.GetCommandType()
+            data = command.GetData()
+            
+            if command_type == CC.APPLICATION_COMMAND_TYPE_SIMPLE:
+                
+                action = data
+                
+                if action == 'set_search_focus':
+                    
+                    self.SetTagBoxFocus()
+                    
+                elif action in ( 'show_and_focus_manage_tags_favourite_tags', 'show_and_focus_manage_tags_related_tags', 'show_and_focus_manage_tags_file_lookup_script_tags', 'show_and_focus_manage_tags_recent_tags' ):
+                    
+                    self._suggested_tags.TakeFocusForUser( action )
+                    
+                else:
+                    
+                    command_processed = False
+                    
+                
+            else:
+                
+                command_processed = False
+                
+            
+            return command_processed
             
         
         def ProcessContentUpdates( self, service_keys_to_content_updates ):
@@ -1841,7 +2098,7 @@ class ManageTagsPanel( ClientGUIScrolledPanels.ManagePanel ):
                         
                     
                 
-                self._AddTags( tags, only_remove = True )
+                self._EnterTags( tags, only_remove = True )
                 
             
         
@@ -1871,7 +2128,7 @@ class ManageTagCensorshipPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         self._tag_services = ClientGUICommon.BetterNotebook( self )
         
-        min_width = ClientGUICommon.ConvertTextToPixelWidth( self._tag_services, 100 )
+        min_width = ClientGUIFunctions.ConvertTextToPixelWidth( self._tag_services, 100 )
         
         self._tag_services.SetMinSize( ( min_width, -1 ) )
         
@@ -1980,7 +2237,10 @@ class ManageTagCensorshipPanel( ClientGUIScrolledPanels.ManagePanel ):
                 
                 self._tag_input.SetValue( '' )
                 
-            else: event.Skip()
+            else:
+                
+                event.Skip()
+                
             
         
         def GetInfo( self ):
@@ -2153,17 +2413,17 @@ class ManageTagParents( ClientGUIScrolledPanels.ManagePanel ):
             self._children = ClientGUIListBoxes.ListBoxTagsStringsAddRemove( self, self._service_key, show_sibling_text = False )
             self._parents = ClientGUIListBoxes.ListBoxTagsStringsAddRemove( self, self._service_key, show_sibling_text = False )
             
-            ( gumpf, preview_height ) = ClientGUICommon.ConvertTextToPixels( self._children, ( 12, 6 ) )
+            ( gumpf, preview_height ) = ClientGUIFunctions.ConvertTextToPixels( self._children, ( 12, 6 ) )
             
             self._children.SetInitialSize( ( -1, preview_height ) )
             self._parents.SetInitialSize( ( -1, preview_height ) )
             
             expand_parents = True
             
-            self._child_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.EnterChildren, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, service_key )
+            self._child_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.EnterChildren, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, service_key, show_paste_button = True )
             self._child_input.Disable()
             
-            self._parent_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.EnterParents, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, service_key )
+            self._parent_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.EnterParents, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, service_key, show_paste_button = True )
             self._parent_input.Disable()
             
             self._add = wx.Button( self, label = 'add' )
@@ -2284,7 +2544,10 @@ class ManageTagParents( ClientGUIScrolledPanels.ManagePanel ):
                                 
                                 reason = dlg.GetValue()
                                 
-                            else: do_it = False
+                            else:
+                                
+                                do_it = False
+                                
                             
                         
                     
@@ -2340,7 +2603,10 @@ class ManageTagParents( ClientGUIScrolledPanels.ManagePanel ):
                                             
                                             reason = dlg.GetValue()
                                             
-                                        else: do_it = False
+                                        else:
+                                            
+                                            do_it = False
+                                            
                                         
                                     
                                 
@@ -2562,7 +2828,16 @@ class ManageTagParents( ClientGUIScrolledPanels.ManagePanel ):
         
         def _ImportFromClipboard( self, add_only = False ):
             
-            import_string = HG.client_controller.GetClipboardText()
+            try:
+                
+                import_string = HG.client_controller.GetClipboardText()
+                
+            except HydrusExceptions.DataMissing as e:
+                
+                wx.MessageBox( str( e ) )
+                
+                return
+                
             
             pairs = self._DeserialiseImportString( import_string )
             
@@ -2761,9 +3036,9 @@ class ManageTagParents( ClientGUIScrolledPanels.ManagePanel ):
                 new_petitions = current_petitioned.difference( original_petitioned )
                 rescinded_petitions = original_petitioned.difference( current_petitioned )
                 
-                content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_PARENTS, HC.CONTENT_UPDATE_PEND, ( pair, self._pairs_to_reasons[ pair ] ) ) for pair in new_pends ) )
+                content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_PARENTS, HC.CONTENT_UPDATE_PEND, pair, reason = self._pairs_to_reasons[ pair ] ) for pair in new_pends ) )
                 content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_PARENTS, HC.CONTENT_UPDATE_RESCIND_PEND, pair ) for pair in rescinded_pends ) )
-                content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_PARENTS, HC.CONTENT_UPDATE_PETITION, ( pair, self._pairs_to_reasons[ pair ] ) ) for pair in new_petitions ) )
+                content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_PARENTS, HC.CONTENT_UPDATE_PETITION, pair, reason = self._pairs_to_reasons[ pair ] ) for pair in new_petitions ) )
                 content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_PARENTS, HC.CONTENT_UPDATE_RESCIND_PETITION, pair ) for pair in rescinded_petitions ) )
                 
             
@@ -2979,13 +3254,13 @@ class ManageTagSiblings( ClientGUIScrolledPanels.ManagePanel ):
             self._old_siblings = ClientGUIListBoxes.ListBoxTagsStringsAddRemove( self, self._service_key, show_sibling_text = False )
             self._new_sibling = ClientGUICommon.BetterStaticText( self )
             
-            ( gumpf, preview_height ) = ClientGUICommon.ConvertTextToPixels( self._old_siblings, ( 12, 6 ) )
+            ( gumpf, preview_height ) = ClientGUIFunctions.ConvertTextToPixels( self._old_siblings, ( 12, 6 ) )
             
             self._old_siblings.SetInitialSize( ( -1, preview_height ) )
             
             expand_parents = False
             
-            self._old_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.EnterOlds, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, service_key )
+            self._old_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.EnterOlds, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, service_key, show_paste_button = True )
             self._old_input.Disable()
             
             self._new_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( self, self.SetNew, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, service_key )
@@ -3190,7 +3465,10 @@ class ManageTagSiblings( ClientGUIScrolledPanels.ManagePanel ):
                             
                         
                     
-                    self._current_statuses_to_pairs[ HC.CONTENT_STATUS_PETITIONED ].update( current_pairs )
+                    if do_it:
+                        
+                        self._current_statuses_to_pairs[ HC.CONTENT_STATUS_PETITIONED ].update( current_pairs )
+                        
                     
                 
                 if len( pending_pairs ) > 0:
@@ -3427,7 +3705,16 @@ class ManageTagSiblings( ClientGUIScrolledPanels.ManagePanel ):
         
         def _ImportFromClipboard( self, add_only = False ):
             
-            import_string = HG.client_controller.GetClipboardText()
+            try:
+                
+                import_string = HG.client_controller.GetClipboardText()
+                
+            except HydrusExceptions.DataMissing as e:
+                
+                wx.MessageBox( str( e ) )
+                
+                return
+                
             
             pairs = self._DeserialiseImportString( import_string )
             
@@ -3633,9 +3920,9 @@ class ManageTagSiblings( ClientGUIScrolledPanels.ManagePanel ):
                 new_petitions = current_petitioned.difference( original_petitioned )
                 rescinded_petitions = original_petitioned.difference( current_petitioned )
                 
-                content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_SIBLINGS, HC.CONTENT_UPDATE_PEND, ( pair, self._pairs_to_reasons[ pair ] ) ) for pair in new_pends ) )
+                content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_SIBLINGS, HC.CONTENT_UPDATE_PEND, pair, reason = self._pairs_to_reasons[ pair ] ) for pair in new_pends ) )
                 content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_SIBLINGS, HC.CONTENT_UPDATE_RESCIND_PEND, pair ) for pair in rescinded_pends ) )
-                content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_SIBLINGS, HC.CONTENT_UPDATE_PETITION, ( pair, self._pairs_to_reasons[ pair ] ) ) for pair in new_petitions ) )
+                content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_SIBLINGS, HC.CONTENT_UPDATE_PETITION, pair, reason = self._pairs_to_reasons[ pair ] ) for pair in new_petitions ) )
                 content_updates.extend( ( HydrusData.ContentUpdate( HC.CONTENT_TYPE_TAG_SIBLINGS, HC.CONTENT_UPDATE_RESCIND_PETITION, pair ) for pair in rescinded_petitions ) )
                 
             

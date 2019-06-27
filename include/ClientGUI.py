@@ -10,6 +10,7 @@ from . import ClientGUIDialogsManage
 from . import ClientGUIDialogsQuick
 from . import ClientGUIExport
 from . import ClientGUIFrames
+from . import ClientGUIFunctions
 from . import ClientGUIImport
 from . import ClientGUILogin
 from . import ClientGUIManagement
@@ -48,6 +49,7 @@ from . import HydrusNetwork
 from . import HydrusNetworking
 from . import HydrusSerialisable
 from . import HydrusTagArchive
+from . import HydrusText
 from . import HydrusVideoHandling
 import os
 import PIL
@@ -71,20 +73,20 @@ MENU_ORDER = [ 'file', 'undo', 'pages', 'database', 'pending', 'network', 'servi
 
 def THREADUploadPending( service_key ):
     
-    service = HG.client_controller.services_manager.GetService( service_key )
-    
-    service_name = service.GetName()
-    service_type = service.GetServiceType()
-    
-    nums_pending = HG.client_controller.Read( 'nums_pending' )
-    
-    info = nums_pending[ service_key ]
-    
-    initial_num_pending = sum( info.values() )
-    
-    result = HG.client_controller.Read( 'pending', service_key )
-    
     try:
+        
+        service = HG.client_controller.services_manager.GetService( service_key )
+        
+        service_name = service.GetName()
+        service_type = service.GetServiceType()
+        
+        nums_pending = HG.client_controller.Read( 'nums_pending' )
+        
+        info = nums_pending[ service_key ]
+        
+        initial_num_pending = sum( info.values() )
+        
+        result = HG.client_controller.Read( 'pending', service_key )
         
         job_key = ClientThreading.JobKey( pausable = True, cancellable = True )
         
@@ -99,10 +101,14 @@ def THREADUploadPending( service_key ):
             info = nums_pending[ service_key ]
             
             remaining_num_pending = sum( info.values() )
-            done_num_pending = initial_num_pending - remaining_num_pending
             
-            job_key.SetVariable( 'popup_text_1', 'uploading to ' + service_name + ': ' + HydrusData.ConvertValueRangeToPrettyString( done_num_pending, initial_num_pending ) )
-            job_key.SetVariable( 'popup_gauge_1', ( done_num_pending, initial_num_pending ) )
+            # sometimes more come in while we are pending, -754/1,234 ha ha
+            num_to_do = max( initial_num_pending, remaining_num_pending )
+            
+            done_num_pending = num_to_do - remaining_num_pending
+            
+            job_key.SetVariable( 'popup_text_1', 'uploading to ' + service_name + ': ' + HydrusData.ConvertValueRangeToPrettyString( done_num_pending, num_to_do ) )
+            job_key.SetVariable( 'popup_gauge_1', ( done_num_pending, num_to_do ) )
             
             while job_key.IsPaused() or job_key.IsCancelled():
                 
@@ -199,6 +205,14 @@ def THREADUploadPending( service_key ):
             result = HG.client_controller.Read( 'pending', service_key )
             
         
+        job_key.DeleteVariable( 'popup_gauge_1' )
+        job_key.SetVariable( 'popup_text_1', 'upload done!' )
+        
+        HydrusData.Print( job_key.ToString() )
+        
+        job_key.Finish()
+        job_key.Delete( 5 )
+        
     except Exception as e:
         
         r = re.search( '[a-fA-F0-9]{64}', str( e ) )
@@ -218,17 +232,12 @@ def THREADUploadPending( service_key ):
         
         raise
         
+    finally:
+        
+        HG.currently_uploading_pending = False
+        HG.client_controller.pub( 'notify_new_pending' )
+        
     
-    job_key.DeleteVariable( 'popup_gauge_1' )
-    job_key.SetVariable( 'popup_text_1', 'upload done!' )
-    
-    HydrusData.Print( job_key.ToString() )
-    
-    job_key.Finish()
-    
-    job_key.Delete( 5 )
-    
-
 class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
     
     def __init__( self, controller ):
@@ -244,11 +253,11 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         ClientGUITopLevelWindows.FrameThatResizes.__init__( self, None, title, 'main_gui', float_on_parent = False )
         
-        bandwidth_width = ClientGUICommon.ConvertTextToPixelWidth( self, 17 )
-        idle_width = ClientGUICommon.ConvertTextToPixelWidth( self, 6 )
-        hydrus_busy_width = ClientGUICommon.ConvertTextToPixelWidth( self, 11 )
-        system_busy_width = ClientGUICommon.ConvertTextToPixelWidth( self, 13 )
-        db_width = ClientGUICommon.ConvertTextToPixelWidth( self, 14 )
+        bandwidth_width = ClientGUIFunctions.ConvertTextToPixelWidth( self, 17 )
+        idle_width = ClientGUIFunctions.ConvertTextToPixelWidth( self, 6 )
+        hydrus_busy_width = ClientGUIFunctions.ConvertTextToPixelWidth( self, 11 )
+        system_busy_width = ClientGUIFunctions.ConvertTextToPixelWidth( self, 13 )
+        db_width = ClientGUIFunctions.ConvertTextToPixelWidth( self, 14 )
         
         stb_style = wx.STB_SIZEGRIP | wx.STB_ELLIPSIZE_END | wx.FULL_REPAINT_ON_RESIZE
         
@@ -264,6 +273,10 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         self._delayed_dialog_lock = threading.Lock()
         
         self._notebook = ClientGUIPages.PagesNotebook( self, self._controller, 'top page notebook' )
+        
+        self._last_clipboard_watched_text = ''
+        self._clipboard_watcher_destination_page_watcher = None
+        self._clipboard_watcher_destination_page_urls = None
         
         self.SetDropTarget( ClientDragDrop.FileDropTarget( self, self.ImportFiles, self.ImportURLFromDragAndDrop, self._notebook.MediaDragAndDropDropped, self._notebook.PageDragAndDropDropped ) )
         
@@ -287,6 +300,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         self._controller.sub( self, 'NewPageQuery', 'new_page_query' )
         self._controller.sub( self, 'NotifyClosedPage', 'notify_closed_page' )
         self._controller.sub( self, 'NotifyDeletedPage', 'notify_deleted_page' )
+        self._controller.sub( self, 'NotifyNewExportFolders', 'notify_new_export_folders' )
         self._controller.sub( self, 'NotifyNewImportFolders', 'notify_new_import_folders' )
         self._controller.sub( self, 'NotifyNewOptions', 'notify_new_options' )
         self._controller.sub( self, 'NotifyNewPages', 'notify_new_pages' )
@@ -296,7 +310,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         self._controller.sub( self, 'NotifyNewSessions', 'notify_new_sessions' )
         self._controller.sub( self, 'NotifyNewUndo', 'notify_new_undo' )
         self._controller.sub( self, 'PresentImportedFilesToPage', 'imported_files_to_page' )
-        self._controller.sub( self, 'RenamePage', 'rename_page' )
         self._controller.sub( self, 'SetDBLockedStatus', 'db_locked_status' )
         self._controller.sub( self, 'SetMediaFocus', 'set_media_focus' )
         self._controller.sub( self, 'SetStatusBarDirty', 'set_status_bar_dirty' )
@@ -315,13 +328,26 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         self._InitialiseMenubar()
         
-        self._RefreshStatusBar()
+        self._menubar_open_menu_stack = []
         
-        wx.CallAfter( self._InitialiseSession ) # do this in callafter as some pages want to talk to controller.gui, which doesn't exist yet!
+        # tfw in OSX wxCocoa every time you open a new unrelated menu the next button press causes every menu and submenu in the menubar to send a 'window open' event
+        # https://trac.wxwidgets.org/ticket/14333
+        
+        # In Linux behaviour is unreliable, receiving closes but not opens etc...
+        
+        if HC.PLATFORM_WINDOWS:
+            
+            self.Bind( wx.EVT_MENU_CLOSE, self.EventMenuClose )
+            self.Bind( wx.EVT_MENU_OPEN, self.EventMenuOpen )
+            
+        
+        self._RefreshStatusBar()
         
         self._bandwidth_repeating_job = self._controller.CallRepeatingWXSafe( self, 1.0, 1.0, self.REPEATINGBandwidth )
         
         self._page_update_repeating_job = self._controller.CallRepeatingWXSafe( self, 0.25, 0.25, self.REPEATINGPageUpdate )
+        
+        self._clipboard_watcher_repeating_job = None
         
         self._ui_update_repeating_job = None
         
@@ -333,7 +359,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         self._my_shortcut_handler = ClientGUIShortcuts.ShortcutsHandler( self, [ 'main_gui' ] )
         
-        wx.CallAfter( self.Layout ) # some i3 thing--doesn't layout main gui on init for some reason
+        self._controller.CallLaterWXSafe( self, 0.5, self._InitialiseSession ) # do this in callafter as some pages want to talk to controller.gui, which doesn't exist yet!
         
     
     def _AboutWindow( self ):
@@ -349,13 +375,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         library_versions.append( ( 'FFMPEG', HydrusVideoHandling.GetFFMPEGVersion() ) )
         library_versions.append( ( 'OpenCV', cv2.__version__ ) )
         library_versions.append( ( 'openssl', ssl.OPENSSL_VERSION ) )
-        library_versions.append( ( 'PIL', PIL.VERSION ) )
-        
-        if hasattr( PIL, 'PILLOW_VERSION' ):
-            
-            library_versions.append( ( 'Pillow', PIL.PILLOW_VERSION ) )
-            
-        
+        library_versions.append( ( 'Pillow', PIL.__version__ ) )
         library_versions.append( ( 'html5lib present: ', str( ClientParsing.HTML5LIB_IS_OK ) ) )
         library_versions.append( ( 'lxml present: ', str( ClientParsing.LXML_IS_OK ) ) )
         library_versions.append( ( 'lz4 present: ', str( ClientRendering.LZ4_OK ) ) )
@@ -371,7 +391,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         library_versions.append( ( 'python', v ) )
         
         library_versions.append( ( 'wx', wx.version() ) )
-        library_versions.append( ( 'temp dir', ClientPaths.GetCurrentTempDir() ) )
+        library_versions.append( ( 'temp dir', HydrusPaths.GetCurrentTempDir() ) )
         
         import locale
         
@@ -434,11 +454,11 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                 
                 stop_time = HydrusData.GetNow() + 120
                 
-                self._controller.Write( 'analyze', stop_time = stop_time )
+                self._controller.Write( 'analyze', maintenance_mode = HC.MAINTENANCE_FORCED, stop_time = stop_time )
                 
             elif result == wx.ID_NO:
                 
-                self._controller.Write( 'analyze', force_reanalyze = True )
+                self._controller.Write( 'analyze', maintenance_mode = HC.MAINTENANCE_FORCED, force_reanalyze = True )
                 
             
         
@@ -892,11 +912,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             import_folder = self._controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_IMPORT_FOLDER, name )
             
-            if import_folder.Paused():
-                
-                import_folder.PausePlay()
-                
-            
             import_folders = [ import_folder ]
             
         
@@ -994,6 +1009,27 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             if dlg.ShowModal() == wx.ID_YES:
                 
                 self._controller.Write( 'clear_orphan_tables' )
+                
+            
+        
+    
+    def _CullFileViewingStats( self ):
+        
+        text = 'If your file viewing statistics have some erroneous values due to many short views or accidental long views, this routine will cull your current numbers to compensate. For instance:'
+        text += os.linesep * 2
+        text += 'If you have a file with 100 views over 100 seconds and a minimum view time of 2 seconds, this will cull the views to 50.'
+        text += os.linesep * 2
+        text += 'If you have a file with 10 views over 100000 seconds and a maximum view time of 60 seconds, this will cull the total viewtime to 600 seconds.'
+        text += os.linesep * 2
+        text += 'It will work for both preview and media views based on their separate rules.'
+        
+        with ClientGUIDialogs.DialogYesNo( self, text, yes_label = 'do it', no_label = 'forget it' ) as dlg:
+            
+            if dlg.ShowModal() == wx.ID_YES:
+                
+                self._controller.WriteSynchronous( 'cull_file_viewing_statistics' )
+                
+                wx.MessageBox( 'Cull done! Please restart the client to see the changes in the UI.')
                 
             
         
@@ -1321,6 +1357,11 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
         
     
+    def _DoFileMaintenance( self ):
+        
+        self._controller.CallToThread( self._controller.files_maintenance_manager.DoMaintenance, maintenance_mode = HC.MAINTENANCE_FORCED )
+        
+    
     def _ExportDownloader( self ):
         
         with ClientGUITopLevelWindows.DialogNullipotent( self, 'export downloaders' ) as dlg:
@@ -1377,6 +1418,18 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         return wx.NOT_FOUND
         
     
+    def _FlipClipboardWatcher( self, option_name ):
+        
+        self._controller.new_options.FlipBoolean( option_name )
+        
+        self._last_clipboard_watched_text = ''
+        
+        if self._clipboard_watcher_repeating_job is None:
+            
+            self._clipboard_watcher_repeating_job = self._controller.CallRepeatingWXSafe( self, 1.0, 1.0, self.REPEATINGClipboardWatcher )
+            
+        
+    
     def _ForceFitAllNonGUITLWs( self ):
         
         tlws = wx.GetTopLevelWindows()
@@ -1423,11 +1476,9 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
     
     def _GenerateMenuInfo( self, name ):
         
-        menu = wx.Menu()
-        
-        menu.hydrus_menubar_name = name
-        
         def file():
+            
+            menu = wx.Menu()
             
             ClientGUIMenus.AppendMenuItem( self, menu, 'import files', 'Add new files to the database.', self._ImportFiles )
             
@@ -1466,8 +1517,29 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                 
                 ClientGUIMenus.AppendMenu( i_and_e_submenu, submenu, 'check import folder now' )
                 
-                ClientGUIMenus.AppendSeparator( i_and_e_submenu )
+            
+            export_folder_names = self._controller.Read( 'serialisable_names', HydrusSerialisable.SERIALISABLE_TYPE_EXPORT_FOLDER )
+            
+            if len( export_folder_names ) > 0:
                 
+                submenu = wx.Menu()
+                
+                if len( export_folder_names ) > 1:
+                    
+                    ClientGUIMenus.AppendMenuItem( self, submenu, 'run all', 'Run all export folders.', self._RunExportFolder )
+                    
+                    ClientGUIMenus.AppendSeparator( submenu )
+                    
+                
+                for name in export_folder_names:
+                    
+                    ClientGUIMenus.AppendMenuItem( self, submenu, name, 'Check this export folder now.', self._RunExportFolder, name )
+                    
+                
+                ClientGUIMenus.AppendMenu( i_and_e_submenu, submenu, 'check export folder now' )
+                
+            
+            ClientGUIMenus.AppendSeparator( i_and_e_submenu )
             
             ClientGUIMenus.AppendMenuItem( self, i_and_e_submenu, 'manage import folders', 'Manage folders from which the client can automatically import.', self._ManageImportFolders )
             ClientGUIMenus.AppendMenuItem( self, i_and_e_submenu, 'manage export folders', 'Manage folders to which the client can automatically export.', self._ManageExportFolders )
@@ -1500,9 +1572,11 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                 ClientGUIMenus.AppendMenuItem( self, menu, 'restart', 'Shut the client down and then start it up again.', self.Exit, restart = True )
                 
             
+            ClientGUIMenus.AppendMenuItem( self, menu, 'exit and force shutdown maintenance', 'Shut the client down and force any outstanding shutdown maintenance to run.', self.Exit, force_shutdown_maintenance = True )
+            
             ClientGUIMenus.AppendMenuItem( self, menu, 'exit', 'Shut the client down.', self.Exit )
             
-            return ( menu, '&file', True )
+            return ( menu, '&file' )
             
         
         def undo():
@@ -1517,7 +1591,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             if have_closed_pages or have_undo_stuff:
                 
-                show = True
+                menu = wx.Menu()
                 
                 if undo_string is not None:
                     
@@ -1543,7 +1617,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                     
                     for ( i, ( time_closed, page ) ) in enumerate( self._closed_pages ):
                         
-                        name = page.GetDisplayName()
+                        name = page.GetName()
                         
                         args.append( ( i, name + ' - ' + page.GetPrettyStatus() ) )
                         
@@ -1560,13 +1634,15 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                 
             else:
                 
-                show = False
+                menu = None
                 
             
-            return ( menu, '&undo', show )
+            return ( menu, '&undo' )
             
         
         def pages():
+            
+            menu = wx.Menu()
             
             if self._controller.new_options.GetBoolean( 'advanced_mode' ):
                 
@@ -1772,10 +1848,12 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             #
             
-            return ( menu, '&pages', True )
+            return ( menu, '&pages' )
             
         
         def database():
+            
+            menu = wx.Menu()
             
             ClientGUIMenus.AppendMenuItem( self, menu, 'set a password', 'Set a simple password for the database so only you can open it in the client.', self._SetPassword )
             
@@ -1809,8 +1887,8 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             submenu = wx.Menu()
             
-            ClientGUIMenus.AppendMenuCheckItem( self, submenu, 'track file viewing', 'If activated, the client will record how frequently files are viewed in the preview and media viewers, and for how long.', self._controller.new_options.GetBoolean( 'file_viewing_statistics_active' ), self._controller.new_options.FlipBoolean, 'file_viewing_statistics_active' )
             ClientGUIMenus.AppendMenuItem( self, submenu, 'clear all file viewing statistics', 'Delete all file viewing records from the database.', self._ClearFileViewingStats )
+            ClientGUIMenus.AppendMenuItem( self, submenu, 'cull file viewing statistics based on current min/max values', 'Cull your file viewing statistics based on minimum and maximum permitted time deltas.', self._CullFileViewingStats )
             
             ClientGUIMenus.AppendMenu( menu, submenu, 'file viewing statistics' )
             
@@ -1818,6 +1896,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             ClientGUIMenus.AppendMenuItem( self, submenu, 'vacuum', 'Defrag the database by completely rebuilding it.', self._VacuumDatabase )
             ClientGUIMenus.AppendMenuItem( self, submenu, 'analyze', 'Optimise slow queries by running statistical analyses on the database.', self._AnalyzeDatabase )
+            ClientGUIMenus.AppendMenuItem( self, submenu, 'file maintenance', 'Run any outstanding file maintenance.', self._DoFileMaintenance )
             ClientGUIMenus.AppendMenuItem( self, submenu, 'clear orphan files', 'Clear out surplus files that have found their way into the file structure.', self._ClearOrphanFiles )
             ClientGUIMenus.AppendMenuItem( self, submenu, 'clear orphan file records', 'Clear out surplus file records that have not been deleted correctly.', self._ClearOrphanFileRecords )
             
@@ -1841,11 +1920,10 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             ClientGUIMenus.AppendMenuItem( self, submenu, 'autocomplete cache', 'Delete and recreate the tag autocomplete cache, fixing any miscounts.', self._RegenerateACCache )
             ClientGUIMenus.AppendMenuItem( self, submenu, 'similar files search metadata', 'Delete and recreate the similar files search phashes.', self._RegenerateSimilarFilesPhashes )
             ClientGUIMenus.AppendMenuItem( self, submenu, 'similar files search tree', 'Delete and recreate the similar files search tree.', self._RegenerateSimilarFilesTree )
-            ClientGUIMenus.AppendMenuItem( self, submenu, 'missing/all thumbnails', 'Delete missing/all thumbnails and regenerate them from their original files.', self._RegenerateThumbnails )
             
             ClientGUIMenus.AppendMenu( menu, submenu, 'regenerate' )
             
-            return ( menu, '&database', True )
+            return ( menu, '&database' )
             
         
         def pending():
@@ -1854,7 +1932,11 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             total_num_pending = 0
             
-            for ( service_key, info ) in list(nums_pending.items()):
+            menu = None
+            
+            can_do_a_menu = not HG.currently_uploading_pending
+            
+            for ( service_key, info ) in nums_pending.items():
                 
                 service = self._controller.services_manager.GetService( service_key )
                 
@@ -1888,7 +1970,12 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                     num_petitioned = info[ HC.SERVICE_INFO_NUM_PETITIONED_FILES ]
                     
                 
-                if num_pending + num_petitioned > 0:
+                if can_do_a_menu and num_pending + num_petitioned > 0:
+                    
+                    if menu is None:
+                        
+                        menu = wx.Menu()
+                        
                     
                     submenu = wx.Menu()
                     
@@ -1915,12 +2002,12 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                 total_num_pending += num_pending + num_petitioned
                 
             
-            show = total_num_pending > 0
-            
-            return ( menu, '&pending (' + HydrusData.ToHumanInt( total_num_pending ) + ')', show )
+            return ( menu, '&pending (' + HydrusData.ToHumanInt( total_num_pending ) + ')' )
             
         
         def network():
+            
+            menu = wx.Menu()
             
             submenu = wx.Menu()
             
@@ -1976,8 +2063,14 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             ClientGUIMenus.AppendSeparator( submenu )
             
-            # this will be the easy-mode 'export ability to download from blahbooru' that'll bundle it all into a nice package with a neat png.
-            # need a name for this that isn't 'downloader', or maybe it should be, and I should rename downloaders below to 'gallery query generator' or whatever.
+            clipboard_menu = wx.Menu()
+            
+            ClientGUIMenus.AppendMenuCheckItem( self, clipboard_menu, 'watcher urls', 'Automatically import watcher URLs that enter the clipboard just as if you drag-and-dropped them onto the ui.', self._controller.new_options.GetBoolean( 'watch_clipboard_for_watcher_urls' ), self._FlipClipboardWatcher, 'watch_clipboard_for_watcher_urls' )
+            ClientGUIMenus.AppendMenuCheckItem( self, clipboard_menu, 'other recognised urls', 'Automatically import recognised URLs that enter the clipboard just as if you drag-and-dropped them onto the ui.', self._controller.new_options.GetBoolean( 'watch_clipboard_for_other_recognised_urls' ), self._FlipClipboardWatcher, 'watch_clipboard_for_other_recognised_urls' )
+            
+            ClientGUIMenus.AppendMenu( submenu, clipboard_menu, 'watch clipboard for urls' )
+            
+            ClientGUIMenus.AppendSeparator( submenu )
             
             ClientGUIMenus.AppendMenuItem( self, submenu, 'import downloaders', 'Import new download capability through encoded pngs from other users.', self._ImportDownloaders )
             
@@ -2003,14 +2096,14 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             submenu = wx.Menu()
             
             ClientGUIMenus.AppendMenuItem( self, submenu, 'manage gallery url generators', 'Manage the client\'s GUGs, which convert search terms into URLs.', self._ManageGUGs )
-            ClientGUIMenus.AppendMenuItem( self, submenu, 'manage url classes', 'Configure which URLs the client can recognise.', self._ManageURLMatches )
+            ClientGUIMenus.AppendMenuItem( self, submenu, 'manage url classes', 'Configure which URLs the client can recognise.', self._ManageURLClasses )
             ClientGUIMenus.AppendMenuItem( self, submenu, 'manage parsers', 'Manage the client\'s parsers, which convert URL content into hydrus metadata.', self._ManageParsers )
             
             ClientGUIMenus.AppendMenuItem( self, submenu, 'manage login scripts', 'Manage the client\'s login scripts, which define how to log in to different sites.', self._ManageLoginScripts )
             
             ClientGUIMenus.AppendSeparator( submenu )
             
-            ClientGUIMenus.AppendMenuItem( self, submenu, 'manage url class links', 'Configure how URLs present across the client.', self._ManageURLMatchLinks )
+            ClientGUIMenus.AppendMenuItem( self, submenu, 'manage url class links', 'Configure how URLs present across the client.', self._ManageURLClassLinks )
             ClientGUIMenus.AppendMenuItem( self, submenu, 'export downloaders', 'Export downloader components to easy-import pngs.', self._ExportDownloader )
             
             ClientGUIMenus.AppendSeparator( submenu )
@@ -2021,10 +2114,12 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             #
             
-            return ( menu, '&network', True )
+            return ( menu, '&network' )
             
         
         def services():
+            
+            menu = wx.Menu()
             
             tag_services = self._controller.services_manager.GetServices( ( HC.TAG_REPOSITORY, ) )
             file_services = self._controller.services_manager.GetServices( ( HC.FILE_REPOSITORY, ) )
@@ -2142,10 +2237,12 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             ClientGUIMenus.AppendMenuItem( self, menu, 'manage tag siblings', 'Set certain tags to be automatically replaced with other tags.', self._ManageTagSiblings )
             ClientGUIMenus.AppendMenuItem( self, menu, 'manage tag parents', 'Set certain tags to be automatically added with other tags.', self._ManageTagParents )
             
-            return ( menu, '&services', True )
+            return ( menu, '&services' )
             
         
         def help():
+            
+            menu = wx.Menu()
             
             ClientGUIMenus.AppendMenuItem( self, menu, 'help and getting started guide', 'Open hydrus\'s local help in your web browser.', ClientPaths.LaunchPathInWebBrowser, os.path.join( HC.HELP_DIR, 'index.html' ) )
             
@@ -2248,6 +2345,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             ClientGUIMenus.AppendMenuItem( self, data_actions, 'flush log', 'Command the log to write any buffered contents to hard drive.', HydrusData.DebugPrint, 'Flushing log' )
             ClientGUIMenus.AppendMenuItem( self, data_actions, 'print garbage', 'Print some information about the python garbage to the log.', self._DebugPrintGarbage )
             ClientGUIMenus.AppendMenuItem( self, data_actions, 'clear image rendering cache', 'Tell the image rendering system to forget all current images. This will often free up a bunch of memory immediately.', self._controller.ClearCaches )
+            ClientGUIMenus.AppendMenuItem( self, data_actions, 'clear thumbnail cache', 'Tell the thumbnail cache to forget everything and redraw all current thumbs.', self._controller.pub, 'clear_all_thumbnails' )
             ClientGUIMenus.AppendMenuItem( self, data_actions, 'clear db service info cache', 'Delete all cached service info like total number of mappings or files, in case it has become desynchronised. Some parts of the gui may be laggy immediately after this as these numbers are recalculated.', self._DeleteServiceInfo )
             ClientGUIMenus.AppendMenuItem( self, data_actions, 'load whole db in disk cache', 'Contiguously read as much of the db as will fit into memory. This will massively speed up any subsequent big job.', self._controller.CallToThread, self._controller.Read, 'load_into_disk_cache' )
             
@@ -2268,7 +2366,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             ClientGUIMenus.AppendMenuItem( self, menu, 'hardcoded shortcuts', 'Review some currently hardcoded shortcuts.', wx.MessageBox, CC.SHORTCUT_HELP )
             ClientGUIMenus.AppendMenuItem( self, menu, 'about', 'See this client\'s version and other information.', self._AboutWindow )
             
-            return ( menu, '&help', True )
+            return ( menu, '&help' )
             
         
         if name == 'file': result = file()
@@ -2281,23 +2379,21 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         elif name == 'help': result = help()
         
         # hackery dackery doo
-        ( menu, label, show ) = result
+        ( menu_or_none, label ) = result
         
-        if show:
+        if menu_or_none is not None:
+            
+            menu = menu_or_none
+            
+            menu.hydrus_menubar_name = name
             
             if HC.PLATFORM_OSX:
                 
                 menu.SetTitle( label ) # causes bugs in os x if this is not here
                 
             
-        else:
-            
-            ClientGUIMenus.DestroyMenu( self, menu )
-            
-            menu = None
-            
         
-        return ( menu, label, show )
+        return ( menu_or_none, label )
         
     
     def _GenerateNewAccounts( self, service_key ):
@@ -2456,7 +2552,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
         
     
-    def _ImportURL( self, url, service_keys_to_tags = None, destination_page_name = None, show_destination_page = True ):
+    def _ImportURL( self, url, service_keys_to_tags = None, destination_page_name = None, destination_page_key = None, show_destination_page = True, allow_watchers = True, allow_other_recognised_urls = True, allow_unrecognised_urls = True ):
         
         if service_keys_to_tags is None:
             
@@ -2473,12 +2569,23 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             message += os.linesep * 2
             message += 'Since this URL cannot be parsed, a downloader cannot be created for it! Please check your url class links under the \'networking\' menu.'
             
-            raise HydrusExceptions.URLMatchException( message )
+            raise HydrusExceptions.URLClassException( message )
             
         
-        if url_type in ( HC.URL_TYPE_UNKNOWN, HC.URL_TYPE_FILE, HC.URL_TYPE_POST, HC.URL_TYPE_GALLERY ):
+        url_caught = False
+        
+        if ( url_type == HC.URL_TYPE_UNKNOWN and allow_unrecognised_urls ) or ( url_type in ( HC.URL_TYPE_FILE, HC.URL_TYPE_POST, HC.URL_TYPE_GALLERY ) and allow_other_recognised_urls ):
             
-            page = self._notebook.GetOrMakeURLImportPage( desired_page_name = destination_page_name, select_page = show_destination_page )
+            url_caught = True
+            
+            if not self._notebook.HasURLImportPage() and self.IsIconized():
+                
+                self._controller.CallLaterWXSafe( self, 10, self._ImportURL, url, service_keys_to_tags = service_keys_to_tags, destination_page_name = destination_page_name, destination_page_key = destination_page_key, show_destination_page = show_destination_page, allow_watchers = allow_watchers, allow_other_recognised_urls = allow_other_recognised_urls, allow_unrecognised_urls = allow_unrecognised_urls )
+                
+                return ( url, '"{}" URL was accepted, but it needed a new page and the client is currently minimized. It is queued to be added once the client is restored.' )
+                
+            
+            page = self._notebook.GetOrMakeURLImportPage( desired_page_name = destination_page_name, desired_page_key = destination_page_key, select_page = show_destination_page )
             
             if page is not None:
                 
@@ -2494,9 +2601,18 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                 return ( url, '"{}" URL added successfully.'.format( match_name ) )
                 
             
-        elif url_type == HC.URL_TYPE_WATCHABLE:
+        elif url_type == HC.URL_TYPE_WATCHABLE and allow_watchers:
             
-            page = self._notebook.GetOrMakeMultipleWatcherPage( desired_page_name = destination_page_name, select_page = show_destination_page )
+            url_caught = True
+            
+            if not self._notebook.HasMultipleWatcherPage() and self.IsIconized():
+                
+                self._controller.CallLaterWXSafe( self, 10, self._ImportURL, url, service_keys_to_tags = service_keys_to_tags, destination_page_name = destination_page_name, destination_page_key = destination_page_key, show_destination_page = show_destination_page, allow_watchers = allow_watchers, allow_other_recognised_urls = allow_other_recognised_urls, allow_unrecognised_urls = allow_unrecognised_urls )
+                
+                return ( url, '"{}" URL was accepted, but it needed a new page and the client is current minimized. It is queued to be added once the client is restored.' )
+                
+            
+            page = self._notebook.GetOrMakeMultipleWatcherPage( desired_page_name = destination_page_name, desired_page_key = destination_page_key, select_page = show_destination_page )
             
             if page is not None:
                 
@@ -2513,7 +2629,10 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
                 
             
         
-        raise HydrusExceptions.DataMissing( '"{}" URL was not added successfully--could not find/generate a new downloader page for it.'.format( match_name ) )
+        if url_caught:
+            
+            raise HydrusExceptions.DataMissing( '"{}" URL was accepted but not added successfully--could not find/generate a new downloader page for it.'.format( match_name ) )
+            
         
     
     def _InitialiseMenubar( self ):
@@ -2527,9 +2646,9 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         for name in MENU_ORDER:
             
-            ( menu_or_none, label, show ) = self._GenerateMenuInfo( name )
+            ( menu_or_none, label ) = self._GenerateMenuInfo( name )
             
-            if show:
+            if menu_or_none is not None:
                 
                 menu = menu_or_none
                 
@@ -2579,7 +2698,11 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         
         last_session_save_period_minutes = self._controller.new_options.GetInteger( 'last_session_save_period_minutes' )
         
+        self._controller.CallLaterWXSafe( self, 1.0, self.Layout ) # some i3 thing--doesn't layout main gui on init for some reason
+        
         self._controller.CallLaterWXSafe( self, last_session_save_period_minutes * 60, self.SaveLastSession )
+        
+        self._clipboard_watcher_repeating_job = self._controller.CallRepeatingWXSafe( self, 1.0, 1.0, self.REPEATINGClipboardWatcher )
         
     
     def _ManageAccountTypes( self, service_key ):
@@ -2604,22 +2727,22 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             domain_manager = self._controller.network_engine.domain_manager
             
-            ( file_post_default_tag_import_options, watchable_default_tag_import_options, url_match_keys_to_tag_import_options ) = domain_manager.GetDefaultTagImportOptions()
+            ( file_post_default_tag_import_options, watchable_default_tag_import_options, url_class_keys_to_tag_import_options ) = domain_manager.GetDefaultTagImportOptions()
             
-            url_matches = domain_manager.GetURLMatches()
+            url_classes = domain_manager.GetURLClasses()
             parsers = domain_manager.GetParsers()
             
-            url_match_keys_to_parser_keys = domain_manager.GetURLMatchKeysToParserKeys()
+            url_class_keys_to_parser_keys = domain_manager.GetURLClassKeysToParserKeys()
             
-            panel = ClientGUIScrolledPanelsEdit.EditDefaultTagImportOptionsPanel( dlg, url_matches, parsers, url_match_keys_to_parser_keys, file_post_default_tag_import_options, watchable_default_tag_import_options, url_match_keys_to_tag_import_options )
+            panel = ClientGUIScrolledPanelsEdit.EditDefaultTagImportOptionsPanel( dlg, url_classes, parsers, url_class_keys_to_parser_keys, file_post_default_tag_import_options, watchable_default_tag_import_options, url_class_keys_to_tag_import_options )
             
             dlg.SetPanel( panel )
             
             if dlg.ShowModal() == wx.ID_OK:
                 
-                ( file_post_default_tag_import_options, watchable_default_tag_import_options, url_match_keys_to_tag_import_options ) = panel.GetValue()
+                ( file_post_default_tag_import_options, watchable_default_tag_import_options, url_class_keys_to_tag_import_options ) = panel.GetValue()
                 
-                domain_manager.SetDefaultTagImportOptions( file_post_default_tag_import_options, watchable_default_tag_import_options, url_match_keys_to_tag_import_options )
+                domain_manager.SetDefaultTagImportOptions( file_post_default_tag_import_options, watchable_default_tag_import_options, url_class_keys_to_tag_import_options )
                 
             
         
@@ -2636,20 +2759,20 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             gug_keys_to_display = domain_manager.GetGUGKeysToDisplay()
             
-            url_matches = domain_manager.GetURLMatches()
+            url_classes = domain_manager.GetURLClasses()
             
-            url_match_keys_to_display = domain_manager.GetURLMatchKeysToDisplay()
+            url_class_keys_to_display = domain_manager.GetURLClassKeysToDisplay()
             
-            panel = ClientGUIScrolledPanelsEdit.EditDownloaderDisplayPanel( dlg, self._controller.network_engine, gugs, gug_keys_to_display, url_matches, url_match_keys_to_display )
+            panel = ClientGUIScrolledPanelsEdit.EditDownloaderDisplayPanel( dlg, self._controller.network_engine, gugs, gug_keys_to_display, url_classes, url_class_keys_to_display )
             
             dlg.SetPanel( panel )
             
             if dlg.ShowModal() == wx.ID_OK:
                 
-                ( gug_keys_to_display, url_match_keys_to_display ) = panel.GetValue()
+                ( gug_keys_to_display, url_class_keys_to_display ) = panel.GetValue()
                 
                 domain_manager.SetGUGKeysToDisplay( gug_keys_to_display )
-                domain_manager.SetURLMatchKeysToDisplay( url_match_keys_to_display )
+                domain_manager.SetURLClassKeysToDisplay( url_class_keys_to_display )
                 
             
         
@@ -3201,7 +3324,7 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
         
     
-    def _ManageURLMatches( self ):
+    def _ManageURLClasses( self ):
         
         title = 'manage url classes'
         
@@ -3209,22 +3332,22 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             domain_manager = self._controller.network_engine.domain_manager
             
-            url_matches = domain_manager.GetURLMatches()
+            url_classes = domain_manager.GetURLClasses()
             
-            panel = ClientGUIScrolledPanelsEdit.EditURLMatchesPanel( dlg, url_matches )
+            panel = ClientGUIScrolledPanelsEdit.EditURLClassesPanel( dlg, url_classes )
             
             dlg.SetPanel( panel )
             
             if dlg.ShowModal() == wx.ID_OK:
                 
-                url_matches = panel.GetValue()
+                url_classes = panel.GetValue()
                 
-                domain_manager.SetURLMatches( url_matches )
+                domain_manager.SetURLClasses( url_classes )
                 
             
         
     
-    def _ManageURLMatchLinks( self ):
+    def _ManageURLClassLinks( self ):
         
         title = 'manage url class links'
         
@@ -3232,20 +3355,20 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             domain_manager = self._controller.network_engine.domain_manager
             
-            url_matches = domain_manager.GetURLMatches()
+            url_classes = domain_manager.GetURLClasses()
             parsers = domain_manager.GetParsers()
             
-            url_match_keys_to_parser_keys = domain_manager.GetURLMatchKeysToParserKeys()
+            url_class_keys_to_parser_keys = domain_manager.GetURLClassKeysToParserKeys()
             
-            panel = ClientGUIScrolledPanelsEdit.EditURLMatchLinksPanel( dlg, self._controller.network_engine, url_matches, parsers, url_match_keys_to_parser_keys )
+            panel = ClientGUIScrolledPanelsEdit.EditURLClassLinksPanel( dlg, self._controller.network_engine, url_classes, parsers, url_class_keys_to_parser_keys )
             
             dlg.SetPanel( panel )
             
             if dlg.ShowModal() == wx.ID_OK:
                 
-                url_match_keys_to_parser_keys = panel.GetValue()
+                url_class_keys_to_parser_keys = panel.GetValue()
                 
-                domain_manager.SetURLMatchKeysToParserKeys( url_match_keys_to_parser_keys )
+                domain_manager.SetURLClassKeysToParserKeys( url_class_keys_to_parser_keys )
                 
             
         
@@ -3464,31 +3587,6 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
         
     
-    def _RegenerateThumbnails( self ):
-        
-        client_files_manager = self._controller.client_files_manager
-        
-        text = 'This will rebuild all your thumbnails from the original files. You probably only want to do this if you experience thumbnail errors. If you have a lot of files, it will take some time. A popup message will show its progress.'
-        text += os.linesep * 2
-        text += 'You can choose to only regenerate missing thumbnails, which is useful if you are rebuilding a fractured database, or you can force a complete refresh of all thumbnails, which is useful if some have been corrupted by a faulty hard drive.'
-        text += os.linesep * 2
-        text += 'Files and thumbnails will be inaccessible while this occurs, so it is best to leave the client alone until it is done.'
-        
-        with ClientGUIDialogs.DialogYesNo( self, text, yes_label = 'only do missing', no_label = 'force all' ) as dlg:
-            
-            result = dlg.ShowModal()
-            
-            if result == wx.ID_YES:
-                
-                self._controller.CallToThread( client_files_manager.RegenerateThumbnails, only_do_missing = True )
-                
-            elif result == wx.ID_NO:
-                
-                self._controller.CallToThread( client_files_manager.RegenerateThumbnails )
-                
-            
-        
-    
     def _RestoreSplitterPositions( self ):
         
         self._controller.pub( 'set_splitter_positions', HC.options[ 'hpos' ], HC.options[ 'vpos' ] )
@@ -3537,6 +3635,34 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
         panel = ClientGUIScrolledPanelsReview.ReviewThreads( frame, self._controller )
         
         frame.SetPanel( panel )
+        
+    
+    def _RunExportFolder( self, name = None ):
+        
+        if self._controller.options[ 'pause_export_folders_sync' ]:
+            
+            HydrusData.ShowText( 'Export folders are currently paused under the \'file\' menu. Please unpause them and try this again.' )
+            
+        
+        if name is None:
+            
+            export_folders = self._controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_EXPORT_FOLDER )
+            
+        else:
+            
+            export_folder = self._controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_EXPORT_FOLDER, name )
+            
+            export_folders = [ export_folder ]
+            
+        
+        for export_folder in export_folders:
+            
+            export_folder.RunNow()
+            
+            self._controller.WriteSynchronous( 'serialisable', export_folder )
+            
+        
+        self._controller.pub( 'notify_new_export_folders' )
         
     
     def _RunUITest( self ):
@@ -3666,20 +3792,23 @@ class FrameGUI( ClientGUITopLevelWindows.FrameThatResizes ):
             
             for i in range( 16 ):
                 
-                t += 0.5
+                t += 1.0
                 
-                HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_DOWN )
-                
-                t += 0.05
+                for j in range( i + 1 ):
+                    
+                    HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_DOWN )
+                    
+                    t += 0.1
+                    
                 
                 HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
                 
-                t += 0.5
+                t += 1.0
                 
                 HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_RETURN )
                 
             
-            t += 0.5
+            t += 1.0
             
             HG.client_controller.CallLaterWXSafe( self, t, uias.Char, wx.WXK_DOWN )
             
@@ -4029,7 +4158,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             HG.force_idle_mode = not HG.force_idle_mode
             
-            self._controller.pub( 'wake_daemons' )
+            self._controller.pub( 'wake_idle_workers' )
             self.SetStatusBarDirty()
             
         elif name == 'no_page_limit_mode':
@@ -4047,7 +4176,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
                 return
                 
             
-            closed_page_index = 0
+            closed_page_index = len( self._closed_pages ) - 1
             
         
         ( time_closed, page ) = self._closed_pages.pop( closed_page_index )
@@ -4067,7 +4196,14 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         
         try:
             
-            service.CheckFunctional( including_bandwidth = False )
+            if isinstance( service, ClientServices.ServiceRestricted ):
+                
+                service.CheckFunctional( including_bandwidth = False )
+                
+            else:
+                
+                service.CheckFunctional()
+                
             
         except Exception as e:
             
@@ -4075,6 +4211,8 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             return
             
+        
+        HG.currently_uploading_pending = True
         
         self._controller.CallToThread( THREADUploadPending, service_key )
         
@@ -4093,11 +4231,11 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             if result == wx.ID_YES:
                 
-                self._controller.Write( 'vacuum' )
+                self._controller.Write( 'vacuum', maintenance_mode = HC.MAINTENANCE_FORCED )
                 
             elif result == wx.ID_NO:
                 
-                self._controller.Write( 'vacuum', force_vacuum = True )
+                self._controller.Write( 'vacuum', maintenance_mode = HC.MAINTENANCE_FORCED, force_vacuum = True )
                 
             
         
@@ -4245,7 +4383,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         
         if self.IsIconized() or dialog_open:
             
-            self._controller.CallLaterWXSafe( self, 10, self.AddModalMessage, job_key )
+            self._controller.CallLaterWXSafe( self, 2, self.AddModalMessage, job_key )
             
         else:
             
@@ -4346,11 +4484,6 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
     
     def EventFrameNewPage( self, event ):
         
-        if self._controller.MenuIsOpen():
-            
-            return
-            
-        
         screen_position = wx.GetMousePosition()
         
         self._notebook.EventNewPageFromScreenPosition( screen_position )
@@ -4361,6 +4494,48 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         screen_position = wx.GetMousePosition()
         
         self._notebook.EventMenuFromScreenPosition( screen_position )
+        
+    
+    def EventMenuClose( self, event ):
+        
+        menu = event.GetMenu()
+        
+        if menu is not None and hasattr( menu, 'hydrus_menubar_name' ):
+            
+            if menu in self._menubar_open_menu_stack:
+                
+                index = self._menubar_open_menu_stack.index( menu )
+                
+                del self._menubar_open_menu_stack[ index ]
+                
+            
+            if len( self._menubar_open_menu_stack ) == 0:
+                
+                HG.client_controller.MenubarMenuIsClosed()
+                
+            
+        
+        event.Skip()
+        
+    
+    def EventMenuOpen( self, event ):
+        
+        menu = event.GetMenu()
+        
+        if menu is not None and hasattr( menu, 'hydrus_menubar_name' ):
+            
+            if len( self._menubar_open_menu_stack ) == 0:
+                
+                HG.client_controller.MenubarMenuIsOpen()
+                
+            
+            if menu not in self._menubar_open_menu_stack:
+                
+                self._menubar_open_menu_stack.append( menu )
+                
+            
+        
+        event.Skip()
         
     
     def EventMove( self, event ):
@@ -4428,7 +4603,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
         
     
-    def Exit( self, restart = False ):
+    def Exit( self, restart = False, force_shutdown_maintenance = False ):
         
         # the return value here is 'exit allowed'
         
@@ -4477,6 +4652,11 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             HG.restart = True
             
         
+        if force_shutdown_maintenance:
+            
+            HG.do_idle_shutdown_work = True
+            
+        
         try:
             
             self._notebook.SaveGUISession( 'last session' )
@@ -4486,9 +4666,12 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             self.DeleteAllClosedPages() # wx crashes if any are left in here, wew
             
-            self._message_manager.CleanBeforeDestroy()
-            
-            self._message_manager.Hide()
+            if self._message_manager:
+                
+                self._message_manager.CleanBeforeDestroy()
+                
+                self._message_manager.Hide()
+                
             
             self._notebook.CleanBeforeDestroy()
             
@@ -4559,7 +4742,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             ( predicate_type, value, inclusive ) = predicate.GetInfo()
             
-            if value is None and predicate_type in [ HC.PREDICATE_TYPE_SYSTEM_NUM_TAGS, HC.PREDICATE_TYPE_SYSTEM_LIMIT, HC.PREDICATE_TYPE_SYSTEM_SIZE, HC.PREDICATE_TYPE_SYSTEM_DIMENSIONS, HC.PREDICATE_TYPE_SYSTEM_AGE, HC.PREDICATE_TYPE_SYSTEM_KNOWN_URLS, HC.PREDICATE_TYPE_SYSTEM_HASH, HC.PREDICATE_TYPE_SYSTEM_DURATION, HC.PREDICATE_TYPE_SYSTEM_NUM_WORDS, HC.PREDICATE_TYPE_SYSTEM_MIME, HC.PREDICATE_TYPE_SYSTEM_RATING, HC.PREDICATE_TYPE_SYSTEM_SIMILAR_TO, HC.PREDICATE_TYPE_SYSTEM_FILE_SERVICE, HC.PREDICATE_TYPE_SYSTEM_TAG_AS_NUMBER, HC.PREDICATE_TYPE_SYSTEM_DUPLICATE_RELATIONSHIPS, HC.PREDICATE_TYPE_SYSTEM_FILE_VIEWING_STATS ]:
+            if value is None and predicate_type in [ HC.PREDICATE_TYPE_SYSTEM_NUM_TAGS, HC.PREDICATE_TYPE_SYSTEM_LIMIT, HC.PREDICATE_TYPE_SYSTEM_SIZE, HC.PREDICATE_TYPE_SYSTEM_DIMENSIONS, HC.PREDICATE_TYPE_SYSTEM_AGE, HC.PREDICATE_TYPE_SYSTEM_KNOWN_URLS, HC.PREDICATE_TYPE_SYSTEM_HASH, HC.PREDICATE_TYPE_SYSTEM_DURATION, HC.PREDICATE_TYPE_SYSTEM_NUM_WORDS, HC.PREDICATE_TYPE_SYSTEM_MIME, HC.PREDICATE_TYPE_SYSTEM_RATING, HC.PREDICATE_TYPE_SYSTEM_SIMILAR_TO, HC.PREDICATE_TYPE_SYSTEM_FILE_SERVICE, HC.PREDICATE_TYPE_SYSTEM_TAG_AS_NUMBER, HC.PREDICATE_TYPE_SYSTEM_DUPLICATE_RELATIONSHIP_COUNT, HC.PREDICATE_TYPE_SYSTEM_FILE_VIEWING_STATS ]:
                 
                 with ClientGUITopLevelWindows.DialogEdit( self, 'input predicate', hide_buttons = True ) as dlg:
                     
@@ -4591,6 +4774,11 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         return self._notebook.GetCurrentMediaPage()
         
     
+    def GetCurrentSessionPageInfoDict( self ):
+        
+        return self._notebook.GetPageInfoDict( is_selected = True )
+        
+    
     def GetTotalPageCounts( self ):
         
         total_active_page_count = self._notebook.GetNumPages()
@@ -4606,7 +4794,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         
         if current_page is not None:
             
-            in_current_page = ClientGUICommon.IsWXAncestor( window, current_page )
+            in_current_page = ClientGUIFunctions.IsWXAncestor( window, current_page )
             
             if in_current_page:
                 
@@ -4614,7 +4802,7 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
                 
             
         
-        in_other_window = ClientGUICommon.GetTLP( window ) != self
+        in_other_window = ClientGUIFunctions.GetTLP( window ) != self
         
         return in_other_window
         
@@ -4631,11 +4819,11 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         self._ImportFiles( paths )
         
     
-    def ImportURLFromAPI( self, url, service_keys_to_tags, destination_page_name, show_destination_page ):
+    def ImportURLFromAPI( self, url, service_keys_to_tags, destination_page_name, destination_page_key, show_destination_page ):
         
         try:
             
-            ( normalised_url, result_text ) = self._ImportURL( url, service_keys_to_tags = service_keys_to_tags, destination_page_name = destination_page_name, show_destination_page = show_destination_page )
+            ( normalised_url, result_text ) = self._ImportURL( url, service_keys_to_tags = service_keys_to_tags, destination_page_name = destination_page_name, destination_page_key = destination_page_key, show_destination_page = show_destination_page )
             
             return ( normalised_url, result_text )
             
@@ -4697,6 +4885,16 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
     
     def NotifyClosedPage( self, page ):
         
+        if self._clipboard_watcher_destination_page_urls == page:
+            
+            self._clipboard_watcher_destination_page_urls = None
+            
+        
+        if self._clipboard_watcher_destination_page_watcher == page:
+            
+            self._clipboard_watcher_destination_page_watcher = None
+            
+        
         close_time = HydrusData.GetNow()
         
         self._closed_pages.append( ( close_time, page ) )
@@ -4723,6 +4921,13 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         self._DestroyPages( ( page, ) )
         
         self._DirtyMenu( 'pages' )
+        
+        self._menu_updater.Update()
+        
+    
+    def NotifyNewExportFolders( self ):
+        
+        self._DirtyMenu( 'file' )
         
         self._menu_updater.Update()
         
@@ -4790,16 +4995,13 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
     
     def PresentImportedFilesToPage( self, hashes, page_name ):
         
-        tlp = ClientGUICommon.GetTLP( self )
+        tlp = ClientGUIFunctions.GetTLP( self )
         
-        if tlp.IsIconized(): # initial layout is bugged if the new page is added during minimised, so let's delay it here
+        if tlp.IsIconized() and not self._notebook.HasMediaPageName( page_name ):
             
-            if not self._notebook.HasMediaPageName( page_name ):
-                
-                self._controller.CallLaterWXSafe( self, 5.0, self.PresentImportedFilesToPage, hashes, page_name )
-                
-                return
-                
+            self._controller.CallLaterWXSafe( self, 10.0, self.PresentImportedFilesToPage, hashes, page_name )
+            
+            return
             
         
         dest_page = self._notebook.PresentImportedFilesToPage( hashes, page_name )
@@ -4917,8 +5119,9 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
         
         db_going_to_hang_if_we_hit_it = HG.client_controller.DBCurrentlyDoingJob()
+        menu_open = HG.client_controller.MenuIsOpen()
         
-        if db_going_to_hang_if_we_hit_it:
+        if db_going_to_hang_if_we_hit_it or menu_open:
             
             self._controller.CallLaterWXSafe( self, 0.5, self.RefreshMenu )
             
@@ -4929,13 +5132,13 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
             name = self._dirty_menus.pop()
             
-            ( menu_or_none, label, show ) = self._GenerateMenuInfo( name )
+            ( menu_or_none, label ) = self._GenerateMenuInfo( name )
             
             old_menu_index = self._FindMenuBarIndex( name )
             
             if old_menu_index == wx.NOT_FOUND:
                 
-                if show:
+                if menu_or_none is not None:
                     
                     menu = menu_or_none
                     
@@ -4962,20 +5165,27 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
                 
             else:
                 
-                old_menu = self._menubar.GetMenu( old_menu_index )
-                
-                if show:
+                if name == 'pending' and HG.currently_uploading_pending:
                     
-                    menu = menu_or_none
-                    
-                    self._menubar.Replace( old_menu_index, menu, label )
+                    self._menubar.SetMenuLabel( old_menu_index, label )
                     
                 else:
                     
-                    self._menubar.Remove( old_menu_index )
+                    old_menu = self._menubar.GetMenu( old_menu_index )
                     
-                
-                ClientGUIMenus.DestroyMenu( self, old_menu )
+                    if menu_or_none is not None:
+                        
+                        menu = menu_or_none
+                        
+                        self._menubar.Replace( old_menu_index, menu, label )
+                        
+                    else:
+                        
+                        self._menubar.Remove( old_menu_index )
+                        
+                    
+                    ClientGUIMenus.DestroyMenu( self, old_menu )
+                    
                 
             
         
@@ -5010,11 +5220,6 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
         
     
-    def RenamePage( self, page_key, name ):
-        
-        self._notebook.RenamePage( page_key, name )
-        
-    
     def REPEATINGBandwidth( self ):
         
         global_tracker = self._controller.network_engine.bandwidth_manager.GetTracker( ClientNetworkingContexts.GLOBAL_NETWORK_CONTEXT )
@@ -5035,6 +5240,68 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
             
         
         self._statusbar.SetStatusText( bandwidth_status, 1 )
+        
+    
+    def REPEATINGClipboardWatcher( self ):
+        
+        allow_watchers = self._controller.new_options.GetBoolean( 'watch_clipboard_for_watcher_urls' )
+        allow_other_recognised_urls = self._controller.new_options.GetBoolean( 'watch_clipboard_for_other_recognised_urls' )
+        
+        if not ( allow_watchers or allow_other_recognised_urls ):
+            
+            self._clipboard_watcher_repeating_job.Cancel()
+            
+            self._clipboard_watcher_repeating_job = None
+            
+            return
+            
+        
+        try:
+            
+            text = HG.client_controller.GetClipboardText()
+            
+        except HydrusExceptions.DataMissing:
+            
+            text = ''
+            
+        except Exception as e:
+            
+            HydrusData.ShowText( 'Could not access the clipboard: {}'.format( e ) )
+            
+            self._clipboard_watcher_repeating_job.Cancel()
+            
+            self._clipboard_watcher_repeating_job = None
+            
+            return
+            
+        
+        if text != self._last_clipboard_watched_text:
+            
+            self._last_clipboard_watched_text = text
+            
+            for possible_url in HydrusText.DeserialiseNewlinedTexts( text ):
+                
+                if not possible_url.startswith( 'http' ):
+                    
+                    continue
+                    
+                
+                try:
+                    
+                    self._ImportURL( possible_url, show_destination_page = False, allow_watchers = allow_watchers, allow_other_recognised_urls = allow_other_recognised_urls, allow_unrecognised_urls = False )
+                    
+                except HydrusExceptions.URLClassException:
+                    
+                    pass
+                    
+                except HydrusExceptions.DataMissing:
+                    
+                    HydrusData.ShowText( 'Could not find a new page to place the clipboard URL. Perhaps the client is at its page limit.' )
+                    
+                    break
+                    
+                
+            
         
     
     def REPEATINGPageUpdate( self ):
@@ -5144,6 +5411,153 @@ The password is cleartext here but obscured in the entry dialog. Enter a blank p
         self._ui_update_windows.discard( window )
         
     
+class FrameSplashPanel( wx.Panel ):
+    
+    WIDTH = 480
+    HEIGHT = 280
+    
+    def __init__( self, parent, controller ):
+        
+        wx.Panel.__init__( self, parent )
+        
+        self._controller = controller
+        
+        self._dirty = True
+        
+        self._my_status = FrameSplashStatus( self._controller, self )
+        
+        self._bmp = wx.Bitmap( self.WIDTH, self.HEIGHT, 24 )
+        
+        self.SetClientSize( ( self.WIDTH, self.HEIGHT ) )
+        self.SetMinClientSize( ( self.WIDTH, self.HEIGHT ) )
+        
+        self._drag_init_click_coordinates = None
+        self._drag_init_position = None
+        self._initial_position = self.GetParent().GetPosition()
+        
+        # this is 124 x 166
+        self._hydrus = wx.Bitmap( os.path.join( HC.STATIC_DIR, 'hydrus_splash.png' ) )
+        
+        self.Bind( wx.EVT_PAINT, self.EventPaint )
+        self.Bind( wx.EVT_MOTION, self.EventDrag )
+        self.Bind( wx.EVT_LEFT_DOWN, self.EventDragBegin )
+        self.Bind( wx.EVT_LEFT_UP, self.EventDragEnd )
+        self.Bind( wx.EVT_ERASE_BACKGROUND, self.EventEraseBackground )
+        
+    
+    def _Redraw( self, dc ):
+        
+        ( title_text, status_text, status_subtext ) = self._my_status.GetTexts()
+        
+        dc.SetBackground( wx.Brush( wx.SystemSettings.GetColour( wx.SYS_COLOUR_WINDOW ) ) )
+        
+        dc.Clear()
+        
+        #
+        
+        x = ( self.WIDTH - 124 ) // 2
+        y = 15
+        
+        dc.DrawBitmap( self._hydrus, x, y )
+        
+        dc.SetFont( wx.SystemSettings.GetFont( wx.SYS_DEFAULT_GUI_FONT ) )
+        
+        y += 166 + 15
+        
+        #
+        
+        ( width, height ) = dc.GetTextExtent( title_text )
+        
+        text_gap = ( self.HEIGHT - y - height * 3 ) // 4
+        
+        x = ( self.WIDTH - width ) // 2
+        y += text_gap
+        
+        dc.DrawText( title_text, x, y )
+        
+        #
+        
+        y += height + text_gap
+        
+        ( width, height ) = dc.GetTextExtent( status_text )
+        
+        x = ( self.WIDTH - width ) // 2
+        
+        dc.DrawText( status_text, x, y )
+        
+        #
+        
+        y += height + text_gap
+        
+        ( width, height ) = dc.GetTextExtent( status_subtext )
+        
+        x = ( self.WIDTH - width ) // 2
+        
+        dc.DrawText( status_subtext, x, y )
+        
+    
+    def EventDrag( self, event ):
+        
+        if event.Dragging() and self._drag_init_click_coordinates is not None:
+            
+            ( init_x, init_y ) = self._drag_init_click_coordinates
+            
+            ( x, y ) = wx.GetMousePosition()
+            
+            total_drag_delta = ( x - init_x, y - init_y )
+            
+            #
+            
+            ( init_x, init_y ) = self._drag_init_position
+            
+            ( total_delta_x, total_delta_y ) = total_drag_delta
+            
+            self.GetParent().SetPosition( ( init_x + total_delta_x, init_y + total_delta_y ) )
+            
+        
+    
+    def EventDragBegin( self, event ):
+        
+        self._drag_init_click_coordinates = wx.GetMousePosition()
+        self._drag_init_position = self.GetParent().GetPosition()
+        
+        event.Skip()
+        
+    
+    def EventDragEnd( self, event ):
+        
+        self._drag_init_click_coordinates = None
+        
+        event.Skip()
+        
+    
+    def EventEraseBackground( self, event ):
+        
+        pass
+        
+    
+    def EventPaint( self, event ):
+        
+        dc = wx.BufferedPaintDC( self, self._bmp )
+        
+        if self._dirty:
+            
+            self._Redraw( dc )
+            
+        
+    
+    def SetDirty( self ):
+        
+        if not self:
+            
+            return
+            
+        
+        self._dirty = True
+        
+        self.Refresh()
+        
+    
 # We have this to be an off-wx-thread-happy container for this info, as the framesplash has to deal with messages in the fuzzy time of shutdown
 # all of a sudden, pubsubs are processed in non wx-thread time, so this handles that safely and lets the gui know if the wx controller is still running
 class FrameSplashStatus( object ):
@@ -5232,9 +5646,6 @@ class FrameSplashStatus( object ):
     
 class FrameSplash( wx.Frame ):
     
-    WIDTH = 480
-    HEIGHT = 280
-    
     def __init__( self, controller ):
         
         self._controller = controller
@@ -5243,144 +5654,39 @@ class FrameSplash( wx.Frame ):
         
         wx.Frame.__init__( self, None, style = style, title = 'hydrus client' )
         
-        self._dirty = True
+        self.SetBackgroundColour( wx.WHITE )
         
-        self._my_status = FrameSplashStatus( self._controller, self )
+        self._my_panel = FrameSplashPanel( self, self._controller )
         
-        self._bmp = wx.Bitmap( self.WIDTH, self.HEIGHT, 24 )
+        self._vbox = wx.BoxSizer( wx.VERTICAL )
         
-        self.SetClientSize( ( self.WIDTH, self.HEIGHT ) )
+        self._vbox.Add( self._my_panel, CC.FLAGS_EXPAND_SIZER_BOTH_WAYS )
+        
+        self.SetSizer( self._vbox )
+        
+        self.Fit()
         
         self.Center()
-        
-        self._drag_init_click_coordinates = None
-        self._drag_init_position = None
-        self._initial_position = self.GetPosition()
-        
-        # this is 124 x 166
-        self._hydrus = wx.Bitmap( os.path.join( HC.STATIC_DIR, 'hydrus_splash.png' ) )
-        
-        self.Bind( wx.EVT_PAINT, self.EventPaint )
-        self.Bind( wx.EVT_MOTION, self.EventDrag )
-        self.Bind( wx.EVT_LEFT_DOWN, self.EventDragBegin )
-        self.Bind( wx.EVT_LEFT_UP, self.EventDragEnd )
-        self.Bind( wx.EVT_ERASE_BACKGROUND, self.EventEraseBackground )
         
         self.Show( True )
         
         self.Raise()
         
     
-    def _Redraw( self, dc ):
+    def CancelShutdownMaintenance( self ):
         
-        ( title_text, status_text, status_subtext ) = self._my_status.GetTexts()
+        self._cancel_shutdown_maintenance.SetLabelText( 'stopping\u2026' )
+        self._cancel_shutdown_maintenance.Disable()
         
-        dc.SetBackground( wx.Brush( wx.SystemSettings.GetColour( wx.SYS_COLOUR_WINDOW ) ) )
-        
-        dc.Clear()
-        
-        #
-        
-        x = ( self.WIDTH - 124 ) // 2
-        y = 15
-        
-        dc.DrawBitmap( self._hydrus, x, y )
-        
-        dc.SetFont( wx.SystemSettings.GetFont( wx.SYS_DEFAULT_GUI_FONT ) )
-        
-        y += 166 + 15
-        
-        #
-        
-        ( width, height ) = dc.GetTextExtent( title_text )
-        
-        text_gap = ( self.HEIGHT - y - height * 3 ) // 4
-        
-        x = ( self.WIDTH - width ) // 2
-        y += text_gap
-        
-        dc.DrawText( title_text, x, y )
-        
-        #
-        
-        y += height + text_gap
-        
-        ( width, height ) = dc.GetTextExtent( status_text )
-        
-        x = ( self.WIDTH - width ) // 2
-        
-        dc.DrawText( status_text, x, y )
-        
-        #
-        
-        y += height + text_gap
-        
-        ( width, height ) = dc.GetTextExtent( status_subtext )
-        
-        x = ( self.WIDTH - width ) // 2
-        
-        dc.DrawText( status_subtext, x, y )
+        HG.do_idle_shutdown_work = False
         
     
-    def EventDrag( self, event ):
+    def MakeCancelShutdownButton( self ):
         
-        if event.Dragging() and self._drag_init_click_coordinates is not None:
-            
-            ( init_x, init_y ) = self._drag_init_click_coordinates
-            
-            ( x, y ) = wx.GetMousePosition()
-            
-            total_drag_delta = ( x - init_x, y - init_y )
-            
-            #
-            
-            ( init_x, init_y ) = self._drag_init_position
-            
-            ( total_delta_x, total_delta_y ) = total_drag_delta
-            
-            self.SetPosition( ( init_x + total_delta_x, init_y + total_delta_y ) )
-            
+        self._cancel_shutdown_maintenance = ClientGUICommon.BetterButton( self, 'stop shutdown maintenance', self.CancelShutdownMaintenance )
         
-    
-    def EventDragBegin( self, event ):
+        self._vbox.Insert( 0, self._cancel_shutdown_maintenance, CC.FLAGS_EXPAND_PERPENDICULAR )
         
-        self._drag_init_click_coordinates = wx.GetMousePosition()
-        self._drag_init_position = self.GetPosition()
-        
-        event.Skip()
-        
-    
-    def EventDragEnd( self, event ):
-        
-        self._drag_init_click_coordinates = None
-        
-        event.Skip()
-        
-    
-    def EventEraseBackground( self, event ):
-        
-        pass
-        
-    
-    def EventPaint( self, event ):
-        
-        dc = wx.BufferedPaintDC( self, self._bmp )
-        
-        if self._dirty:
-            
-            self._Redraw( dc )
-            
-        
-    
-    def SetDirty( self ):
-        
-        if not self:
-            
-            return
-            
-        
-        self._dirty = True
-        
-        self.Refresh()
+        self.Fit()
         
     

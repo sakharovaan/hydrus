@@ -1,5 +1,6 @@
 from . import ClientCaches
 from . import ClientConstants as CC
+from . import ClientGUIFunctions
 from . import ClientGUIMenus
 from . import ClientGUIShortcuts
 from . import HydrusConstants as HC
@@ -296,20 +297,13 @@ class NewDialog( wx.Dialog ):
         
         wx.Dialog.__init__( self, parent, title = title, style = style )
         
+        self._consumed_esc_to_cancel = False
+        
         self._new_options = HG.client_controller.new_options
         
         self.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_FRAMEBK ) )
         
         self.SetIcon( HG.client_controller.frame_icon )
-        
-        self.Bind( wx.EVT_BUTTON, self.EventDialogButton )
-        
-        self.Bind( wx.EVT_MENU_CLOSE, self.EventMenuClose )
-        self.Bind( wx.EVT_MENU_HIGHLIGHT_ALL, self.EventMenuHighlight )
-        self.Bind( wx.EVT_MENU_OPEN, self.EventMenuOpen )
-        
-        self._menu_stack = []
-        self._menu_text_stack = []
         
         HG.client_controller.ResetIdleTimer()
         
@@ -366,6 +360,8 @@ class NewDialog( wx.Dialog ):
             self._SaveOKPosition()
             
         
+        self.CleanBeforeDestroy()
+        
         try:
             
             self.EndModal( value )
@@ -400,6 +396,11 @@ class NewDialog( wx.Dialog ):
             
         
     
+    def CleanBeforeDestroy( self ):
+        
+        pass
+        
+    
     def DoOK( self ):
         
         self._TryEndModal( wx.ID_OK )
@@ -409,7 +410,13 @@ class NewDialog( wx.Dialog ):
         
         ( modifier, key ) = ClientGUIShortcuts.ConvertKeyEventToSimpleTuple( event )
         
-        if key == wx.WXK_ESCAPE:
+        obj = event.GetEventObject()
+        
+        event_from_us = obj is not None and ClientGUIFunctions.IsWXAncestor( self, obj )
+        
+        if event_from_us and key == wx.WXK_ESCAPE and not self._consumed_esc_to_cancel:
+            
+            self._consumed_esc_to_cancel = True
             
             self._TryEndModal( wx.ID_CANCEL )
             
@@ -460,73 +467,6 @@ class NewDialog( wx.Dialog ):
             
         
         self._TryEndModal( event_id )
-        
-    
-    def EventMenuClose( self, event ):
-        
-        menu = event.GetMenu()
-        
-        if menu is not None and menu in self._menu_stack:
-            
-            index = self._menu_stack.index( menu )
-            
-            del self._menu_stack[ index ]
-            
-            previous_text = self._menu_text_stack.pop()
-            
-            status_bar = HG.client_controller.GetGUI().GetStatusBar()
-            
-            status_bar.SetStatusText( previous_text )
-            
-        
-    
-    def EventMenuHighlight( self, event ):
-        
-        if len( self._menu_stack ) > 0:
-            
-            text = ''
-            
-            menu = self._menu_stack[-1]
-            
-            while ClientGUIMenus.MenuIsDead( menu ):
-                
-                if len( self._menu_stack ) == 0:
-                    
-                    return
-                    
-                
-                del self._menu_stack[-1]
-                
-                menu = self._menu_stack[-1]
-                
-            
-            menu_item = menu.FindItemById( event.GetMenuId() )
-            
-            if menu_item is not None:
-                
-                text = menu_item.GetHelp()
-                
-            
-            status_bar = HG.client_controller.GetGUI().GetStatusBar()
-            
-            status_bar.SetStatusText( text )
-            
-        
-    
-    def EventMenuOpen( self, event ):
-        
-        menu = event.GetMenu()
-        
-        if menu is not None:
-            
-            status_bar = HG.client_controller.GetGUI().GetStatusBar()
-            
-            previous_text = status_bar.GetStatusText()
-            
-            self._menu_stack.append( menu )
-            
-            self._menu_text_stack.append( previous_text )
-            
         
     
     def EventOK( self, event ):
@@ -586,6 +526,16 @@ class DialogThatTakesScrollablePanel( DialogThatResizes ):
     def _InitialiseButtons( self ):
         
         raise NotImplementedError()
+        
+    
+    def CleanBeforeDestroy( self ):
+        
+        DialogThatResizes.CleanBeforeDestroy( self )
+        
+        if hasattr( self._panel, 'CleanBeforeDestroy' ):
+            
+            self._panel.CleanBeforeDestroy()
+            
         
     
     def EventChildSizeChanged( self, event ):
@@ -689,10 +639,11 @@ class DialogApplyCancel( DialogThatTakesScrollablePanel ):
         
         self._apply = wx.Button( self, id = wx.ID_OK, label = 'apply' )
         self._apply.SetForegroundColour( ( 0, 128, 0 ) )
-        #self._apply.Bind( wx.EVT_BUTTON, self.EventOK )
+        self._apply.Bind( wx.EVT_BUTTON, self.EventDialogButton )
         
         self._cancel = wx.Button( self, id = wx.ID_CANCEL, label = 'cancel' )
         self._cancel.SetForegroundColour( ( 128, 0, 0 ) )
+        self._cancel.Bind( wx.EVT_BUTTON, self.EventDialogButton )
         
         if self._hide_buttons:
             
@@ -783,81 +734,21 @@ class Frame( wx.Frame ):
         
         self.SetIcon( HG.client_controller.frame_icon )
         
-        self.Bind( wx.EVT_MENU_CLOSE, self.EventMenuClose )
-        self.Bind( wx.EVT_MENU_HIGHLIGHT_ALL, self.EventMenuHighlight )
-        self.Bind( wx.EVT_MENU_OPEN, self.EventMenuOpen )
-        
-        self._menu_stack = []
-        self._menu_text_stack = []
+        self.Bind( wx.EVT_CLOSE, self.EventAboutToClose )
         
         HG.client_controller.ResetIdleTimer()
         
     
-    def EventMenuClose( self, event ):
+    def CleanBeforeDestroy( self ):
         
-        menu = event.GetMenu()
-        
-        if menu is not None and menu in self._menu_stack:
-            
-            index = self._menu_stack.index( menu )
-            
-            del self._menu_stack[ index ]
-            
-            previous_text = self._menu_text_stack.pop()
-            
-            status_bar = HG.client_controller.GetGUI().GetStatusBar()
-            
-            status_bar.SetStatusText( previous_text )
-            
+        pass
         
     
-    def EventMenuHighlight( self, event ):
+    def EventAboutToClose( self, event ):
         
-        if len( self._menu_stack ) > 0:
-            
-            text = ''
-            
-            menu = self._menu_stack[-1]
-            
-            while ClientGUIMenus.MenuIsDead( menu ):
-                
-                del self._menu_stack[-1]
-                
-                if len( self._menu_stack ) == 0:
-                    
-                    return
-                    
-                
-                menu = self._menu_stack[-1]
-                
-            
-            menu_item = menu.FindItemById( event.GetMenuId() )
-            
-            if menu_item is not None:
-                
-                text = menu_item.GetHelp()
-                
-            
-            status_bar = HG.client_controller.GetGUI().GetStatusBar()
-            
-            status_bar.SetStatusText( text )
-            
+        self.CleanBeforeDestroy()
         
-    
-    def EventMenuOpen( self, event ):
-        
-        menu = event.GetMenu()
-        
-        if menu is not None:
-            
-            status_bar = HG.client_controller.GetGUI().GetStatusBar()
-            
-            previous_text = status_bar.GetStatusText()
-            
-            self._menu_stack.append( menu )
-            
-            self._menu_text_stack.append( previous_text )
-            
+        event.Skip()
         
     
 class FrameThatResizes( Frame ):
@@ -896,6 +787,16 @@ class FrameThatTakesScrollablePanel( FrameThatResizes ):
         self.Bind( CC.EVT_SIZE_CHANGED, self.EventChildSizeChanged )
         
         self.Bind( wx.EVT_CHAR_HOOK, self.EventCharHook )
+        
+    
+    def CleanBeforeDestroy( self ):
+        
+        FrameThatResizes.CleanBeforeDestroy( self )
+        
+        if hasattr( self._panel, 'CleanBeforeDestroy' ):
+            
+            self._panel.CleanBeforeDestroy()
+            
         
     
     def EventCharHook( self, event ):

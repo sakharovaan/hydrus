@@ -181,6 +181,8 @@ class Controller( HydrusController.HydrusController ):
                 
                 try:
                     
+                    time.sleep( 1 )
+                    
                     port = service.GetPort()
                     
                     if HydrusNetworking.LocalPortInUse( port ):
@@ -331,11 +333,11 @@ class Controller( HydrusController.HydrusController ):
         return False
         
     
-    def MaintainDB( self, stop_time = None ):
+    def MaintainDB( self, maintenance_mode = HC.MAINTENANCE_FORCED, stop_time = None ):
         
         stop_time = HydrusData.GetNow() + 10
         
-        self.WriteSynchronous( 'analyze', stop_time )
+        self.WriteSynchronous( 'analyze', maintenance_mode = maintenance_mode, stop_time = stop_time )
         
     
     def ReportDataUsed( self, num_bytes ):

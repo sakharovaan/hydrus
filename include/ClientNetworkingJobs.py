@@ -88,7 +88,7 @@ def ConvertStatusCodeAndDataIntoExceptionInfo( status_code, data, is_hydrus_serv
         error_text += smaller_chunk
         
     
-    e = eclass( error_text )
+    e = eclass( '{}: {}'.format( status_code, error_text ) )
     
     return ( e, error_text )
     
@@ -158,8 +158,6 @@ class NetworkJob( object ):
         self._status_text = 'initialising\u2026'
         self._num_bytes_read = 0
         self._num_bytes_to_read = 1
-        
-        self._death_time = None
         
         self._file_import_options = None
         
@@ -470,6 +468,21 @@ class NetworkJob( object ):
     def _Sleep( self, seconds ):
         
         self._wake_time = HydrusData.GetNow() + seconds
+        
+    
+    def _WaitOnConnectionError( self, status_text ):
+        
+        time_to_try_again = HydrusData.GetNow() + ( ( self._current_connection_attempt_number - 1 ) * 60 )
+        
+        while not HydrusData.TimeHasPassed( time_to_try_again ) and not self._IsCancelled():
+            
+            with self._lock:
+                
+                self._status_text = status_text + ' - retrying in {}'.format( HydrusData.TimestampToPrettyTimeDelta( time_to_try_again ) )
+                
+            
+            time.sleep( 1 )
+            
         
     
     def _WaitOnOngoingBandwidth( self ):
@@ -843,11 +856,6 @@ class NetworkJob( object ):
             
         
     
-    def SetDeathTime( self, death_time ):
-        
-        self._death_time = death_time
-        
-    
     def SetError( self, e, error ):
         
         with self._lock:
@@ -919,6 +927,11 @@ class NetworkJob( object ):
             while not request_completed:
                 
                 try:
+                    
+                    if self._IsCancelled():
+                        
+                        return
+                        
                     
                     response = self._SendRequestAndGetResponse()
                     
@@ -1004,12 +1017,7 @@ class NetworkJob( object ):
                         raise HydrusExceptions.NetworkException( 'Ran out of reattempts on this error: ' + str( e ) )
                         
                     
-                    with self._lock:
-                        
-                        self._status_text = str( e ) + '--retrying'
-                        
-                    
-                    time.sleep( 3 )
+                    self._WaitOnConnectionError( 'server suddenly stopped delivering data' )
                     
                 except requests.exceptions.ChunkedEncodingError:
                     
@@ -1020,12 +1028,7 @@ class NetworkJob( object ):
                         raise HydrusExceptions.ConnectionException( 'Unable to complete request--it broke mid-way!' )
                         
                     
-                    with self._lock:
-                        
-                        self._status_text = 'connection broke mid-request--retrying'
-                        
-                    
-                    time.sleep( 3 )
+                    self._WaitOnConnectionError( 'connection broke mid-request' )
                     
                 except ( requests.exceptions.ConnectionError, requests.exceptions.ConnectTimeout ):
                     
@@ -1036,12 +1039,7 @@ class NetworkJob( object ):
                         raise HydrusExceptions.ConnectionException( 'Could not connect!' )
                         
                     
-                    with self._lock:
-                        
-                        self._status_text = 'connection failed--retrying'
-                        
-                    
-                    time.sleep( 3 )
+                    self._WaitOnConnectionError( 'connection failed' )
                     
                 except requests.exceptions.ReadTimeout:
                     
@@ -1052,12 +1050,7 @@ class NetworkJob( object ):
                         raise HydrusExceptions.ConnectionException( 'Connection successful, but reading response timed out!' )
                         
                     
-                    with self._lock:
-                        
-                        self._status_text = 'read timed out--retrying'
-                        
-                    
-                    time.sleep( 3 )
+                    self._WaitOnConnectionError( 'read timed out' )
                     
                 
             
@@ -1067,7 +1060,7 @@ class NetworkJob( object ):
                 
                 trace = traceback.format_exc()
                 
-                if not isinstance( e, HydrusExceptions.ConnectionException ):
+                if not isinstance( e, ( HydrusExceptions.ConnectionException, HydrusExceptions.SizeException ) ):
                     
                     HydrusData.Print( trace )
                     
@@ -1127,14 +1120,6 @@ class NetworkJob( object ):
         while True:
             
             self._is_done_event.wait( 5 )
-            
-            with self._lock:
-                
-                if not self._is_started and self._death_time is not None and HydrusData.TimeHasPassed( self._death_time ):
-                    
-                    raise Exception( 'Network job death time reached--not sure what the error was. Maybe a paused service?' )
-                    
-                
             
             if self.IsDone():
                 

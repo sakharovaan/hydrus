@@ -8,8 +8,434 @@
 		<div class="content">
 			<h3>changelog</h3>
 			<ul>
+				<li><h3>version 357</h3></li>
 				<ul>
+					<li>duplicates:</li>
+					<li>moved better/worse/same quality duplicates relationships to the new 'king' group-based model. rather than tracking every relationship, duplicates are now stored in groups with a single 'best' file</li>
+					<li>as a result, duplicate relationships are now transitive! saying that one king is duplicate to another will merge groups. the 'better' king is the new king, and 'same quality' kings choose one of the kings pseudorandomly. advanced exceptions: saying that a king is better than a basic member of another group or saying that two members are same quality is still valid but will simply 'poach' the non-king member from the other group in order to ensure the wrong king doesn't end up on top in the eventual merge. saying KingA is same quality as MemberB will merge the groups with KingB as the new king (since it is presumably same/better quality to all members of A)</li>
+					<li>the thumbnail right-click 'duplicates' entry is now renamed to 'file relationships' and is no longer advanced mode only. the 'find similar files' entry is folded into this</li>
+					<li>the thumbnail 'file relationships' menu now shows a simple 'duplicates' count rather than the old messy better/worse/equal. it will show all the members of a duplicates group when clicked. the menu also notes if the focused file is the best file of its group. if it is not, you will get the option to show the best file or make the focused file the best</li>
+					<li>as a result, it is now much simpler to view a group of duplicates and overrule a 'best quality' member as needed</li>
+					<li>added the 'media' shortcut 'duplicate_media_set_focused_king' to shortcut setting a 'best quality' file</li>
+					<li>the system:num duplicate relationships now has the simpler 'duplicates' entry, to search on size of the entire group. searching for kings/not kings will come soon</li>
+					<li>due to the new duplicate transitivity rules, potential pairs are now eliminated at a much faster rate!</li>
+					<li>setting duplicate relationships will overrule false positive or alternate relationships already in place</li>
+					<li>manually setting alternate relationships to more than two thumbnails at once will now set each file as alternate to every other file in the selection, completely eliminating potential pairs within the group. if you try to do this to large groups of files you will get a longer yes/no confirmation message just to make sure you aren't overwriting some potential dupes by accident</li>
+					<li>all existing better/worse/same relationships will be converted to the new group storage in this update, with appropriate kings determined. potential pair queue counts will be reduce accordingly, and the temporary alternate/duplicate confusion from the alternates update will be auto-resolved by merging truly duplicate 'alternates' together</li>
+					<li>fleshed out the duplicate test code significantly to handle the new dupe groups and their interactions with the recent false positive and alternates changes</li>
+					<li>refactored some db test code into separate client/server/duplicates files and cleaned up dupe tests readability</li>
+					<li>potential pairs are now the only component of the new system still on the old pairs system. the duplicate filter will still serve up some inefficient (i.e. non-king) comparisons</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>fixed the issue where many clipboard-watcher-caught URLs that did not match were producing false-positive 'could not generate new page for that URL' error popups</li>
+					<li>the clipboard text-fetcher now tests against incompatible clipboard types (like a screenshot) better, and all instances of text fetching now report errors more gracefully and with more information</li>
+					<li>fixed the unusual OS X issue where many shortcuts were not being processed after client boot until the top menubar was opened and closed. a variety of other blocking-while-menubar-is-open issues that were false-positive misfiring are now fixed as well, please let me know if you still have trouble here</li>
+					<li>the file menu now has an 'exit and force shutdown maintenance' option to force-run outstanding maintenance jobs</li>
+					<li>when shutdown maintenance work is going on, the shutdown splash screen now has a 'stop shutdown maintenance' button!</li>
+					<li>cleaned up some file maintenance manager maintenance locking and shutdown cancel logic</li>
+					<li>moved all the idle-mode maintenance checks to a new system that explicitly defines idle/shutdown/forced maintenance work and tests those states in a unified manner, checking idle mode and the new splash cancel button status and so on more reliably. a lot of maintenance should cancel out quicker when appropriate</li>
+					<li>misc shutdown logic cleanup</li>
+					<li>added a 'file maintenance' option to the database->maintenance menu that forces the new file maintenance manager to run its queue. it'll make a little popup as it works, or a note that no work is due</li>
+					<li>the 'regenerate' thumbnail menu is also available to all users</li>
+					<li>jpeg quality estimates are now available for all users in the duplicate filter. they only display when the two jpegs' quality have different labels</li>
+					<li>the jpeg quality estimator now handles some unusual jpegs that load with empty quantization table arrays</li>
+					<li>the duplicate filter now handles bad jpeg quality estimations gracefully</li>
+					<li>cleaned up some ffmpeg communication code</li>
+					<li>the ffmpeg debug text that spawns on a help->about call that fails to discover ffmpeg version information now prints stderr output as well. if you have been hit by this, please give it another go and let me know what you get</li>
+					<li>the same ffmpeg 'no response' error on file parse now popups and prints some debug info and returns a better error</li>
+					<li>dialogs and windows on the new panel system now support a new pre-close tidying system</li>
+					<li>the manage tags dialog and window will now cancel any pending large tag autocomplete queries on close</li>
+					<li>regular gui pages now support a new pre-close tidying system</li>
+					<li>search pages will now cancel any pending search results loading or tag autocomplete queries on close</li>
+					<li>improved reliability of the popup message manager chasing the main gui when it is sent to another screen by a keyboard shortcut (such as shift+win+arrow on Windows). it should work now if the mouse cursor is in either window. please let me know if this causes trouble for virtual display navigation</li>
+					<li>the network engine now waits significantly longer--60s--on connection errors before trying again, and with every failed attempt will wait n times longer again. when in this waiting state, a manual user cancel command cancels it out faster</li>
+					<li>I believe I have fixed/improved a situation where media viewer hover windows would sometimes disappear immediately after appearing on some Linux window managers</li>
+					<li>improved hover window report mode to state more focus info in case the above is insufficient</li>
+					<li>to better link the two requests and consume bandwidth under strict rules more precisely, the override bandwidth rule that kicks in when a file page has a single file is now 3 seconds instead of 30</li>
+					<li>updated options->connection page to specify that 'socks4a'/'socks5h' is needed to force remote dns resolution</li>
+					<li>sped up tag parents initialisation</li>
+					<li>repositories now group tag sibling and parent petitions by the parent/better tag's namespace</li>
+					<li>removed some old network 'death time' code that is no longer useful and was interfering with heavy petition processing</li>
+					<li>the log now flushes itself to disk every 60s rather than 300s</li>
+					<li>misc fixes and cleanup</li>
+				</ul>
+				<li><h3>version 356</h3></li>
+				<ul>
+					<li>duplicates:</li>
+					<li>moved better/worse/same quality duplicates relationships to the new 'king' group-based model. rather than tracking every relationship, duplicates are now stored in groups with a single 'best' file</li>
+					<li>as a result, duplicate relationships are now transitive! saying that one king is duplicate to another will merge groups. the 'better' king is the new king, and 'same quality' kings choose one of the kings pseudorandomly. advanced exceptions: saying that a king is better than a basic member of another group or saying that two members are same quality is still valid but will simply 'poach' the non-king member from the other group in order to ensure the wrong king doesn't end up on top in the eventual merge. saying KingA is same quality as MemberB will merge the groups with KingB as the new king (since it is presumably same/better quality to all members of A)</li>
+					<li>the thumbnail right-click 'duplicates' entry is now renamed to 'file relationships' and is no longer advanced mode only. the 'find similar files' entry is folded into this</li>
+					<li>the thumbnail 'file relationships' menu now shows a simple 'duplicates' count rather than the old messy better/worse/equal. it will show all the members of a duplicates group when clicked. the menu also notes if the focused file is the best file of its group. if it is not, you will get the option to show the best file or make the focused file the best</li>
+					<li>as a result, it is now much simpler to view a group of duplicates and overrule a 'best quality' member as needed</li>
+					<li>added the 'media' shortcut 'duplicate_media_set_focused_king' to shortcut setting a 'best quality' file</li>
+					<li>the system:num duplicate relationships now has the simpler 'duplicates' entry, to search on size of the entire group. searching for kings/not kings will come soon</li>
+					<li>due to the new duplicate transitivity rules, potential pairs are now eliminated at a much faster rate!</li>
+					<li>setting duplicate relationships will overrule false positive or alternate relationships already in place</li>
+					<li>manually setting alternate relationships to more than two thumbnails at once will now set each file as alternate to every other file in the selection, completely eliminating potential pairs within the group. if you try to do this to large groups of files you will get a longer yes/no confirmation message just to make sure you aren't overwriting some potential dupes by accident</li>
+					<li>all existing better/worse/same relationships will be converted to the new group storage in this update, with appropriate kings determined. potential pair queue counts will be reduce accordingly, and the temporary alternate/duplicate confusion from the alternates update will be auto-resolved by merging truly duplicate 'alternates' together</li>
+					<li>fleshed out the duplicate test code significantly to handle the new dupe groups and their interactions with the recent false positive and alternates changes</li>
+					<li>refactored some db test code into separate client/server/duplicates files and cleaned up dupe tests readability</li>
+					<li>potential pairs are now the only component of the new system still on the old pairs system. the duplicate filter will still serve up some inefficient (i.e. non-king) comparisons</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>fixed the issue where many clipboard-watcher-caught URLs that did not match were producing false-positive 'could not generate new page for that URL' error popups</li>
+					<li>the clipboard text-fetcher now tests against incompatible clipboard types (like a screenshot) better, and all instances of text fetching now report errors more gracefully and with more information</li>
+					<li>fixed the unusual OS X issue where many shortcuts were not being processed after client boot until the top menubar was opened and closed. a variety of other blocking-while-menubar-is-open issues that were false-positive misfiring are now fixed as well, please let me know if you still have trouble here</li>
+					<li>the file menu now has an 'exit and force shutdown maintenance' option to force-run outstanding maintenance jobs</li>
+					<li>when shutdown maintenance work is going on, the shutdown splash screen now has a 'stop shutdown maintenance' button!</li>
+					<li>cleaned up some file maintenance manager maintenance locking and shutdown cancel logic</li>
+					<li>moved all the idle-mode maintenance checks to a new system that explicitly defines idle/shutdown/forced maintenance work and tests those states in a unified manner, checking idle mode and the new splash cancel button status and so on more reliably. a lot of maintenance should cancel out quicker when appropriate</li>
+					<li>misc shutdown logic cleanup</li>
+					<li>added a 'file maintenance' option to the database->maintenance menu that forces the new file maintenance manager to run its queue. it'll make a little popup as it works, or a note that no work is due</li>
+					<li>the 'regenerate' thumbnail menu is also available to all users</li>
+					<li>jpeg quality estimates are now available for all users in the duplicate filter. they only display when the two jpegs' quality have different labels</li>
+					<li>the jpeg quality estimator now handles some unusual jpegs that load with empty quantization table arrays</li>
+					<li>the duplicate filter now handles bad jpeg quality estimations gracefully</li>
+					<li>cleaned up some ffmpeg communication code</li>
+					<li>the ffmpeg debug text that spawns on a help->about call that fails to discover ffmpeg version information now prints stderr output as well. if you have been hit by this, please give it another go and let me know what you get</li>
+					<li>the same ffmpeg 'no response' error on file parse now popups and prints some debug info and returns a better error</li>
+					<li>dialogs and windows on the new panel system now support a new pre-close tidying system</li>
+					<li>the manage tags dialog and window will now cancel any pending large tag autocomplete queries on close</li>
+					<li>regular gui pages now support a new pre-close tidying system</li>
+					<li>search pages will now cancel any pending search results loading or tag autocomplete queries on close</li>
+					<li>improved reliability of the popup message manager chasing the main gui when it is sent to another screen by a keyboard shortcut (such as shift+win+arrow on Windows). it should work now if the mouse cursor is in either window. please let me know if this causes trouble for virtual display navigation</li>
+					<li>the network engine now waits significantly longer--60s--on connection errors before trying again, and with every failed attempt will wait n times longer again. when in this waiting state, a manual user cancel command cancels it out faster</li>
+					<li>I believe I have fixed/improved a situation where media viewer hover windows would sometimes disappear immediately after appearing on some Linux window managers</li>
+					<li>improved hover window report mode to state more focus info in case the above is insufficient</li>
+					<li>to better link the two requests and consume bandwidth under strict rules more precisely, the override bandwidth rule that kicks in when a file page has a single file is now 3 seconds instead of 30</li>
+					<li>updated options->connection page to specify that 'socks4a'/'socks5h' is needed to force remote dns resolution</li>
+					<li>sped up tag parents initialisation</li>
+					<li>repositories now group tag sibling and parent petitions by the parent/better tag's namespace</li>
+					<li>removed some old network 'death time' code that is no longer useful and was interfering with heavy petition processing</li>
+					<li>the log now flushes itself to disk every 60s rather than 300s</li>
+					<li>misc fixes and cleanup</li>
+				</ul>
+				<li><h3>version 355</h3></li>
+				<ul>
+					<li>duplicates:</li>
+					<li>retuned the new alternate and false positive setting code to be less aggressive about removing potential pairs. users with alternate groups who updated to 354 may have lost some intra-alternate potential pairs, which I expect to fill back in once the potential pairs system is updated</li>
+					<li>the duplicate filter center-right hover window now has a trash button, which is moved to its own row with the cog icon where they will fit on thinner windows better</li>
+					<li>users who are in advanced mode now have access to duplicate merge options for 'alternates' again--but be careful with this, it is advanced. if you had merge options for alternates set up before, your old options _should_ return, but make sure to check it</li>
+					<li>if you are in advanced mode, the duplicate filter can now show an experimental jpeg quality comparison statement. if this works out, I will add custom scores and improve this otherwise based on feedback , so comments would be appreciated</li>
+					<li>.</li>
+					<li>client api:</li>
+					<li>the client api has a new 'manage pages' permission!</li>
+					<li>/manage_pages/get_pages now fetches a structure of the current page session! there's some help for it</li>
+					<li>in future, I expect to add a 'select page' command and get/remove/highlight URL(s) for downloader pages, and reveal the unique page identifier for better targeting here and for add_url commands</li>
+					<li>client api is now version 7</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>fixed a stupid issue related to drawing collection thumbnails that was causing a lot of errors. I apologise for the inconvenience and have added pre-build tests to catch these simple mistakes in future</li>
+					<li>added a clipboard url watcher! there are two options now under network->downloaders--one for watcher urls, and one for all other _recognised_ urls (i.e. post and gallery urls, and file urls that have matching url classes). it checks every second, sends urls to pages according to the same rules as a drag and drop event, and will handle newline-separated lists of urls</li>
+					<li>when the client is minimised and needs to create a new downloader page because of an 'add url' command through this new clipboard watcher or the client api, it will now queue up the url and its page creation for when the client is next restored (page creation while minimized causes layout bugs). it returns an appropriate result text to the client api in this case</li>
+					<li>added four 'show_and_focus_manage_tags_XXX' shortcuts to the 'main_gui' shortcut set that let you select and focus the four possible suggested tags panels on the manage tags dialog. these are slightly special focus events that do some 'first tag selection' work as well and should let you make the whole process keyboard-only</li>
+					<li>added a 'focus_media_viewer' shortcut to the 'main_gui' shortcut set that focuses the media viewer from a media viewer's manage tags window</li>
+					<li>file viewing statistics gets an update: it now has its own options page where you can set min/max for preview and media viewing times. the global turn on/off control is moved from database menu to this page, as is a new control for enabling it on the duplicate filter (where you will be flicking back and forth and perhaps do not want lots of views recorded). duplicate filter file stats now default to disabled</li>
+					<li>added a new command to database->file viewing statistics that will cull your current stats based on the new min/max values to compensate for previous accidental '3day 4hour' preview view that snuck in. a yes/no dialog explains how it works before it goes</li>
+					<li>wrote a 'mixin' class to let my buttons automatically note current shortcut mapping information to the bottom of button tooltips</li>
+					<li>the duplicate commands and a variety of other media viewer buttons that work in the new shortcut system now report their current shortcuts in their tooltips!</li>
+					<li>quick-entering 'namespace:' in a search page's tag autocomplete input will now automatically swap in the special 'namespace:*anything*' predicate</li>
+					<li>cleaned up code around setting a custom temp_dir through the "temp_dir" command, and made it test the given path is indeed a directory and writable-to. if not, the program dumps out with an error popup</li>
+					<li>the client and server now similarly test that the directory db is a dir and writable-to</li>
+					<li>rearranged some critical boot error handling code and made the client's boot error handling throw up some ui</li>
+					<li>fixed the client's repairdb function when needing to regen autocomplete caches</li>
+					<li>autocomplete regen now publishes status updates to the splash screen</li>
+					<li>fixed the client's repairdb to wait correctly for the ui in case the user wants to bail before repair</li>
+					<li>the client's repair db now repairs the new local_tags_cache table if missing</li>
+					<li>fixed an issue with showing the manage logins panel when the domain had some unusual cookie expiry numbers</li>
+					<li>to reduce initial load gui-event crunch (which affects some systems' layout reliability), initial session load now happens after a 0.5s delay</li>
+					<li>cleaned up some image load error handling</li>
+					<li>when FFMPEG version information cannot be understood in help->about, a popup note appears and debug information is printed to the log</li>
+					<li>the advanced content update panel now puts up a 'working...' dialog while it processed a job</li>
+					<li>in the client</li>
+					<li>all 4XX and 5XX network exceptions' error texts are now prepended with the actual status code</li>
+					<li>extended the hover window debug report mode</li>
+					<li>improved some misc temp and permission testing code</li>
+					<li>improved some misc testing code</li>
+				</ul>
+				<li><h3>version 354</h3></li>
+				<ul>
+					<li>duplicates important:</li>
+					<li>duplicates 'false positive' and 'alternates' pairs are now stored in a new more efficient structure that is better suited for larger groups of files</li>
+					<li>alternate relationships are now implicitly transitive--if A is alternate B and A is alternate C, B is now alternate C</li>
+					<li>false positive relationships remain correctly non-transitive, but they are now implicitly shared amongst alternates--if A is alternate B and A is false positive with C, B is now false positive with C. and further, if C alt D, then A and B are implicitly fp D as well!</li>
+					<li>your existing false positive and alternates relationships will be migrated on update. alternates will apply first, so in the case of conflicts due to previous non-excellent filtering workflow, formerly invalid false positives (i.e. false positives between now-transitive alternates) will be discarded. invalid potentials will also be cleared out</li>
+					<li>attempting to set a 'false positives' or 'alternates' relationship to files that already have a conflicting relation (e.g. setting false positive to two files that already have alternates) now does nothing. in future, this will have graceful failure reporting</li>
+					<li>the false positive and alternate transitivity clears out potential dupes at a faster rate than previously, speeding up duplicate filter workflow and reducing redundancy on the human end</li>
+					<li>unfortunately, as potential and better/worse/same pairs have yet to be updated, the system may report that a file has the same alternate as same quality partner. this will be automatically corrected in the coming weeks</li>
+					<li>when selecting 'view this file's duplicates' from thumbnail right-click, the focus file will now be the first file displayed in the next page</li>
+					<li>.</li>
+					<li>duplicates boring details:</li>
+					<li>setting 'false positive' and 'alternates' status now accounts for the new data storage, and a variety of follow-on assumptions and transitive properties (such as implying other false positive relationships or clearing out potential dupes between two groups of merging alternates) are now dealt with more rigorously (and moreso when I move the true 'duplicate' file relationships over)</li>
+					<li>fetching file duplicate status counts, file duplicate status hashes, and searching for system:num_dupes now accounts for the new data storage r.e. false positives and alternates</li>
+					<li>new potential dupes are culled when they conflict with the new transitive alternate and false positive relationships</li>
+					<li>removed the code that fudges explicit transitive 'false positive' and 'alternate' relationships based on existing same/better/worse pairs when setting new dupe pairs. this temporary gap will be filled back in in the coming weeks (clearing out way more potentials too)</li>
+					<li>several specific advanced duplicate actions are now cleared out to make way for future streamlining of the filter workflow:</li>
+					<li>removed the 'duplicate_media_set_false_positive' shortcut, which is an action only appropriate when viewing confirmed potentials through the duplicate filter (or after the ' show random pairs' button)</li>
+					<li>removed the 'duplicate_media_remove_relationships' shortcut and menu action ('remove x pairs ... from the dupes system'), which will return as multiple more precise and reliable 'dissolve' actions in the coming weeks</li>
+					<li>removed the 'duplicate_media_reset_to_potential' shortcut and menu action ('send the x pairs ... to be compared in the duplicates filter') as it was always buggy and lead to bloating of the filter queue. it is likely to return as part of the 'dissolve'-style reset commands as above</li>
+					<li>fixed an issue where hitting 'duplicate_media_set_focused_better' shortcut with no focused thumb would throw an error</li>
+					<li>started proper unit tests for the duplicates system and filled in the phash search, basic current better/worse, and false positive and alternate components</li>
+					<li>various incidences of duplicate 'action options' and similar phrasing are now unified to 'metadata merge options'</li>
+					<li>cleaned up 'unknown/potential' phrasing in duplicate pair code and some related duplicate filter code</li>
+					<li>cleaned up wording and layout of the thumbnail duplicates menu</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>tag blacklists in downloaders' tag import options now apply to the parsed tags both before and after a tag sibling collapse. it uses the combined tag sibling rules, so feedback on how well this works irl would be appreciated</li>
+					<li>I believe I fixed the annoying issue where a handful of thumbnails would sometimes inexplicitly not fade in after during thumbgrid scrolling (and typically on first thumb load--this problem was aggravated by scroll/thumb-render speed ratio)</li>
+					<li>when to-be-regenerated thumbnails are taken off the thumbnail waterfall queue due to fast scrolling or page switching, they are now queued up in the new file maintenance system for idle-time work!</li>
+					<li>the main gui menus will now no longer try to update while they are open! uploading pending tags while lots of new tags are coming in is now much more reliable. let me know if you discover a way to get stuck in this frozen state!</li>
+					<li>cleaned up some main gui menu regeneration code, reducing the total number of stub objects created and deleted, particularly when the 'pending' menu refreshes its label frequently while uploading many pending tags. should be a bit more stable for some linux flavours</li>
+					<li>the 'fix siblings and parents' button on manage tags is now a menu button with two options--for fixing according to the 'all services combined' siblings and parents or just for the current panel's service. this overrides the 'apply sibs/parents across all services' options. this will be revisited in future when more complicated sibling application rules are added</li>
+					<li>the 'hide and anchor mouse' check under 'options->media' is no longer windows-only, if you want to test it, and the previous touchscreen-detecting override (which unhid and unanchored on vigorous movement) is now optional, defaulting to off</li>
+					<li>greatly reduced typical and max repository pre-processing disk cache time and reworked stop calculations to ensure some work always gets done</li>
+					<li>fixed an issue with 'show some random dupes' thumbnails not hiding on manual trashing, if that option is set. 'show some random dupes' thumbnail panels will now inherit their file service from the current duplicate search domain</li>
+					<li>repository processing will now never run for more than an hour at once. this mitigates some edge-case disastrous ui-hanging outcomes and generally gives a chance for hydrus-level jobs like subscriptions and even other programs like defraggers to run even when there is a gigantic backlog of processing to do</li>
+					<li>added yet another CORS header to improve Client API CORS compatibility, and fixed an overauthentication problem</li>
+					<li>setting a blank string on the new local booru external port override option will now forego the host:port colon in the resultant external url. a tooltip on the control repeats this</li>
+					<li>reworded and coloured the pause/play sync button in review services repository panel to be more clear about current paused status</li>
+					<li>fixed a problem when closing the gui when the popup message manager is already closed by clever OS-specific means</li>
+					<li>misc code cleanup</li>
+					<li>updated sqlite on windows to 3.28.0</li>
+					<li>updated upnpc exe on windows to 2.1</li>
+				</ul>
+				<li><h3>version 353</h3></li>
+				<ul>
+					<li>duplicate filter:</li>
+					<li>duplicate action options no longer handle file deletion</li>
+					<li>renamed 'not duplicates' across the program to 'not related' or 'false positive'</li>
+					<li>'alternates' and 'not related/false positive' duplicate actions no longer have duplicate action options. no merge content update now occurs on these actions</li>
+					<li>the duplicate filter hover panel now splits 'this is better' decisions into two buttons--whether to delete or keep the worse file</li>
+					<li>when selecting 'custom action' in the duplicate filter hover panel, it now asks if you would like to delete the current file, the other file, or both</li>
+					<li>the 'duplicate_filter_this_is_better' shortcut action will be auto-updated to 'duplicate_filter_this_is_better_and_delete_other'. an alternate 'duplicate_filter_this_is_better_but_keep_both' is now also available</li>
+					<li>the 'duplicate_filter_not_dupes' shortcut action will be auto-updated to 'duplicate_filter_false_positive'</li>
+					<li>separated the buttons on the duplicate filter hover panel to more carefully split 'yes, files are duplicates' vs other decisions</li>
+					<li>in prep for the duplicate db overhaul, refactored all PHash search code and Duplicate management code apart</li>
+					<li>misc other prep work for duplicate db overhaul</li>
+					<li>.</li>
+					<li>file maintenance:</li>
+					<li>wrote a new unified manager to handle various long-term file maintenance tasks like regenerating file metadata and thumbnails</li>
+					<li>options to govern how this manager can run are now in options->maintenance and processing. you can enable it for idle and shutdown maintenance time and give it a throttle to limit how fast it will work on files, defaulting to 200 per day</li>
+					<li>unified the previous db-level attempts at file maintenance to the new system, which supports async job queueing, and moving regen code up to the new manager, out of the db lock</li>
+					<li>unified a variety of file and thumbnail regen code to work through the new simpler and saner path</li>
+					<li>the right-click->regen thumbnail commands now run through the new manager and no longer need a modal popup. you can keep browsing while they work. they will also not hang the ui as the old system could on big jobs</li>
+					<li>when right-click->regenning on more than 50 thumbnails, you now get a dialog asking if you want to do the job now or put it off later</li>
+					<li>file maintenance tasks can now run in shutdown time! you will get previews of the jobs with file counts and status progress reports on the shutdown splash</li>
+					<li>cleaned up some file extension renaming and dupe-removing code</li>
+					<li>in future, I will move the current file integrity check to this new system and have some ui to prompt and set up other big jobs, like fixing various historical misparsing issues</li>
+					<li>thumbnail resizing during thumbnail fade that resizes down is now more efficient</li>
+					<li>moved the ClientFilesManager to ClientFiles.py</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>the 'manage upnp' dialog now moves the duplicated external ip display from the column up to the status text at the top. it fetches the ip after the initial mappings fetch is done. this ip is no longer affected by the external host override option</li>
+					<li>cleaned up options->connection page and removed the now defunct external host override option</li>
+					<li>the manage services page for the local booru now has optional override for scheme, host, and port for the 'copy external url' function</li>
+					<li>fixed an issue with the recent 'collect by' session saving where a restored session that needed a collect was not sorted</li>
+					<li>fixed an issue with collections being sorted by approx bitrate</li>
+					<li>added a new checkbox to options->sort/collect to set it so the default sort updates every time you choose a new sort anywhere</li>
+					<li>fixed an issue with 'remove trashed files from view', which was incorrectly removing on 'all local files' pages</li>
+					<li>the 'all local files' file domain, which is frequently confusing to new users, is now no longer an option for new file pages or the autocomplete file domain if the user is not in advanced mode</li>
+					<li>the client now searches for versions of urls both with and without a final '/' character when looking up file url import status at the db level and in import lists. system:known_url is unfortunately still an inefficient mess</li>
+					<li>improved how the server code deals with some connectionLost errors</li>
+					<li>cleaned up and unified some older dialog button code</li>
+					<li>fixed a problem in manage tag siblings when petitioning existing pairs and then cancelling when asked for a reason</li>
+					<li>fixed a miscount issue when uploading pending tags while many new tags are coming in. progress would sometimes be -754/1,234, ha ha</li>
+					<li>db maintenance, repository sync, and file maintenance processing will all now wake on a force idle mode call</li>
+					<li>deleted some old code</li>
+					<li>misc fixes and cleanup</li>
+					<li>some misc gui layout fixes</li>
+				</ul>
+				<li><h3>version 352</h3></li>
+				<ul>
+					<li>the client now supports importing .ico files! (.cur should be supported too)</li>
+					<li>finally, 'collect by' is saved for sessions! if your default collect by previously included ratings services, it will forget them this one time--please reset it under the options->sort/collect</li>
+					<li>fixed the issue where the media viewer's hover windows were hovering over child dialogs (manage tags, ratings, or known urls)</li>
+					<li>improved some os x hover window focus handling for the new always-on-top duplicate action window</li>
+					<li>the entries on the 'sort by' list on gui pages are now subcategorised better. it should be a bit easier to find what you are looking for</li>
+					<li>the 'sort by file: approximate bitrate' sort option now sorts still images as well by filesize / num_pixels</li>
+					<li>to reduce confusion, sort by mime and system:mime are now renamed to 'filetype'</li>
+					<li>fixed an issue where the 'unclose_page' shortcut was restoring pages in reverse order (unclosing least-recently-closed-first rather than most-recently-closed-first)</li>
+					<li>improved rigour of video framerate estimation</li>
+					<li>stopped the video metadata parser from opting to manually frame count videos with size >128MB or num_frames estimate >2,400</li>
+					<li>fixed the forced manual frame count to deal with frame counts >9999</li>
+					<li>the 'ffmpeg not found' error on file import will now put up a popup message once per boot informing you of this problem more broadly and steps to address it</li>
+					<li>fixed some underreporting issues with subprocess_report_mode</li>
+					<li>fixed an issue with some yes/no dialogs returning 'no' on escape/window_close_button rather than 'cancel', which affected cancelability some db maintenance questions</li>
+					<li>fixed an issue where media that fitted the media viewer canvas width or height exactly at 100% zoom would not respond to zoom switch events to restore non-100% zoom to 100%</li>
+					<li>when a local server's CORS mode is turned on, Access-Control-Allow-Origin is now correctly added to GET/POST requests with an Origin request header</li>
+					<li>improved reliability of some timestamp rendering code, which should help some users who had trouble opening cookies management page after malformed cookie import</li>
+					<li>I believe I fixed an issue with 'open externally' on certain custom paths where the external program could spawn without an ui (flash projector did this). please let me know if your 'open externally' calls start making terminal windows everywhere</li>
+					<li>fixed a runtime stability issue with the new duplicates page and slow-updating counts that come in after the page has been deleted</li>
+				</ul>
+				<li><h3>version 351</h3></li>
+				<ul>
+					<li>wrote a new (always on top!) hover window for the duplicate filter that sits on the middle-right. the duplicate cog button and action buttons are moved to this new window, as are the file comparison statements</li>
+					<li>the duplicate file comparison statements now state the relevant actual metadata along with better '>>'-style operators to highlight differences and green/red/blue colouring based on given score. it is now much easier to see and action clearly better files at-a-glance</li>
+					<li>improved some hover window focus display calculations to play with the new always-on-top tech</li>
+					<li>both the 'show some random dupes' button and finding dupe pairs for the filter should be a bit faster for very large search domains. the basic file search and indexing still has to run, but the second sampling step in both cases will bail out earlier once it has a decent result</li>
+					<li>core image handling functions now uniformly use OpenCV (faster, more accurate) by default, falling to PIL/Pillow on errors. image importing in the client and server should be a bit faster, and some unusual image rotations should now be read correctly</li>
+					<li>the server now supports OpenCV for image operations, it _should_ also still work with only PIL/Pillow, if you are running from source and cannot get it</li>
+					<li>unified all thumbnail generation code and insulated it from suprises due to unexpectedly-sized source files, fixing a potential client-level thumbnail generation looping bug</li>
+					<li>gave all image processing a refactor and general cleanup pass, deleted a bunch of old code</li>
+					<li>wrote a new 'local tag cache' for the db that will speed up tag definition lookups for all local files. this should speed up a variety of tag and file result fetching, particularly right after client boot. it will take a minute or two on update to generate</li>
+					<li>sped up how fast the tag parent structure builds itself</li>
+					<li>the review services panel now uses nested notebooks, rather than the old badly coded listbook control. I don't really like how it looks, but the code is now saner</li>
+					<li>similar-files metadata generation now discards blank frames more reliably</li>
+					<li>subscription popups now report x/y progress in terms of the current job, discarding historical work previously done. 1001/1003 is gone, 1/3 is in</li>
+					<li>made the disk cache more conservative on non-pre-processing calls</li>
+					<li>cleaned up some file import code, moving responsibility from the file locations manager to the file import object</li>
+					<li>updated the ipfs service listctrl to use the new listctrl object. also cleaned up its action code to be more async and stable</li>
+					<li>I believe I fixed a rare vector for the 'tryendmodal' dialog bug</li>
+					<li>fixed a bug in presenting the available importable downloader objects in the easy drag-and-drop downloader import when the multiple downloaders dropped included objects of the same type and name--duplicate-named objects in this case will now be discarded</li>
+					<li>unified url_match/url_class code differences to url class everywhere</li>
+					<li>updated some common db list selection code to use new python string formatting</li>
+					<li>plenty of misc code cleanup</li>
+				</ul>
+				<li><h3>version 350</h3></li>
+				<ul>
+					<li>the duplicate filter no longer applies the implicit system limit (which defaults to 10,000 files) on its search domains, which solves the undercounting issue on large search domains. duplicate operations will be appropriately slower, so narrow your duplicate file queries (adding a creator: tag works great) if they take too long</li>
+					<li>fixed the duplicate pairs filter's 'ghost pair' issue. it was failing, when 'both files' was unchecked, to remove pairs that included one file that was non-local. this accidental inclusion resulted in incorrect non-zero count and filter/random pairs that could not display correctly</li>
+					<li>insulated against potential future iterations of this problem (likely that one of the pair was deleted by another process while a filter is ongoing), with a notification and graceful exiting of the duplicate filter while saving progress</li>
+					<li>the 'show random duplicates' button now puts the 'base' of the group (to which all the others are potentially matched) as the first thumbnail</li>
+					<li>added a new 'advanced file deletion' section to 'files and trash' options page to turn on a new advanced dialog and set custom file deletion reasons</li>
+					<li>if this new dialog is turned on, a delete event from thumbnail grid, regular media viewer, or the duplicate filter's manual delete will launch it. it permits you to delete physically (skipping trash) in one step or delete physically without leaving a deletion record (for easier later re-import) and choose one of the deletion reasons in the new options panel or set a one-time custom reason</li>
+					<li>export folders now have more run-controls: 'run regularly', 'paused', and 'run now'</li>
+					<li>the file menu now has a 'run export folder now' submenu just like for import folders-- it is simple now to set up an export folder that only runs when you tell it to</li>
+					<li>updated the on-boot missing file folder recovery process to automatically 'heal' file location mappings when a missing folder is actually in a location that is known (essentially, you can now manually move a bunch of folders from one known location to another while the client is off and it will recover automatically now). error dialogs will appear in this case summarising the problem and proposed fixes with a chance to bail out if you do not want it to happen</li>
+					<li>added a new frame type to 'gui' options page called 'regular_center_dialog' for yes/no style dialogs that are better in the center of the parent window</li>
+					<li>the custom web browser launch path and file type 'open externally' paths are moved from 'files and trash' to a new 'external programs' options page</li>
+					<li>as the superior '--temp_path' program launch parameter now exists for both client and server, I have removed the limited 'BUGFIX: temp folder override' option from the client's 'files and trash' page and use in the actual code. if this option was important to you, please migrate to the --temp_path launch parameter, which covers temp usage more comprehensively</li>
+					<li>as the artstation downloader is now non-functional, apparently by a cloudflare issue, the default gug for new users (and anyone with artstation set atm) is now safebooru</li>
+					<li>added dolphin file manager add-on link to the client api help</li>
+					<li>some misc file metadata fetching cleanup</li>
+				</ul>
+				<li><h3>version 349</h3></li>
+				<ul>
+					<li>duplicate filter:</li>
+					<li>the duplicate filter page now has a full-on real-deal file search object to narrow down the duplicate filter, potential duplicate count, and 'show some random dupes' search domains! it also has a 'both files match' checkbox that determines if one of both files of the potential pairs should match the search!</li>
+					<li>the duplicate filter page has multiple layout changes as a result:</li>
+					<li>the main management area is now split into two pages--'preparation', for doing maintenance and discovery work, and 'filtering', for actioning the potential dupe pairs found</li>
+					<li>the 'filtering' page will select by default, but if 'preparation' needs work, its name will become 'preparation (needs work)'</li>
+					<li>the 'filtering' page now has file search ui and the 'both files' checkbox instead of the file domain button. this search data is saved on a per-page basis</li>
+					<li>the two pages' status texts are now updated on separate calls which have been rewritten to be asynchronous (with 'updating...' text while they work). both now have explicit refresh buttons to force them to update</li>
+					<li>the additional non-unknown pair counts listed on the filter area, which were irrelevant to filtering and sometimes confusing, are now gone. it only lists the 'unknown' pair number</li>
+					<li>the duplicate filter page's help button no longer has the awful 'simple help' entry. the full html help will get a pass in the coming weeks to reflect the new search changes</li>
+					<li>the duplicate file db code received significant refactoring and improvement to support searching the potential dupe space while cross-referencing the new file search context (and still falling back to the fast code when the search is just blank/system:everything)</li>
+					<li>misc duplicate file db code cleanup and refactoring</li>
+					<li>while in advanced mode, you can no longer select 'all known files' file domain for an export folder (and now the duplicate filter page) search context</li>
+					<li>making a file delete action in the duplicate filter (by hitting delete key or the button on the top hover window, which both trigger a dialog asking to delete one or both) now auto-skips the current pair</li>
+					<li>.</li>
+					<li>manage tags:</li>
+					<li>the manage tags has a new 'siblings and parents' button that will auto-replace incorrect siblings and auto-add missing parents! it works on multi-file selections as well! it gives you a summary yes/no dialog before it fires</li>
+					<li>the manage tags dialog has a little logic cleanup r.e. siblings and parents and their cog auto-apply options. the auto-application now only applies on add/pend actions</li>
+					<li>the manage tags dialog has a new cog button option to not trigger 'remove' actions from an autocomplete dropdown or suggested tag input action when the tag already exists</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>gave video metadata parsing another pass--it now detects 'hidden' incorrect framerates due to advanced 'skip frame' codec settings and is more accurate at determining frame count and duration, including some fixed offset calculations that was sometimes adding or discounting a few frames</li>
+					<li>manual video frame count, when needed, is now faster and produces better error text</li>
+					<li>fixed a critical bug in thumbnail regen that was sometimes potentially looping regen on files with unusual rotation exif information</li>
+					<li>significant improvements to how the client file manager handles thumbnail identifier information, saving a great deal of time for file import and thumbnail regeneration code of videos</li>
+					<li>fixed an issue where regenerated file metadata was not propagating up to the ui level in real time</li>
+					<li>cleaned up some thumbnail cache initialisation code</li>
+					<li>the 'generate video thumbs this % in' option is moved from the 'media' to 'thumbnails' options page</li>
+					<li>to simplify code, and in prep for the idle-maintenance-rewrite of this system, the database->regen->thumbnails call is now removed</li>
+					<li>all three fields of text on serialised pngs now wrap, and they pad a little better as well</li>
+					<li>added a new option to the 'gui pages' options page to force input text box focus on page changes</li>
+					<li>fixed a small type issue with the server's session cookie code and some new library versions</li>
+				</ul>
+				<li><h3>version 348</h3></li>
+				<ul>
+					<li>wrote some OR search help to 'getting started with tags' help page</li>
+					<li>wrote a new multi-reader, single-writer lock object for the client file manager, along with some unit tests for it.</li>
+					<li>updated the file and thumbnail access and regen and maintenance code to use the new lock. various access is now faster when available and overall safer. there is still work to do here</li>
+					<li>adjusted file import to be less aggressive about locking, which should reduce some file/thumbnail access lag during heavy imports</li>
+					<li>the thumbnail space estimate in the migrate database dialog is now more adaptive to the new more flexible thumbnail size system and specificies better that it is an estimate</li>
+					<li>the client api's /add_tags/add_tags call now collapses siblings and expands parents on an add/pend call. this can be turned off by setting the new optional parameter 'add_siblings_and_parents' to false. the help is updated regarding this and the client api version is incremented to 6</li>
+					<li>fixed the client api's /add_tags/add_tags call for the 'hashes' parameter, which was failing to parse, and added an accidentally missing unit test to check this in future</li>
+					<li>the client local services (the booru and client api) now have two new options under their 'manage services' panel: 'support CORS', which turns on cross-orogin support (which is experimental for now, so defaults to False), and 'logs requests', which controls whether your log will be spammed with request reports (this also defaults to False), which should clear up some 100MB+ log hassle for people using the Hydrus Companion browser add-on</li>
+					<li>hydrus services now respond correctly (albeit sparsely) to OPTIONS requests, and if CORS is enabled, to CORS OPTIONS requests. there are unit tests for this that seem to work ok, but I think we'll need to verify it irl</li>
+					<li>finished a first version bitmap manager to handle all wx bitmap creation and destruction, including recycling mid-steps</li>
+					<li>updated all simple wx bitmap creation and destruction calls across the client to use the new bitmap manager, improving stability and saving some CPU</li>
+					<li>fixed some incorrect button alignment flags that were causing problems for clients set to assert check these values</li>
+					<li>added a new yiff.party file url class to the defaults that matches a new file attachment format</li>
+					<li>updated the 'url' content parser so if a parsed url is in the form 'summary_text url', as some booru source fields sometimes specify, the preceding summary text is removed, cleaning up the resultant url</li>
+					<li>silenced an old server connection lost error that was needlessly loud</li>
+					<li>silenced the client network engine from additionally log-printing SizeException errors when a downloading file (usually gif) exceeds file import options rules</li>
+					<li>improved misc window destruction code</li>
+					<li>updated supported mime list in 'getting started with files' help and website index</li>
+					<li>misc cleanup</li>
+				</ul>
+				<li><h3>version 347</h3></li>
+				<ul>
+					<li>or search:</li>
+					<li>under construction OR predicates now present at the top of the regular tag results list, prepended with 'OR: ', and skipping default selection</li>
+					<li>this new OR line is enter-able, which will present it as-is, rather than adding new preds</li>
+					<li>hitting escape on a 'search' tag input box that is empty but has an under construction or predicate will cancel the or pred</li>
+					<li>hitting escape on a 'search' tag input box otherwise should more reliably kill its focus when the dropdown is a float window</li>
+					<li>improved OR search efficiency significantly with dynamic OR search triggering based on other search predicates. OR searches including negated '-tag' components should be massively faster when paired with non-OR tag or file search predicates</li>
+					<li>I believe I fixed a search issue that would sometimes return insufficient results when OR preds are mixed with certain other combinations of tags</li>
+					<li>improved reliability of some thumbnail refresh calls</li>
+					<li>cleaned up a bunch of OR handling ui code</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>after previous weeks' experiments, wrote new double-layer thumbnail loading system--now too-small thumbs will quckly scale up fuzzily straight to screen, and then in the coming seconds, the nice regenerated full-size thumb will be made and drawn in place as ready. it presents much faster and looks better, but there is some cleanup to do here that I will tackle next week</li>
+					<li>all local file trashing events now record a context-appropriate deletion statement such as "Deleted from Media Viewer." this value is recovered in 'deleted' import status 'notes'. You will mostly see 'Unknown deletion reason.', for files deleted before this new system, but it will populate with appropriate info over time</li>
+					<li>fixed a search optimisation that was not cross-referencing with file domain, meaning for instance that bare system:rating calls were returning since-deleted files</li>
+					<li>upnp management window now uses new listctrl</li>
+					<li>cleaned up some old custom page-naming code</li>
+					<li>added a 'data' debug call to clear out all cached thumbnails and force an instant ui thumb reload</li>
+					<li>fixed the trash bmp misalignment, ha ha</li>
+					<li>removed e-hentai login script from the defaults, since this testing script is not appropriate for new users</li>
+					<li>dejanked some media viewer video transitions by cleaning up animation bar rendering and smoothing out video buffer initialisation</li>
+					<li>cleaned out some surplus subprocess wait calls that were hanging some systems on various 'open externally' calls</li>
+					<li>fixed multiple syncing problems with 'synchronise' export folders that produce files with subdirectories. subdirectory structures should now be synced correctly and empty folders deleted</li>
+					<li>export folders that collapse multiple file results to the same duplicated name should, after the next run, do less overwriting to this same name</li>
+					<li>if an export folder or the regular export dialog makes a file destination path that is above the chosen directory (e.g. if the path starts with ../ or ..\), the export job will error out with an explanation</li>
+					<li>big manual file exports _should_ be politer to the ui and cause fewer hangs</li>
+					<li>doing page tab drag and drops may have less post-drop ui jank on linux, continued feedback would be appreciated</li>
+					<li>moved 'reason' handling for all content updates to its own area, which neatens many content update data handling issues</li>
+					<li>fixed petitioning a tag via a shortcut, which had bad reason handling</li>
+					<li>fixed an issue with committing pending ipfs items that was overchecking service permissions</li>
+					<li>fixed some remaining bad wx code in the unit tests</li>
+					<li>misc file status reporting cleanup</li>
+				</ul>
+				<li><h3>version 346</h3></li>
+				<ul>
+					<li>or search:</li>
+					<li>extended the search predicate object to handle more OR stuff</li>
+					<li>extended the tag list to handle list objects that have multiple colours</li>
+					<li>extended the new OR search predicate to report multiple text-snippet-and-colour pairs based on sub-predicates</li>
+					<li>extended tag search input to handle prototype OR predicate creation--hold shift when you enter the tag, and it'll start an OR chain. shift-enter continues the chain, enter alone completes it</li>
+					<li>fleshed out the predicate unit tests to cover more of this</li>
+					<li>wrote unit tests for OR search predicates. it seems good!</li>
+					<li>improved some search logic to apply system preds better in certain edge cases and spend less CPU on OR-search-only searches</li>
+					<li>.</li>
+					<li>thumbnails:</li>
+					<li>thumbnails will now queue for load in a more intelligent order based on estimated difficulty to regenerate, which will tend to put more thumbs on screen faster</li>
+					<li>the decision to regenerate a thumbnail from source is now tempered by how different the current thumbnail is from what is desired--the more similar the two sizes, the more (randomly) likely the client will decide to just use the current (resized) this time. this smooths out change-lag while limiting the number of really fuzzy thumbs you get. feedback on how this works IRL would be appreciated--it uses some voodoo distribution polling to figure it out, which I can definitely tweak</li>
+					<li>improved visual quality of thumbnail scale-up optimisations</li>
+					<li>fixed an issue where a multipage thumbnail grid would incorrectly recalculate the new virtual height after a thumbnail size change event, leading to a bit of invalid extra scrollspace (with noclip rendering errors) at the bottom</li>
+					<li>the thumbnail right-click menu's reparse files entry is now extended to a new 'regenerate' submenu with three options: reparse file and regen thumbs (the old action), force regen thumbs, and regen thumbs if wrong size!</li>
+					<li>the new 'regen if thumbs wrong size' action sends how many thumbs needed resize up to the popup window, as well</li>
+					<li>moved some old thumbnail regen code responsibility out of the db and into the files manager</li>
+					<li>cleaned out some old redundant file/thumbnail code</li>
+					<li>cleaned and refactored a bunch of general image handling and resizing code</li>
+					<li>.</li>
+					<li>the rest:</li>
+					<li>fixed some bad serialisation code that was making file search objects set their 'include current tags' value to false/true on interleaving loads. on this update, all 'include current tags' values are blanket reset to true</li>
+					<li>fixed an issue that was drawing animation canvases pure white on various media update events</li>
+					<li>extended manage urls dialog to support multiple files when launched from a selection of thumbnails. there is a warning in this case, noting that only gallery-style urls are appropriate to be added to multiple files</li>
+					<li>manage urls dialog now supports multiple selections, including shift-select, and accepts delete key presses for easy mass deletion</li>
+					<li>when you ask the database migration dialog to move some files, it now pops up a confirmation dialog that also asks if you would like to limit the max time for the job as 10, 30, or 60 minutes</li>
+					<li>improved file permission setting code across the program to be more sensible for non-Windows</li>
+					<li>if you are a non-Windows user and were hit with directory permission problems last week on the thumbnail update--which resulted in the rxx directories not being deleted--the update this week will attempt to do the delete again, this time correcting the now missing execute permission bit. if it finds outstanding rxx directories to delete, it will give a popup beforehand summarising the situation and giving you a chance to bail out</li>
+					<li>fixed yet another problem that was stopping client api url requests from finding the correct page by name</li>
+					<li>when a client api url request includes fixed tags, these tags should now propagate in all scenarios where the single url produces multiple files</li>
+					<li>updated sqlite dll and console for windows</li>
+					<li>misc fixes and cleanup</li>
+				</ul>
 				<li><h3>version 345</h3></li>
+				<ul>
 					<li>or search:</li>
 					<li>set out a plan to achieve some simple conjunctive normal form (e.g. (blue eyes OR green eyes) AND (blonde hair OR red hair)) OR search support</li>
 					<li>started work on the object extension and search code to support this search in a very basic (and likely inefficient-for-some-scenarios) way--we'll work on this as we discover the most common inefficiencies</li>

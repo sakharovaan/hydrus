@@ -107,7 +107,7 @@ def FilterTagsBySearchText( service_key, search_text, tags, search_siblings = Tr
     
     re_predicate = compile_re( search_text )
     
-    sibling_manager = HG.client_controller.GetManager( 'tag_siblings' )
+    siblings_manager = HG.client_controller.tag_siblings_manager
     
     result = []
     
@@ -115,7 +115,7 @@ def FilterTagsBySearchText( service_key, search_text, tags, search_siblings = Tr
         
         if search_siblings:
             
-            possible_tags = sibling_manager.GetAllSiblings( service_key, tag )
+            possible_tags = siblings_manager.GetAllSiblings( service_key, tag )
             
         else:
             
@@ -171,7 +171,7 @@ class FileSearchContext( HydrusSerialisable.SerialisableBase ):
     
     SERIALISABLE_TYPE = HydrusSerialisable.SERIALISABLE_TYPE_FILE_SEARCH_CONTEXT
     SERIALISABLE_NAME = 'File Search Context'
-    SERIALISABLE_VERSION = 2
+    SERIALISABLE_VERSION = 3
     
     def __init__( self, file_service_key = CC.COMBINED_FILE_SERVICE_KEY, tag_service_key = CC.COMBINED_TAG_SERVICE_KEY, search_type = SEARCH_TYPE_AND, include_current_tags = True, include_pending_tags = True, predicates = None ):
         
@@ -201,7 +201,7 @@ class FileSearchContext( HydrusSerialisable.SerialisableBase ):
     
     def _InitialiseFromSerialisableInfo( self, serialisable_info ):
         
-        ( file_service_key, tag_service_key, self._include_current_tags, self._search_type, self._include_pending_tags, serialisable_predicates, self._search_complete ) = serialisable_info
+        ( file_service_key, tag_service_key, self._search_type, self._include_current_tags, self._include_pending_tags, serialisable_predicates, self._search_complete ) = serialisable_info
         
         self._file_service_key = bytes.fromhex( file_service_key )
         self._tag_service_key = bytes.fromhex( tag_service_key )
@@ -284,6 +284,20 @@ class FileSearchContext( HydrusSerialisable.SerialisableBase ):
             return ( 2, new_serialisable_info )
             
         
+        if version == 2:
+            
+            ( file_service_key_hex, tag_service_key_hex, search_type, include_current_tags, include_pending_tags, serialisable_predicates, search_complete ) = old_serialisable_info
+            
+            # screwed up the serialisation code for the previous update, so these were getting swapped
+            
+            search_type = SEARCH_TYPE_AND
+            include_current_tags = True
+            
+            new_serialisable_info = ( file_service_key_hex, tag_service_key_hex, search_type, include_current_tags, include_pending_tags, serialisable_predicates, search_complete )
+            
+            return ( 3, new_serialisable_info )
+            
+        
     
     def GetFileServiceKey( self ): return self._file_service_key
     def GetNamespacesToExclude( self ): return self._namespaces_to_exclude
@@ -296,9 +310,21 @@ class FileSearchContext( HydrusSerialisable.SerialisableBase ):
     def GetTagsToInclude( self ): return self._tags_to_include
     def GetWildcardsToExclude( self ): return self._wildcards_to_exclude
     def GetWildcardsToInclude( self ): return self._wildcards_to_include
+    
+    def HasNoPredicates( self ):
+        
+        return len( self._predicates ) == 0
+        
+    
     def IncludeCurrentTags( self ): return self._include_current_tags
     def IncludePendingTags( self ): return self._include_pending_tags
     def IsComplete( self ): return self._search_complete
+    
+    def IsJustSystemEverything( self ):
+        
+        return len( self._predicates ) == 1 and self._system_predicates.HasSystemEverything()
+        
+    
     def SetComplete( self ): self._search_complete = True
     
     def SetFileServiceKey( self, file_service_key ):
@@ -332,7 +358,9 @@ HydrusSerialisable.SERIALISABLE_TYPES_TO_OBJECT_TYPES[ HydrusSerialisable.SERIAL
 
 class FileSystemPredicates( object ):
     
-    def __init__( self, system_predicates ):
+    def __init__( self, system_predicates, apply_implicit_limit = True ):
+        
+        self._has_system_everything = False
         
         self._inbox = False
         self._archive = False
@@ -351,24 +379,18 @@ class FileSystemPredicates( object ):
         
         self._ratings_predicates = []
         
-        self._duplicate_predicates = []
+        self._duplicate_count_predicates = []
         
         self._file_viewing_stats_predicates = []
         
         new_options = HG.client_controller.new_options
-        
-        forced_search_limit = new_options.GetNoneableInteger( 'forced_search_limit' )
-        
-        if forced_search_limit is not None:
-            
-            self._limit = forced_search_limit
-            
         
         for predicate in system_predicates:
             
             predicate_type = predicate.GetType()
             value = predicate.GetValue()
             
+            if predicate_type == HC.PREDICATE_TYPE_SYSTEM_EVERYTHING: self._has_system_everything = True
             if predicate_type == HC.PREDICATE_TYPE_SYSTEM_INBOX: self._inbox = True
             if predicate_type == HC.PREDICATE_TYPE_SYSTEM_ARCHIVE: self._archive = True
             if predicate_type == HC.PREDICATE_TYPE_SYSTEM_LOCAL: self._local = True
@@ -653,11 +675,11 @@ class FileSystemPredicates( object ):
                 self._similar_to = ( hash, max_hamming )
                 
             
-            if predicate_type == HC.PREDICATE_TYPE_SYSTEM_DUPLICATE_RELATIONSHIPS:
+            if predicate_type == HC.PREDICATE_TYPE_SYSTEM_DUPLICATE_RELATIONSHIP_COUNT:
                 
                 ( operator, num_relationships, dupe_type ) = value
                 
-                self._duplicate_predicates.append( ( operator, num_relationships, dupe_type ) )
+                self._duplicate_count_predicates.append( ( operator, num_relationships, dupe_type ) )
                 
             
             if predicate_type == HC.PREDICATE_TYPE_SYSTEM_FILE_VIEWING_STATS:
@@ -669,9 +691,9 @@ class FileSystemPredicates( object ):
             
         
     
-    def GetDuplicateRelationshipsPredicates( self ):
+    def GetDuplicateRelationshipCountPredicates( self ):
         
-        return self._duplicate_predicates
+        return self._duplicate_count_predicates
         
     
     def GetFileServiceInfo( self ):
@@ -689,13 +711,28 @@ class FileSystemPredicates( object ):
         return self._common_info
         
     
-    def GetLimit( self ): return self._limit
+    def GetLimit( self, apply_implicit_limit = True ):
+        
+        if self._limit is None and apply_implicit_limit:
+            
+            forced_search_limit = HG.client_controller.new_options.GetNoneableInteger( 'forced_search_limit' )
+            
+            return forced_search_limit
+            
+        
+        return self._limit
+        
     
     def GetRatingsPredicates( self ): return self._ratings_predicates
     
     def GetSimilarTo( self ): return self._similar_to
     
     def HasSimilarTo( self ): return self._similar_to is not None
+    
+    def HasSystemEverything( self ):
+        
+        return self._has_system_everything
+        
     
     def MustBeArchive( self ): return self._archive
     
@@ -713,7 +750,7 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
     
     def __init__( self, predicate_type = None, value = None, inclusive = True, min_current_count = 0, min_pending_count = 0, max_current_count = None, max_pending_count = None ):
         
-        if isinstance( value, list ):
+        if isinstance( value, ( list, set ) ):
             
             value = tuple( value )
             
@@ -767,7 +804,7 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
             
             ( operator, rule_type, rule, description ) = self._value
             
-            if rule_type == 'url_match':
+            if rule_type in ( 'url_match', 'url_class' ):
                 
                 serialisable_rule = rule.GetSerialisableTuple()
                 
@@ -783,6 +820,12 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
             ( hash, hash_type ) = self._value
             
             serialisable_value = ( hash.hex(), hash_type )
+            
+        elif self._predicate_type == HC.PREDICATE_TYPE_OR_CONTAINER:
+            
+            or_predicates = self._value
+            
+            serialisable_value = HydrusSerialisable.SerialisableList( or_predicates ).GetSerialisableTuple()
             
         else:
             
@@ -812,7 +855,7 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
             
             ( operator, rule_type, serialisable_rule, description ) = serialisable_value
             
-            if rule_type == 'url_match':
+            if rule_type in ( 'url_match', 'url_class' ):
                 
                 rule = HydrusSerialisable.CreateFromSerialisableTuple( serialisable_rule )
                 
@@ -840,6 +883,12 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
             ( view_type, viewing_locations, operator, viewing_value ) = serialisable_value
             
             self._value = ( view_type, tuple( viewing_locations ), operator, viewing_value )
+            
+        elif self._predicate_type == HC.PREDICATE_TYPE_OR_CONTAINER:
+            
+            serialisable_or_predicates = serialisable_value
+            
+            self._value = tuple( HydrusSerialisable.CreateFromSerialisableTuple( serialisable_or_predicates ) )
             
         else:
             
@@ -930,6 +979,10 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
             
             return namespace
             
+        else:
+            
+            return ''
+            
         
     
     def GetInclusive( self ):
@@ -984,6 +1037,34 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
             
         
     
+    def GetTextsAndNamespaces( self, or_under_construction = False ):
+        
+        if self._predicate_type == HC.PREDICATE_TYPE_OR_CONTAINER:
+            
+            texts_and_namespaces = []
+            
+            if or_under_construction:
+                
+                texts_and_namespaces.append( ( 'OR: ', 'system' ) )
+                
+            
+            for or_predicate in self._value:
+                
+                texts_and_namespaces.append( ( or_predicate.ToString(), or_predicate.GetNamespace() ) )
+                
+                texts_and_namespaces.append( ( ' OR ', 'system' ) )
+                
+            
+            texts_and_namespaces = texts_and_namespaces[ : -1 ]
+            
+        else:
+            
+            texts_and_namespaces = [ ( self.ToString(), self.GetNamespace() ) ]
+            
+        
+        return texts_and_namespaces
+        
+    
     def GetType( self ):
         
         return self._predicate_type
@@ -994,7 +1075,7 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
         return self._inclusive
         
     
-    def ToString( self, with_count = True, sibling_service_key = None, render_for_user = False ):
+    def ToString( self, with_count = True, sibling_service_key = None, render_for_user = False, or_under_construction = False ):
         
         count_text = ''
         
@@ -1196,7 +1277,7 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                 
             elif self._predicate_type == HC.PREDICATE_TYPE_SYSTEM_MIME:
                 
-                base = 'mime'
+                base = 'filetype'
                 
                 if self._value is not None:
                     
@@ -1367,7 +1448,7 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                     base = n_text + o_text + HydrusData.ToHumanInt( num )
                     
                 
-            elif self._predicate_type == HC.PREDICATE_TYPE_SYSTEM_DUPLICATE_RELATIONSHIPS:
+            elif self._predicate_type == HC.PREDICATE_TYPE_SYSTEM_DUPLICATE_RELATIONSHIP_COUNT:
                 
                 base = 'num duplicate relationships'
                 
@@ -1455,7 +1536,7 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
             
             if sibling_service_key is not None:
                 
-                siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
+                siblings_manager = HG.client_controller.tag_siblings_manager
                 
                 sibling = siblings_manager.GetSibling( sibling_service_key, tag )
                 
@@ -1504,6 +1585,19 @@ class Predicate( HydrusSerialisable.SerialisableBase ):
                 
             
             base += wildcard
+            
+        elif self._predicate_type == HC.PREDICATE_TYPE_OR_CONTAINER:
+            
+            or_predicates = self._value
+            
+            base = ''
+            
+            if or_under_construction:
+                
+                base += 'OR: '
+                
+            
+            base += ' OR '.join( ( or_predicate.ToString( render_for_user = render_for_user ) for or_predicate in or_predicates ) )
             
         
         return base

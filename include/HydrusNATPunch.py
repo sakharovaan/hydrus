@@ -29,11 +29,6 @@ EXTERNAL_IP[ 'time' ] = 0
 
 def GetExternalIP():
     
-    if 'external_host' in HC.options and HC.options[ 'external_host' ] is not None:
-        
-        return HC.options[ 'external_host' ]
-        
-    
     if HydrusData.TimeHasPassed( EXTERNAL_IP[ 'time' ] + ( 3600 * 24 ) ):
         
         cmd = [ upnpc_path, '-l' ]
@@ -44,17 +39,17 @@ def GetExternalIP():
         
         HydrusData.WaitForProcessToFinish( p, 30 )
         
-        ( output, error ) = p.communicate()
+        ( stdout, stderr ) = p.communicate()
         
-        if error is not None and len( error ) > 0:
+        if stderr is not None and len( stderr ) > 0:
             
-            raise Exception( 'Problem while trying to fetch External IP:' + os.linesep * 2 + str( error ) )
+            raise Exception( 'Problem while trying to fetch External IP:' + os.linesep * 2 + str( stderr ) )
             
         else:
             
             try:
                 
-                lines = HydrusText.DeserialiseNewlinedTexts( output )
+                lines = HydrusText.DeserialiseNewlinedTexts( stdout )
                 
                 i = lines.index( 'i protocol exPort->inAddr:inPort description remoteHost leaseTime' )
                 
@@ -92,33 +87,31 @@ def AddUPnPMapping( internal_client, internal_port, external_port, protocol, des
     
     HydrusData.WaitForProcessToFinish( p, 30 )
     
-    ( output, error ) = p.communicate()
+    ( stdout, stderr ) = p.communicate()
     
-    if 'x.x.x.x:' + str( external_port ) + ' TCP is redirected to internal ' + internal_client + ':' + str( internal_port ) in output:
+    if 'x.x.x.x:' + str( external_port ) + ' TCP is redirected to internal ' + internal_client + ':' + str( internal_port ) in stdout:
         
         raise HydrusExceptions.FirewallException( 'The UPnP mapping of ' + internal_client + ':' + internal_port + '->external:' + external_port + ' already exists as a port forward. If this UPnP mapping is automatic, please disable it.' )
         
     
-    if output is not None and 'failed with code' in output:
+    if stdout is not None and 'failed with code' in stdout:
         
-        if 'UnknownError' in output:
+        if 'UnknownError' in stdout:
             
-            raise HydrusExceptions.FirewallException( 'Problem while trying to add UPnP mapping:' + os.linesep * 2 + output )
+            raise HydrusExceptions.FirewallException( 'Problem while trying to add UPnP mapping:' + os.linesep * 2 + stdout )
             
         else:
             
-            raise Exception( 'Problem while trying to add UPnP mapping:' + os.linesep * 2 + output )
+            raise Exception( 'Problem while trying to add UPnP mapping:' + os.linesep * 2 + stdout )
             
         
     
-    if error is not None and len( error ) > 0:
+    if stderr is not None and len( stderr ) > 0:
         
-        raise Exception( 'Problem while trying to add UPnP mapping:' + os.linesep * 2 + error )
+        raise Exception( 'Problem while trying to add UPnP mapping:' + os.linesep * 2 + stderr )
         
     
 def GetUPnPMappings():
-    
-    external_ip_address = GetExternalIP()
     
     cmd = [ upnpc_path, '-l' ]
     
@@ -128,17 +121,17 @@ def GetUPnPMappings():
     
     HydrusData.WaitForProcessToFinish( p, 30 )
     
-    ( output, error ) = p.communicate()
+    ( stdout, stderr ) = p.communicate()
     
-    if error is not None and len( error ) > 0:
+    if stderr is not None and len( stderr ) > 0:
         
-        raise Exception( 'Problem while trying to fetch UPnP mappings:' + os.linesep * 2 + error )
+        raise Exception( 'Problem while trying to fetch UPnP mappings:' + os.linesep * 2 + stderr )
         
     else:
         
         try:
             
-            lines = HydrusText.DeserialiseNewlinedTexts( output )
+            lines = HydrusText.DeserialiseNewlinedTexts( stdout )
             
             i = lines.index( 'i protocol exPort->inAddr:inPort description remoteHost leaseTime' )
             
@@ -160,11 +153,6 @@ def GetUPnPMappings():
             for line in data_lines:
                 
                 # 0 UDP 65533->192.168.0.197:65533 'Skype UDP at 192.168.0.197:65533 (2665)' '' 0
-                
-                if line.count( ':' ) != 1:
-                    
-                    continue
-                    
                 
                 while '  ' in line:
                     
@@ -203,7 +191,7 @@ def GetUPnPMappings():
                 
                 lease_time = int( rest_of_line[1:] )
                 
-                processed_data.append( ( description, internal_client, internal_port, external_ip_address, external_port, protocol, lease_time ) )
+                processed_data.append( ( description, internal_client, internal_port, external_port, protocol, lease_time ) )
                 
             
             return processed_data
@@ -213,7 +201,7 @@ def GetUPnPMappings():
             HydrusData.Print( 'UPnP problem:' )
             HydrusData.Print( traceback.format_exc() )
             HydrusData.Print( 'Full response follows:' )
-            HydrusData.Print( output )
+            HydrusData.Print( stdout )
             
             raise Exception( 'Problem while trying to parse UPnP mappings:' + os.linesep * 2 + str( e ) )
             
@@ -229,9 +217,9 @@ def RemoveUPnPMapping( external_port, protocol ):
     
     HydrusData.WaitForProcessToFinish( p, 30 )
     
-    ( output, error ) = p.communicate()
+    ( stdout, stderr ) = p.communicate()
     
-    if error is not None and len( error ) > 0: raise Exception( 'Problem while trying to remove UPnP mapping:' + os.linesep * 2 + error )
+    if stderr is not None and len( stderr ) > 0: raise Exception( 'Problem while trying to remove UPnP mapping:' + os.linesep * 2 + stderr )
     
 
 class ServicesUPnPManager( object ):
@@ -261,7 +249,7 @@ class ServicesUPnPManager( object ):
             
             current_mappings = GetUPnPMappings()
             
-            our_mappings = { ( internal_client, internal_port ) : external_port for ( description, internal_client, internal_port, external_ip_address, external_port, protocol, enabled ) in current_mappings }
+            our_mappings = { ( internal_client, internal_port ) : external_port for ( description, internal_client, internal_port, external_port, protocol, enabled ) in current_mappings }
             
         except:
             

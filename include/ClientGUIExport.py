@@ -29,7 +29,7 @@ class EditExportFoldersPanel( ClientGUIScrolledPanels.EditPanel ):
         
         self._export_folders_panel = ClientGUIListCtrl.BetterListCtrlPanel( self )
         
-        columns = [ ( 'name', 20 ), ( 'path', -1 ), ( 'type', 12 ), ( 'query', 16 ), ( 'period', 10 ), ( 'phrase', 20 ) ]
+        columns = [ ( 'name', 20 ), ( 'path', -1 ), ( 'type', 12 ), ( 'query', 16 ), ( 'paused', 8 ), ( 'period', 16 ), ( 'phrase', 20 ) ]
         
         self._export_folders = ClientGUIListCtrl.BetterListCtrl( self._export_folders_panel, 'export_folders', 6, 40, columns, self._ConvertExportFolderToListCtrlTuples, use_simple_delete = True, activation_callback = self._Edit )
         
@@ -87,7 +87,7 @@ class EditExportFoldersPanel( ClientGUIScrolledPanels.EditPanel ):
     
     def _ConvertExportFolderToListCtrlTuples( self, export_folder ):
         
-        ( name, path, export_type, delete_from_client_after_export, file_search_context, period, phrase ) = export_folder.ToTuple()
+        ( name, path, export_type, delete_from_client_after_export, file_search_context, run_regularly, period, phrase, last_checked, paused, run_now ) = export_folder.ToTuple()
         
         if export_type == HC.EXPORT_FOLDER_TYPE_REGULAR:
             
@@ -105,13 +105,34 @@ class EditExportFoldersPanel( ClientGUIScrolledPanels.EditPanel ):
         
         pretty_file_search_context = ', '.join( predicate.ToString( with_count = False ) for predicate in file_search_context.GetPredicates() )
         
-        pretty_period = HydrusData.TimeDeltaToPrettyTimeDelta( period )
+        if run_regularly:
+            
+            pretty_period = HydrusData.TimeDeltaToPrettyTimeDelta( period )
+            
+        else:
+            
+            pretty_period = 'not running regularly'
+            
+        
+        if run_now:
+            
+            pretty_period += ' (running after dialog ok)'
+            
+        
+        if paused:
+            
+            pretty_paused = 'yes'
+            
+        else:
+            
+            pretty_paused = ''
+            
         
         pretty_phrase = phrase
         
-        display_tuple = ( name, path, pretty_export_type, pretty_file_search_context, pretty_period, pretty_phrase )
+        display_tuple = ( name, path, pretty_export_type, pretty_file_search_context, pretty_paused, pretty_period, pretty_phrase )
         
-        sort_tuple = ( name, path, pretty_export_type, pretty_file_search_context, period, phrase )
+        sort_tuple = ( name, path, pretty_export_type, pretty_file_search_context, paused, period, phrase )
         
         return ( display_tuple, sort_tuple )
         
@@ -168,11 +189,11 @@ class EditExportFolderPanel( ClientGUIScrolledPanels.EditPanel ):
         
         self._export_folder = export_folder
         
-        ( name, path, export_type, delete_from_client_after_export, file_search_context, period, phrase ) = self._export_folder.ToTuple()
+        ( name, path, export_type, delete_from_client_after_export, file_search_context, run_regularly, period, phrase, self._last_checked, paused, run_now ) = self._export_folder.ToTuple()
         
         self._path_box = ClientGUICommon.StaticBox( self, 'name and location' )
         
-        self._name = wx.TextCtrl( self._path_box)
+        self._name = wx.TextCtrl( self._path_box )
         
         self._path = wx.DirPickerCtrl( self._path_box, style = wx.DIRP_USE_TEXTCTRL )
         
@@ -196,13 +217,19 @@ class EditExportFolderPanel( ClientGUIScrolledPanels.EditPanel ):
         
         self._predicates_box = ClientGUIListBoxes.ListBoxTagsActiveSearchPredicates( self._query_box, self._page_key, predicates )
         
-        self._searchbox = ClientGUIACDropdown.AutoCompleteDropdownTagsRead( self._query_box, self._page_key, file_search_context )
+        self._searchbox = ClientGUIACDropdown.AutoCompleteDropdownTagsRead( self._query_box, self._page_key, file_search_context, allow_all_known_files = False )
         
         #
         
         self._period_box = ClientGUICommon.StaticBox( self, 'export period' )
         
         self._period = ClientGUITime.TimeDeltaButton( self._period_box, min = 3 * 60, days = True, hours = True, minutes = True )
+        
+        self._run_regularly = wx.CheckBox( self._period_box )
+        
+        self._paused = wx.CheckBox( self._period_box )
+        
+        self._run_now = wx.CheckBox( self._period_box )
         
         #
         
@@ -223,6 +250,12 @@ class EditExportFolderPanel( ClientGUIScrolledPanels.EditPanel ):
         self._delete_from_client_after_export.SetValue( delete_from_client_after_export )
         
         self._period.SetValue( period )
+        
+        self._run_regularly.SetValue( run_regularly )
+        
+        self._paused.SetValue( paused )
+        
+        self._run_now.SetValue( run_now )
         
         self._pattern.SetValue( phrase )
         
@@ -264,6 +297,16 @@ If you select synchronise, be careful!'''
         self._query_box.Add( self._searchbox, CC.FLAGS_EXPAND_PERPENDICULAR )
         
         self._period_box.Add( self._period, CC.FLAGS_EXPAND_PERPENDICULAR )
+        
+        rows = []
+        
+        rows.append( ( 'run regularly?: ', self._run_regularly ) )
+        rows.append( ( 'paused: ', self._paused ) )
+        rows.append( ( 'run on dialog ok: ', self._run_now ) )
+        
+        gridbox = ClientGUICommon.WrapInGrid( self._period_box, rows )
+        
+        self._period_box.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         
         phrase_hbox = wx.BoxSizer( wx.HORIZONTAL )
         
@@ -352,6 +395,8 @@ If you select synchronise, be careful!'''
         
         file_search_context.SetPredicates( predicates )
         
+        run_regularly = self._run_regularly.GetValue()
+        
         period = self._period.GetValue()
         
         phrase = self._pattern.GetValue()
@@ -372,7 +417,11 @@ If you select synchronise, be careful!'''
             raise HydrusExceptions.VetoException( 'Could not parse that export phrase! ' + str( e ) )
             
         
-        export_folder = ClientExporting.ExportFolder( name, path = path, export_type = export_type, delete_from_client_after_export = delete_from_client_after_export, file_search_context = file_search_context, period = period, phrase = phrase )
+        run_now = self._run_now.GetValue()
+        
+        paused = self._paused.GetValue()
+        
+        export_folder = ClientExporting.ExportFolder( name, path = path, export_type = export_type, delete_from_client_after_export = delete_from_client_after_export, file_search_context = file_search_context, run_regularly = run_regularly, period = period, phrase = phrase, last_checked = self._last_checked, paused = paused, run_now = run_now )
         
         return export_folder
         
@@ -514,6 +563,8 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
     
     def _ConvertDataToListCtrlTuples( self, data ):
         
+        directory = self._directory_picker.GetPath()
+        
         ( ordering_index, media ) = data
         
         number = ordering_index
@@ -530,7 +581,13 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
         
         pretty_number = HydrusData.ToHumanInt( ordering_index + 1 )
         pretty_mime = HC.mime_string_lookup[ mime ]
+        
         pretty_path = path
+        
+        if not path.startswith( directory ):
+            
+            pretty_path = 'INVALID, above destination directory: ' + path
+            
         
         display_tuple = ( pretty_number, pretty_mime, pretty_path )
         sort_tuple = ( number, pretty_mime, path )
@@ -636,7 +693,9 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
                 
             
         
-        def do_it( neighbouring_txt_tag_service_keys, delete_afterwards, export_symlinks, quit_afterwards ):
+        def do_it( directory, neighbouring_txt_tag_service_keys, delete_afterwards, export_symlinks, quit_afterwards ):
+            
+            pauser = HydrusData.BigJobPauser()
             
             for ( index, ( ordering_index, media ) ) in enumerate( to_do ):
                 
@@ -649,6 +708,13 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
                     
                     path = self._GetPath( media )
                     
+                    path = os.path.normpath( path )
+                    
+                    if not path.startswith( directory ):
+                        
+                        raise Exception( 'It seems a destination path was above the main export directory! The file was "{}" and its destination path was "{}".'.format( hash.hex(), path ) )
+                        
+                    
                     path_dir = os.path.dirname( path )
                     
                     HydrusPaths.MakeSureDirectoryExists( path_dir )
@@ -659,9 +725,9 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
                         
                         tags = set()
                         
-                        siblings_manager = HG.controller.GetManager( 'tag_siblings' )
+                        siblings_manager = HG.controller.tag_siblings_manager
                         
-                        tag_censorship_manager = HG.client_controller.GetManager( 'tag_censorship' )
+                        tag_censorship_manager = HG.client_controller.tag_censorship_manager
                         
                         for service_key in neighbouring_txt_tag_service_keys:
                             
@@ -696,8 +762,7 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
                         
                         HydrusPaths.MirrorFile( source_path, path )
                         
-                        try: os.chmod( path, stat.S_IWRITE | stat.S_IREAD )
-                        except: pass
+                        HydrusPaths.MakeFileWritable( path )
                         
                     
                 except:
@@ -706,6 +771,8 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
                     
                     break
                     
+                
+                pauser.Pause()
                 
             
             if delete_afterwards:
@@ -716,7 +783,9 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
                 
                 chunks_of_hashes = HydrusData.SplitListIntoChunks( deletee_hashes, 64 )
                 
-                content_updates = [ HydrusData.ContentUpdate( HC.CONTENT_TYPE_FILES, HC.CONTENT_UPDATE_DELETE, chunk_of_hashes ) for chunk_of_hashes in chunks_of_hashes ]
+                reason = 'Deleted after manual export to "{}".'.format( directory )
+                
+                content_updates = [ HydrusData.ContentUpdate( HC.CONTENT_TYPE_FILES, HC.CONTENT_UPDATE_DELETE, chunk_of_hashes, reason = reason ) for chunk_of_hashes in chunks_of_hashes ]
                 
                 for content_update in content_updates:
                     
@@ -733,7 +802,7 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
             wx.CallAfter( wx_done, quit_afterwards )
             
         
-        HG.client_controller.CallToThread( do_it, self._neighbouring_txt_tag_service_keys, delete_afterwards, export_symlinks, quit_afterwards )
+        HG.client_controller.CallToThread( do_it, directory, self._neighbouring_txt_tag_service_keys, delete_afterwards, export_symlinks, quit_afterwards )
         
     
     def _GetPath( self, media ):
@@ -761,6 +830,8 @@ class ReviewExportFilesPanel( ClientGUIScrolledPanels.ReviewPanel ):
             
         
         path = os.path.join( directory, filename )
+        
+        path = os.path.normpath( path )
         
         self._existing_filenames.add( filename )
         self._media_to_paths[ media ] = path

@@ -450,17 +450,15 @@ class HydrusDB( object ):
         # blah_id IN ( ?, ?, ? ) is fast and cacheable but there's a small limit (1024 is too many) to the number of params sql can handle
         # so lets do the latter but break it into 256-strong chunks to get a good medium
 
-        # this will take a select statement with %s like so:
-        # SELECT blah_id, blah FROM blahs WHERE blah_id IN %s;
-
+        # this will take a select statement with {} like so:
+        # SELECT blah_id, blah FROM blahs WHERE blah_id IN {};
         MAX_CHUNK_SIZE = 256
 
         # do this just so we aren't always reproducing this long string for gigantic lists
         # and also so we aren't overmaking it when this gets spammed with a lot of len() == 1 calls
         if len( xs ) >= MAX_CHUNK_SIZE:
 
-            max_statement = select_statement % ( '(' + ','.join( ['%s'] * MAX_CHUNK_SIZE ) + ')' )
-
+            max_statement = select_statement.format( '({})'.format( ','.join( ['%s'] * MAX_CHUNK_SIZE ) ) )
 
         for chunk in HydrusData.SplitListIntoChunks( xs, MAX_CHUNK_SIZE ):
 
@@ -470,11 +468,10 @@ class HydrusDB( object ):
 
             else:
 
-                chunk_statement = select_statement % ( '(' + ','.join( ['%s'] * len( chunk ) ) + ')' )
+                chunk_statement = select_statement.format( '({})'.format( ','.join( ['%s'] * len( chunk ) ) ) )
 
             self._c.execute(chunk_statement, chunk)
             for row in self._c.fetchall():
-
                 yield row
 
 
@@ -749,7 +746,7 @@ class TemporaryIntegerTable( object ):
 
     def __enter__( self ):
 
-        self._cursor.execute( 'CREATE TABLE ' + self._table_name + ' ( ' + self._column_name + ' INTEGER PRIMARY KEY );' )
+        self._cursor.execute( 'CREATE TEMPORARY TABLE ' + self._table_name + ' ( ' + self._column_name + ' INTEGER PRIMARY KEY ) ENGINE=MEMORY;' )
 
         self._cursor.executemany( 'INSERT INTO ' + self._table_name + ' ( ' + self._column_name + ' ) VALUES ( %s );', ( ( i, ) for i in self._integer_iterable ) )
 

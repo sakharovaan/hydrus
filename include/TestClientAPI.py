@@ -1,3 +1,4 @@
+from . import ClientCaches
 from . import ClientConstants as CC
 from . import ClientAPI
 from . import ClientLocalServer
@@ -31,10 +32,14 @@ class TestClientAPI( unittest.TestCase ):
     def setUpClass( cls ):
         
         cls._client_api = ClientServices.GenerateService( CC.CLIENT_API_SERVICE_KEY, HC.CLIENT_API_SERVICE, 'client api' )
+        cls._client_api_cors = ClientServices.GenerateService( CC.CLIENT_API_SERVICE_KEY, HC.CLIENT_API_SERVICE, 'client api' )
+        
+        cls._client_api_cors._support_cors = True
         
         def TWISTEDSetup():
             
             reactor.listenTCP( 45869, ClientLocalServer.HydrusServiceClientAPI( cls._client_api, allow_non_local_connections = False ) )
+            reactor.listenTCP( 45899, ClientLocalServer.HydrusServiceClientAPI( cls._client_api_cors, allow_non_local_connections = False ) )
             
         
         reactor.callFromThread( TWISTEDSetup )
@@ -105,9 +110,9 @@ class TestClientAPI( unittest.TestCase ):
         
         text = str( data, 'utf-8' )
         
-        self.assertIn( 'dialog', text )
-        
         self.assertEqual( response.status, 403 )
+        
+        self.assertIn( 'dialog', text )
         
         # success
         
@@ -117,6 +122,7 @@ class TestClientAPI( unittest.TestCase ):
         permissions_to_set_up.append( ( 'add_files', [ ClientAPI.CLIENT_API_PERMISSION_ADD_FILES ] ) )
         permissions_to_set_up.append( ( 'add_tags', [ ClientAPI.CLIENT_API_PERMISSION_ADD_TAGS ] ) )
         permissions_to_set_up.append( ( 'add_urls', [ ClientAPI.CLIENT_API_PERMISSION_ADD_URLS ] ) )
+        permissions_to_set_up.append( ( 'manage_pages', [ ClientAPI.CLIENT_API_PERMISSION_MANAGE_PAGES ] ) )
         permissions_to_set_up.append( ( 'search_all_files', [ ClientAPI.CLIENT_API_PERMISSION_SEARCH_FILES ] ) )
         permissions_to_set_up.append( ( 'search_green_files', [ ClientAPI.CLIENT_API_PERMISSION_SEARCH_FILES ] ) )
         
@@ -134,9 +140,9 @@ class TestClientAPI( unittest.TestCase ):
             
             ClientAPI.api_request_dialog_open = False
             
-            self.assertEqual( response.status, 200 )
-            
             response_text = str( data, 'utf-8' )
+            
+            self.assertEqual( response.status, 200 )
             
             response_json = json.loads( response_text )
             
@@ -180,7 +186,7 @@ class TestClientAPI( unittest.TestCase ):
         
         self.assertEqual( response.status, 401 )
         
-        # fail
+        # fail header
         
         incorrect_headers = { 'Hydrus-Client-API-Access-Key' : 'abcd' }
         
@@ -192,15 +198,88 @@ class TestClientAPI( unittest.TestCase ):
         
         self.assertEqual( response.status, 403 )
         
+        # fail get param
+        
+        connection.request( 'GET', '/verify_access_key?Hydrus-Client-API-Access-Key=abcd' )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 403 )
+        
         # success
         
-        for ( name, api_permissions ) in set_up_permissions.items():
+        def do_good_verify_test( api_permissions, key_hex, key_name ):
+            
+            for request_type in ( 'header', 'get' ):
+                
+                if request_type == 'header':
+                    
+                    headers = { key_name : key_hex }
+                    
+                    connection.request( 'GET', '/verify_access_key', headers = headers )
+                    
+                elif request_type == 'get':
+                    
+                    connection.request( 'GET', '/verify_access_key?{}={}'.format( key_name, key_hex ) )
+                    
+                
+                response = connection.getresponse()
+                
+                data = response.read()
+                
+                text = str( data, 'utf-8' )
+                
+                self.assertEqual( response.status, 200 )
+                
+                body_dict = json.loads( text )
+                
+                self.assertEqual( set( body_dict[ 'basic_permissions' ] ), set( api_permissions.GetBasicPermissions() ) )
+                self.assertEqual( body_dict[ 'human_description' ], api_permissions.ToHumanString() )
+                
+            
+        
+        for api_permissions in set_up_permissions.values():
+            
+            access_key_hex = api_permissions.GetAccessKey().hex()
+            
+            do_good_verify_test( api_permissions, access_key_hex, 'Hydrus-Client-API-Access-Key' )
+            
+        
+        # /session_key
+        
+        # fail header
+        
+        incorrect_headers = { 'Hydrus-Client-API-Session-Key' : 'abcd' }
+        
+        connection.request( 'GET', '/verify_access_key', headers = incorrect_headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 419 )
+        
+        # fail get param
+        
+        connection.request( 'GET', '/verify_access_key?Hydrus-Client-API-Session-Key=abcd' )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 419 )
+        
+        # success
+        
+        for api_permissions in set_up_permissions.values():
             
             access_key_hex = api_permissions.GetAccessKey().hex()
             
             headers = { 'Hydrus-Client-API-Access-Key' : access_key_hex }
             
-            connection.request( 'GET', '/verify_access_key', headers = headers )
+            connection.request( 'GET', '/session_key', headers = headers )
             
             response = connection.getresponse()
             
@@ -212,11 +291,156 @@ class TestClientAPI( unittest.TestCase ):
             
             self.assertEqual( response.status, 200 )
             
-            self.assertEqual( set( body_dict[ 'basic_permissions' ] ), set( api_permissions.GetBasicPermissions() ) )
-            self.assertEqual( body_dict[ 'human_description' ], api_permissions.ToHumanString() )
+            self.assertIn( 'session_key', body_dict )
+            
+            session_key_hex = body_dict[ 'session_key' ]
+            
+            self.assertEqual( len( session_key_hex ), 64 )
+            
+            do_good_verify_test( api_permissions, session_key_hex, 'Hydrus-Client-API-Session-Key' )
             
         
+        # test access in POST params
+        
+        # fail
+        
+        headers = { 'Content-Type' : HC.mime_string_lookup[ HC.APPLICATION_JSON ] }
+        
+        hash = os.urandom( 32 )
+        hash_hex = hash.hex()
+        
+        HG.test_controller.ClearWrites( 'content_updates' )
+        
+        path = '/add_tags/add_tags'
+        
+        body_dict = { 'Hydrus-Client-API-Access-Key' : 'abcd', 'hash' : hash_hex, 'service_names_to_tags' : { 'local tags' : [ 'test', 'test2' ] } }
+        
+        body = json.dumps( body_dict )
+        
+        connection.request( 'POST', path, body = body, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 403 )
+        
+        body_dict = { 'Hydrus-Client-API-Session-Key' : 'abcd', 'hash' : hash_hex, 'service_names_to_tags' : { 'local tags' : [ 'test', 'test2' ] } }
+        
+        body = json.dumps( body_dict )
+        
+        connection.request( 'POST', path, body = body, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 419 )
+        
+        # success
+        
+        api_permissions = set_up_permissions[ 'everything' ]
+        
+        access_key_hex = api_permissions.GetAccessKey().hex()
+        
+        headers = { 'Hydrus-Client-API-Access-Key' : access_key_hex }
+        
+        connection.request( 'GET', '/session_key', headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        text = str( data, 'utf-8' )
+        
+        body_dict = json.loads( text )
+        
+        session_key_hex = body_dict[ 'session_key' ]
+        
+        headers = { 'Content-Type' : HC.mime_string_lookup[ HC.APPLICATION_JSON ] }
+        
+        hash = os.urandom( 32 )
+        hash_hex = hash.hex()
+        
+        HG.test_controller.ClearWrites( 'content_updates' )
+        
+        path = '/add_tags/add_tags'
+        
+        body_dict = { 'Hydrus-Client-API-Access-Key' : access_key_hex, 'hash' : hash_hex, 'service_names_to_tags' : { 'local tags' : [ 'test', 'test2' ] } }
+        
+        body = json.dumps( body_dict )
+        
+        connection.request( 'POST', path, body = body, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 200 )
+        
+        body_dict = { 'Hydrus-Client-API-Session-Key' : session_key_hex, 'hash' : hash_hex, 'service_names_to_tags' : { 'local tags' : [ 'test', 'test2' ] } }
+        
+        body = json.dumps( body_dict )
+        
+        connection.request( 'POST', path, body = body, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 200 )
+        
         return set_up_permissions
+        
+    
+    def _test_cors_fails( self, connection ):
+        
+        connection.request( 'OPTIONS', '/api_version' )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 200 )
+        
+        self.assertEqual( response.getheader( 'Allow' ), 'GET' )
+        
+        #
+        
+        connection.request( 'OPTIONS', '/api_version', headers = { 'Origin' : 'muhsite.com' } )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 401 )
+        
+    
+    def _test_cors_succeeds( self, connection ):
+        
+        connection.request( 'OPTIONS', '/api_version' )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 200 )
+        
+        self.assertEqual( response.getheader( 'Allow' ), 'GET' )
+        
+        #
+        
+        connection.request( 'OPTIONS', '/api_version', headers = { 'Origin' : 'muhsite.com' } )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 200 )
+        
+        self.assertEqual( response.getheader( 'Access-Control-Allow-Methods' ), 'GET' )
+        self.assertEqual( response.getheader( 'Access-Control-Allow-Headers' ), 'Hydrus-Client-API-Access-Key' )
+        self.assertEqual( response.getheader( 'Access-Control-Allow-Origin' ), '*' )
         
     
     def _test_add_files( self, connection, set_up_permissions ):
@@ -453,6 +677,158 @@ class TestClientAPI( unittest.TestCase ):
             self.assertEqual( c_u_tuples, e_c_u_tuples )
             
         
+        # add to multiple files
+        
+        HG.test_controller.ClearWrites( 'content_updates' )
+        
+        path = '/add_tags/add_tags'
+        
+        body_dict = { 'hashes' : [ hash_hex, hash2_hex ], 'service_names_to_tags' : { 'local tags' : [ 'test', 'test2' ] } }
+        
+        body = json.dumps( body_dict )
+        
+        connection.request( 'POST', path, body = body, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 200 )
+        
+        expected_service_keys_to_content_updates = collections.defaultdict( list )
+        
+        expected_service_keys_to_content_updates[ CC.LOCAL_TAG_SERVICE_KEY ] = [ HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, HC.CONTENT_UPDATE_ADD, ( 'test', set( [ hash, hash2 ] ) ) ), HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, HC.CONTENT_UPDATE_ADD, ( 'test2', set( [ hash, hash2 ] ) ) ) ]
+        
+        [ ( ( service_keys_to_content_updates, ), kwargs ) ] = HG.test_controller.GetWrite( 'content_updates' )
+        
+        self.assertEqual( len( service_keys_to_content_updates ), len( expected_service_keys_to_content_updates ) )
+        
+        for ( service_key, content_updates ) in service_keys_to_content_updates.items():
+            
+            expected_content_updates = expected_service_keys_to_content_updates[ service_key ]
+            
+            c_u_tuples = [ c_u.ToTuple() for c_u in content_updates ]
+            e_c_u_tuples = [ e_c_u.ToTuple() for e_c_u in expected_content_updates ]
+            
+            c_u_tuples.sort()
+            e_c_u_tuples.sort()
+            
+            self.assertEqual( c_u_tuples, e_c_u_tuples )
+            
+        
+        # siblings and parents
+        
+        # setting up
+        
+        old_sib = HG.test_controller.tag_siblings_manager
+        old_par = HG.test_controller.tag_parents_manager
+        
+        tag_siblings = collections.defaultdict( HydrusData.default_dict_set )
+        
+        first_dict = HydrusData.default_dict_set()
+        
+        first_dict[ HC.CONTENT_STATUS_CURRENT ] = { ( 'test', 'muh test' ) }
+        
+        tag_siblings[ CC.LOCAL_TAG_SERVICE_KEY ] = first_dict
+        
+        HG.test_controller.SetRead( 'tag_siblings', tag_siblings )
+        
+        tag_parents = collections.defaultdict( HydrusData.default_dict_set )
+        
+        first_dict = HydrusData.default_dict_set()
+        
+        first_dict[ HC.CONTENT_STATUS_CURRENT ] = { ( 'muh test', 'muh test parent' ) }
+        
+        tag_parents[ CC.LOCAL_TAG_SERVICE_KEY ] = first_dict
+        
+        HG.test_controller.SetRead( 'tag_parents', tag_parents )
+        
+        HG.test_controller.tag_siblings_manager = ClientCaches.TagSiblingsManager( HG.test_controller )
+        HG.test_controller.tag_parents_manager = ClientCaches.TagParentsManager( HG.test_controller )
+        
+        # ok, now with
+        
+        HG.test_controller.ClearWrites( 'content_updates' )
+        
+        path = '/add_tags/add_tags'
+        
+        body_dict = { 'hash' : hash_hex, 'service_names_to_tags' : { 'local tags' : [ 'test' ] } }
+        
+        body = json.dumps( body_dict )
+        
+        connection.request( 'POST', path, body = body, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 200 )
+        
+        expected_service_keys_to_content_updates = collections.defaultdict( list )
+        
+        expected_service_keys_to_content_updates[ CC.LOCAL_TAG_SERVICE_KEY ] = [ HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, HC.CONTENT_UPDATE_ADD, ( 'muh test', set( [ hash ] ) ) ), HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, HC.CONTENT_UPDATE_ADD, ( 'muh test parent', set( [ hash ] ) ) ) ]
+        
+        [ ( ( service_keys_to_content_updates, ), kwargs ) ] = HG.test_controller.GetWrite( 'content_updates' )
+        
+        self.assertEqual( len( service_keys_to_content_updates ), len( expected_service_keys_to_content_updates ) )
+        
+        for ( service_key, content_updates ) in service_keys_to_content_updates.items():
+            
+            expected_content_updates = expected_service_keys_to_content_updates[ service_key ]
+            
+            c_u_tuples = [ c_u.ToTuple() for c_u in content_updates ]
+            e_c_u_tuples = [ e_c_u.ToTuple() for e_c_u in expected_content_updates ]
+            
+            c_u_tuples.sort()
+            e_c_u_tuples.sort()
+            
+            self.assertEqual( c_u_tuples, e_c_u_tuples )
+            
+        
+        # and without
+        
+        HG.test_controller.ClearWrites( 'content_updates' )
+        
+        path = '/add_tags/add_tags'
+        
+        body_dict = { 'hash' : hash_hex, 'service_names_to_tags' : { 'local tags' : [ 'test' ] }, 'add_siblings_and_parents' : False }
+        
+        body = json.dumps( body_dict )
+        
+        connection.request( 'POST', path, body = body, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        self.assertEqual( response.status, 200 )
+        
+        expected_service_keys_to_content_updates = collections.defaultdict( list )
+        
+        expected_service_keys_to_content_updates[ CC.LOCAL_TAG_SERVICE_KEY ] = [ HydrusData.ContentUpdate( HC.CONTENT_TYPE_MAPPINGS, HC.CONTENT_UPDATE_ADD, ( 'test', set( [ hash ] ) ) ) ]
+        
+        [ ( ( service_keys_to_content_updates, ), kwargs ) ] = HG.test_controller.GetWrite( 'content_updates' )
+        
+        self.assertEqual( len( service_keys_to_content_updates ), len( expected_service_keys_to_content_updates ) )
+        
+        for ( service_key, content_updates ) in service_keys_to_content_updates.items():
+            
+            expected_content_updates = expected_service_keys_to_content_updates[ service_key ]
+            
+            c_u_tuples = [ c_u.ToTuple() for c_u in content_updates ]
+            e_c_u_tuples = [ e_c_u.ToTuple() for e_c_u in expected_content_updates ]
+            
+            c_u_tuples.sort()
+            e_c_u_tuples.sort()
+            
+            self.assertEqual( c_u_tuples, e_c_u_tuples )
+            
+        
+        # cleanup
+        
+        HG.test_controller.tag_siblings_manager = old_sib
+        HG.test_controller.tag_parents_manager = old_par
+        
     
     def _test_add_urls( self, connection, set_up_permissions ):
         
@@ -639,18 +1015,18 @@ class TestClientAPI( unittest.TestCase ):
         
         response = connection.getresponse()
         
-        self.assertEqual( response.status, 200 )
-        
         data = response.read()
         
         text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
         
         response_json = json.loads( text )
         
         self.assertEqual( response_json[ 'human_result_text' ], '"https://8ch.net/tv/res/1846574.html" URL added successfully.' )
         self.assertEqual( response_json[ 'normalised_url' ], 'https://8ch.net/tv/res/1846574.html' )
         
-        self.assertEqual( HG.test_controller.GetWrite( 'import_url_test' ), [ ( ( url, None, None, False ), {} ) ] )
+        self.assertEqual( HG.test_controller.GetWrite( 'import_url_test' ), [ ( ( url, None, None, None, False ), {} ) ] )
         
         # with name
         
@@ -664,18 +1040,46 @@ class TestClientAPI( unittest.TestCase ):
         
         response = connection.getresponse()
         
-        self.assertEqual( response.status, 200 )
-        
         data = response.read()
         
         text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
         
         response_json = json.loads( text )
         
         self.assertEqual( response_json[ 'human_result_text' ], '"https://8ch.net/tv/res/1846574.html" URL added successfully.' )
         self.assertEqual( response_json[ 'normalised_url' ], 'https://8ch.net/tv/res/1846574.html' )
         
-        self.assertEqual( HG.test_controller.GetWrite( 'import_url_test' ), [ ( ( url, None, 'muh /tv/', False ), {} ) ] )
+        self.assertEqual( HG.test_controller.GetWrite( 'import_url_test' ), [ ( ( url, None, 'muh /tv/', None, False ), {} ) ] )
+        
+        # with page_key
+        
+        HG.test_controller.ClearWrites( 'import_url_test' )
+        
+        page_key = os.urandom( 32 )
+        page_key_hex = page_key.hex()
+        
+        request_dict = { 'url' : url, 'destination_page_key' : page_key_hex }
+        
+        request_body = json.dumps( request_dict )
+        
+        connection.request( 'POST', '/add_urls/add_url', body = request_body, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
+        
+        response_json = json.loads( text )
+        
+        self.assertEqual( response_json[ 'human_result_text' ], '"https://8ch.net/tv/res/1846574.html" URL added successfully.' )
+        self.assertEqual( response_json[ 'normalised_url' ], 'https://8ch.net/tv/res/1846574.html' )
+        
+        self.assertEqual( HG.test_controller.GetWrite( 'import_url_test' ), [ ( ( url, None, None, page_key, False ), {} ) ] )
         
         # add tags and name, and show destination page
         
@@ -689,11 +1093,11 @@ class TestClientAPI( unittest.TestCase ):
         
         response = connection.getresponse()
         
-        self.assertEqual( response.status, 200 )
-        
         data = response.read()
         
         text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
         
         response_json = json.loads( text )
         
@@ -702,7 +1106,7 @@ class TestClientAPI( unittest.TestCase ):
         
         service_keys_to_tags = ClientTags.ServiceKeysToTags( { CC.LOCAL_TAG_SERVICE_KEY : set( [ '/tv/ thread' ] ) } )
         
-        self.assertEqual( HG.test_controller.GetWrite( 'import_url_test' ), [ ( ( url, service_keys_to_tags, 'muh /tv/', True ), {} ) ] )
+        self.assertEqual( HG.test_controller.GetWrite( 'import_url_test' ), [ ( ( url, service_keys_to_tags, 'muh /tv/', None, True ), {} ) ] )
         
         # associate url
         
@@ -821,6 +1225,35 @@ class TestClientAPI( unittest.TestCase ):
         self.assertEqual( result, expected_result )
         
     
+    def _test_manage_pages( self, connection, set_up_permissions ):
+        
+        api_permissions = set_up_permissions[ 'manage_pages' ]
+        
+        access_key_hex = api_permissions.GetAccessKey().hex()
+        
+        headers = { 'Hydrus-Client-API-Access-Key' : access_key_hex }
+        
+        #
+        
+        path = '/manage_pages/get_pages'
+        
+        connection.request( 'GET', path, headers = headers )
+        
+        response = connection.getresponse()
+        
+        data = response.read()
+        
+        text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
+        
+        d = json.loads( text )
+        
+        pages = d[ 'pages' ]
+        
+        self.assertEqual( pages[ 'name' ], 'top pages notebook' )
+        
+    
     def _test_search_files( self, connection, set_up_permissions ):
         
         hash_ids = [ 1, 2, 3, 4, 5, 10 ]
@@ -875,9 +1308,9 @@ class TestClientAPI( unittest.TestCase ):
         
         data = response.read()
         
-        self.assertEqual( response.status, 200 )
-        
         text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
         
         d = json.loads( text )
         
@@ -1106,9 +1539,9 @@ class TestClientAPI( unittest.TestCase ):
         
         data = response.read()
         
-        self.assertEqual( response.status, 200 )
-        
         text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
         
         d = json.loads( text )
         
@@ -1124,9 +1557,9 @@ class TestClientAPI( unittest.TestCase ):
         
         data = response.read()
         
-        self.assertEqual( response.status, 200 )
-        
         text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
         
         d = json.loads( text )
         
@@ -1150,9 +1583,9 @@ class TestClientAPI( unittest.TestCase ):
         
         data = response.read()
         
-        self.assertEqual( response.status, 200 )
-        
         text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
         
         d = json.loads( text )
         
@@ -1168,9 +1601,9 @@ class TestClientAPI( unittest.TestCase ):
         
         data = response.read()
         
-        self.assertEqual( response.status, 200 )
-        
         text = str( data, 'utf-8' )
+        
+        self.assertEqual( response.status, 200 )
         
         d = json.loads( text )
         
@@ -1394,7 +1827,19 @@ class TestClientAPI( unittest.TestCase ):
         self._test_add_files( connection, set_up_permissions )
         self._test_add_tags( connection, set_up_permissions )
         self._test_add_urls( connection, set_up_permissions )
+        self._test_manage_pages( connection, set_up_permissions )
         self._test_search_files( connection, set_up_permissions )
         self._test_permission_failures( connection, set_up_permissions )
+        self._test_cors_fails( connection )
+        
+        connection.close()
+        
+        #
+        
+        port = 45899
+        
+        connection = http.client.HTTPConnection( host, port, timeout = 10 )
+        
+        self._test_cors_succeeds( connection )
         
     

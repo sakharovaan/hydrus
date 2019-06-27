@@ -3,6 +3,7 @@ import queue
 import threading
 import time
 import traceback
+from . import HydrusConstants as HC
 from . import HydrusData
 from . import HydrusGlobals as HG
 from . import HydrusThreading
@@ -11,7 +12,7 @@ import wx
 
 class JobKey( object ):
     
-    def __init__( self, pausable = False, cancellable = False, only_when_idle = False, only_start_if_unbusy = False, stop_time = None, cancel_on_shutdown = True ):
+    def __init__( self, pausable = False, cancellable = False, maintenance_mode = HC.MAINTENANCE_FORCED, only_start_if_unbusy = False, stop_time = None, cancel_on_shutdown = True ):
         
         self._key = HydrusData.GenerateKey()
         
@@ -19,7 +20,7 @@ class JobKey( object ):
         
         self._pausable = pausable
         self._cancellable = cancellable
-        self._only_when_idle = only_when_idle
+        self._maintenance_mode = maintenance_mode
         self._only_start_if_unbusy = only_start_if_unbusy
         self._stop_time = stop_time
         self._cancel_on_shutdown = cancel_on_shutdown
@@ -64,17 +65,9 @@ class JobKey( object ):
                 should_cancel = True
                 
             
-            if self._only_when_idle and not HG.client_controller.CurrentlyIdle():
+            if HG.client_controller.ShouldStopThisWork( self._maintenance_mode, self._stop_time ):
                 
                 should_cancel = True
-                
-            
-            if self._stop_time is not None:
-                
-                if HydrusData.TimeHasPassed( self._stop_time ):
-                    
-                    should_cancel = True
-                    
                 
             
             if should_cancel:
@@ -359,6 +352,132 @@ class JobKey( object ):
             
         
         return ( i_paused, should_quit )
+        
+    
+class FileRWLock( object ):
+    
+    class RLock( object ):
+        
+        def __init__( self, parent ):
+            
+            self.parent = parent
+            
+        
+        def __enter__( self ):
+            
+            while not HydrusThreading.IsThreadShuttingDown():
+                
+                with self.parent.lock:
+                    
+                    # if there are no writers, we can start reading
+                    
+                    if self.parent.num_waiting_writers == 0:
+                        
+                        self.parent.num_readers += 1
+                        
+                        return
+                        
+                    
+                
+                # otherwise wait a bit
+                
+                self.parent.read_available_event.wait( 1 )
+                
+                self.parent.read_available_event.clear()
+                
+            
+        
+        def __exit__( self, exc_type, exc_val, exc_tb ):
+            
+            with self.parent.lock:
+                
+                self.parent.num_readers -= 1
+                
+                do_notify = self.parent.num_readers == 0
+                
+            
+            if do_notify:
+                
+                self.parent.write_available_event.set()
+                
+            
+        
+    
+    class WLock( object ):
+        
+        def __init__( self, parent ):
+            
+            self.parent = parent
+            
+        
+        def __enter__( self ):
+            
+            # let all the readers know that we are bumping up to the front of the queue
+            
+            with self.parent.lock:
+                
+                self.parent.num_waiting_writers += 1
+                
+            
+            while not HydrusThreading.IsThreadShuttingDown():
+                
+                with self.parent.lock:
+                    
+                    # if nothing reading or writing atm, sieze the opportunity
+                    
+                    if self.parent.num_readers == 0 and not self.parent.there_is_an_active_writer:
+                        
+                        self.parent.there_is_an_active_writer = True
+                        
+                        return
+                        
+                    
+                
+                # otherwise wait a bit
+                
+                self.parent.write_available_event.wait( 1 )
+                
+                self.parent.write_available_event.clear()
+                
+            
+        
+        def __exit__( self, exc_type, exc_val, exc_tb ):
+            
+            with self.parent.lock:
+                
+                self.parent.there_is_an_active_writer = False
+                
+                self.parent.num_waiting_writers -= 1
+                
+                do_read_notify = self.parent.num_waiting_writers == 0 # reading is now available
+                do_write_notify = self.parent.num_waiting_writers > 0 # another writer is waiting
+                
+            
+            if do_read_notify:
+                
+                self.parent.read_available_event.set()
+                
+            
+            if do_write_notify:
+                
+                self.parent.write_available_event.set()
+                
+            
+        
+    
+    def __init__( self ):
+        
+        self.read = self.RLock( self )
+        self.write = self.WLock( self )
+        
+        self.lock = threading.Lock()
+        
+        self.read_available_event = threading.Event()
+        self.write_available_event = threading.Event()
+        
+        self.num_readers = 0
+        self.num_waiting_writers = 0
+        self.there_is_an_active_writer = False
         
     
 class WXAwareJob( HydrusThreading.SchedulableJob ):

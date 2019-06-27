@@ -127,7 +127,7 @@ def DAEMONDownloadFiles( controller ):
                         
                         try:
                             
-                            ( os_file_handle, temp_path ) = ClientPaths.GetTempPath()
+                            ( os_file_handle, temp_path ) = HydrusPaths.GetTempPath()
                             
                             try:
                                 
@@ -154,7 +154,7 @@ def DAEMONDownloadFiles( controller ):
                                 
                                 file_import_job = ClientImportFileSeeds.FileImportJob( temp_path, file_import_options )
                                 
-                                client_files_manager.ImportFile( file_import_job )
+                                file_import_job.DoWork()
                                 
                                 successful_hashes.add( hash )
                                 
@@ -193,7 +193,7 @@ def DAEMONDownloadFiles( controller ):
                         multihash = multihashes[0]
                         
                         # this actually calls to a thread that can launch gui 'select from tree' stuff, so let's just break at this point
-                        service.ImportFile( multihash )
+                        wx.CallAfter( service.ImportFile, multihash )
                         
                         break
                         
@@ -295,7 +295,7 @@ def DAEMONSynchroniseRepositories( controller ):
                 return
                 
             
-            service.Sync( only_process_when_idle = True )
+            service.Sync( maintenance_mode = HC.MAINTENANCE_IDLE )
             
             if HydrusThreading.IsThreadShuttingDown():
                 

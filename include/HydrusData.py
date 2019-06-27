@@ -74,11 +74,6 @@ def ConvertFloatToPercentage( f ):
     
     return '{:.1f}%'.format( f * 100 )
     
-def ConvertIntToFirst( n ):
-    
-    # straight from stack, wew
-    return "%d%s" % (n,"tsnrhtdd"[(n/10%10!=1)*(n%10<4)*n%10::4])
-    
 def ConvertIntToPixels( i ):
     
     if i == 1: return 'pixels'
@@ -201,7 +196,7 @@ def ConvertStatusToPrefix( status ):
     elif status == HC.CONTENT_STATUS_PETITIONED: return '(-) '
     elif status == HC.CONTENT_STATUS_DELETED: return '(X) '
     
-def TimeDeltaToPrettyTimeDelta( seconds ):
+def TimeDeltaToPrettyTimeDelta( seconds, show_seconds = True ):
     
     if seconds is None:
         
@@ -235,7 +230,11 @@ def TimeDeltaToPrettyTimeDelta( seconds ):
         lines.append( ( 'day', DAY ) )
         lines.append( ( 'hour', HOUR ) )
         lines.append( ( 'minute', MINUTE ) )
-        lines.append( ( 'second', 1 ) )
+        
+        if show_seconds:
+            
+            lines.append( ( 'second', 1 ) )
+            
         
         result_components = []
         
@@ -318,17 +317,29 @@ def ConvertTimestampToPrettyExpires( timestamp ):
         return 'unknown expiration'
         
     
-    time_delta_string = TimestampToPrettyTimeDelta( timestamp )
-    
-    if TimeHasPassed( timestamp ):
+    try:
         
-        return 'expired ' + time_delta_string
+        time_delta_string = TimestampToPrettyTimeDelta( timestamp )
         
-    else:
-        return 'expires ' + time_delta_string
+        if TimeHasPassed( timestamp ):
+            
+            return 'expired ' + time_delta_string
+            
+        else:
+            return 'expires ' + time_delta_string
+            
+        
+    except:
+        
+        return 'unparseable time {}'.format( timestamp )
         
     
 def ConvertTimestampToPrettyTime( timestamp, in_gmt = False, include_24h_time = True ):
+    
+    if timestamp is None:
+        
+        return 'no time given'
+        
     
     if include_24h_time:
         
@@ -339,20 +350,27 @@ def ConvertTimestampToPrettyTime( timestamp, in_gmt = False, include_24h_time = 
         phrase = '%Y/%m/%d'
         
     
-    if in_gmt:
+    try:
         
-        struct_time = time.gmtime( timestamp )
+        if in_gmt:
+            
+            struct_time = time.gmtime( timestamp )
+            
+            phrase = phrase + ' GMT'
+            
+        else:
+            
+            struct_time = time.localtime( timestamp )
+            
         
-        phrase = phrase + ' GMT'
+        return time.strftime( phrase, struct_time )
         
-    else:
+    except:
         
-        struct_time = time.localtime( timestamp )
+        return 'unparseable time {}'.format( timestamp )
         
     
-    return time.strftime( phrase, struct_time )
-    
-def TimestampToPrettyTimeDelta( timestamp, just_now_string = 'now', just_now_threshold = 3 ):
+def TimestampToPrettyTimeDelta( timestamp, just_now_string = 'now', just_now_threshold = 3, show_seconds = True ):
     
     if timestamp is None:
         
@@ -364,22 +382,34 @@ def TimestampToPrettyTimeDelta( timestamp, just_now_string = 'now', just_now_thr
         return ConvertTimestampToPrettyTime( timestamp )
         
     
-    time_delta = abs( timestamp - GetNow() )
-    
-    if time_delta <= just_now_threshold:
+    if not show_seconds:
         
-        return just_now_string
+        just_now_threshold = max( just_now_threshold, 60 )
         
     
-    time_delta_string = TimeDeltaToPrettyTimeDelta( time_delta )
-    
-    if TimeHasPassed( timestamp ):
+    try:
         
-        return time_delta_string + ' ago'
+        time_delta = abs( timestamp - GetNow() )
         
-    else:
+        if time_delta <= just_now_threshold:
+            
+            return just_now_string
+            
         
-        return 'in ' + time_delta_string
+        time_delta_string = TimeDeltaToPrettyTimeDelta( time_delta, show_seconds = show_seconds )
+        
+        if TimeHasPassed( timestamp ):
+            
+            return time_delta_string + ' ago'
+            
+        else:
+            
+            return 'in ' + time_delta_string
+            
+        
+    except:
+        
+        return 'unparseable time {}'.format( timestamp )
         
     
 def ConvertUglyNamespaceToPrettyString( namespace ):
@@ -610,14 +640,14 @@ def GetSiblingProcessPorts( db_path, instance ):
     
 def GetSubprocessEnv():
     
-    if HC.RUNNING_FROM_FROZEN_BUILD:
+    if HG.subprocess_report_mode:
         
-        if HG.subprocess_report_mode:
-            
-            env = os.environ.copy()
-            
-            ShowText( 'Your pyinstaller env is: {}'.format( env ) )
-            
+        env = os.environ.copy()
+        
+        ShowText( 'Your unmodified env is: {}'.format( env ) )
+        
+    
+    if HC.RUNNING_FROM_FROZEN_BUILD:
         
         # let's make a proper env for subprocess that doesn't have pyinstaller woo woo in it
         
@@ -631,6 +661,12 @@ def GetSubprocessEnv():
         if lp_orig_key in env:
             
             env[ lp_key ] = env[ lp_orig_key ]
+            
+            changes_made = True
+            
+        elif lp_key in env:
+            
+            del env[ lp_key ]
             
             changes_made = True
             
@@ -719,6 +755,8 @@ def GetSubprocessKWArgs( hide_terminal = True, text = False ):
     if HG.subprocess_report_mode:
         
         message = 'KWargs are: {}'.format( sbp_kwargs )
+        
+        ShowText( message )
         
     
     return sbp_kwargs
@@ -1406,11 +1444,12 @@ class Call( object ):
     
 class ContentUpdate( object ):
     
-    def __init__( self, data_type, action, row ):
+    def __init__( self, data_type, action, row, reason = None ):
         
         self._data_type = data_type
         self._action = action
         self._row = row
+        self._reason = reason
         
     
     def __eq__( self, other ):
@@ -1427,7 +1466,7 @@ class ContentUpdate( object ):
     
     def __repr__( self ):
         
-        return 'Content Update: ' + str( ( self._data_type, self._action, self._row ) )
+        return 'Content Update: ' + str( ( self._data_type, self._action, self._row, self._reason ) )
         
     
     def GetAction( self ):
@@ -1454,13 +1493,9 @@ class ContentUpdate( object ):
                 
                 hashes = { file_info_manager.hash }
                 
-            elif self._action in ( HC.CONTENT_UPDATE_ARCHIVE, HC.CONTENT_UPDATE_DELETE, HC.CONTENT_UPDATE_UNDELETE, HC.CONTENT_UPDATE_INBOX, HC.CONTENT_UPDATE_PEND, HC.CONTENT_UPDATE_RESCIND_PEND, HC.CONTENT_UPDATE_RESCIND_PETITION ):
+            else:
                 
                 hashes = self._row
-                
-            elif self._action == HC.CONTENT_UPDATE_PETITION:
-                
-                ( hashes, reason ) = self._row
                 
             
         elif self._data_type == HC.CONTENT_TYPE_DIRECTORIES:
@@ -1476,10 +1511,6 @@ class ContentUpdate( object ):
             if self._action == HC.CONTENT_UPDATE_ADVANCED:
                 
                 hashes = set()
-                
-            elif self._action == HC.CONTENT_UPDATE_PETITION:
-                
-                ( tag, hashes, reason ) = self._row
                 
             else:
                 
@@ -1519,6 +1550,18 @@ class ContentUpdate( object ):
             
         
         return hashes
+        
+    
+    def GetReason( self ):
+        
+        if self._reason is None:
+            
+            return 'No reason given.'
+            
+        else:
+            
+            return self._reason
+            
         
     
     def GetWeight( self ):

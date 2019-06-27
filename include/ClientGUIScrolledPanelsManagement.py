@@ -8,6 +8,7 @@ from . import ClientGUICommon
 from . import ClientGUIControls
 from . import ClientGUIDialogs
 from . import ClientGUIDialogsQuick
+from . import ClientGUIFunctions
 from . import ClientGUIImport
 from . import ClientGUIListBoxes
 from . import ClientGUIListCtrl
@@ -279,9 +280,9 @@ class ManageClientServicesPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         add_remove_hbox = wx.BoxSizer( wx.HORIZONTAL )
         
-        add_remove_hbox.Add( self._add_button, CC.FLAGS_LONE_BUTTON )
-        add_remove_hbox.Add( self._edit_button, CC.FLAGS_LONE_BUTTON )
-        add_remove_hbox.Add( self._delete_button, CC.FLAGS_LONE_BUTTON )
+        add_remove_hbox.Add( self._add_button, CC.FLAGS_VCENTER )
+        add_remove_hbox.Add( self._edit_button, CC.FLAGS_VCENTER )
+        add_remove_hbox.Add( self._delete_button, CC.FLAGS_VCENTER )
         
         vbox = wx.BoxSizer( wx.VERTICAL )
         
@@ -800,8 +801,8 @@ class ManageClientServicesPanel( ClientGUIScrolledPanels.ManagePanel ):
                 
                 hbox = wx.BoxSizer( wx.HORIZONTAL )
                 
-                hbox.Add( self._register, CC.FLAGS_LONE_BUTTON )
-                hbox.Add( self._test_credentials_button, CC.FLAGS_LONE_BUTTON )
+                hbox.Add( self._register, CC.FLAGS_VCENTER )
+                hbox.Add( self._test_credentials_button, CC.FLAGS_VCENTER )
                 
                 wrapped_access_key = ClientGUICommon.WrapInText( self._access_key, self, 'access key: ' )
                 
@@ -1047,7 +1048,7 @@ class ManageClientServicesPanel( ClientGUIScrolledPanels.ManagePanel ):
                 
                 ClientGUICommon.StaticBox.__init__( self, parent, 'client api' )
                 
-                self._booru_options_panel = ClientGUICommon.StaticBox( self, 'options' )
+                self._client_server_options_panel = ClientGUICommon.StaticBox( self, 'options' )
                 
                 if service_type == HC.LOCAL_BOORU:
                     
@@ -1063,13 +1064,32 @@ class ManageClientServicesPanel( ClientGUIScrolledPanels.ManagePanel ):
                 port_name = '{} local port'.format( name )
                 none_phrase = 'do not run {} service'.format( name )
                 
-                self._port = ClientGUICommon.NoneableSpinCtrl( self._booru_options_panel, port_name, none_phrase = none_phrase, min = 1, max = 65535 )
+                self._port = ClientGUICommon.NoneableSpinCtrl( self._client_server_options_panel, port_name, none_phrase = none_phrase, min = 1, max = 65535 )
+
+                self._allow_non_local_connections = wx.CheckBox( self._client_server_options_panel, label = 'allow non-local connections' )
+
+                self._support_cors = wx.CheckBox( self._client_server_options_panel, label = 'support CORS headers' )
+                self._support_cors.SetToolTip( 'Have this server support Cross-Origin Resource Sharing, which allows web browsers to access it off other domains. Turn this on if you want to access this service through a web-based wrapper (e.g. a booru wrapper) hosted on another domain.' )
+
+                self._log_requests = wx.CheckBox( self._client_server_options_panel, label = 'log requests' )
+                self._log_requests.SetToolTip( 'Hydrus server services will write a brief anonymous line to the log for every request made, but for the client services this tends to be a bit spammy. You probably want this off unless you are testing something.' )
                 
-                self._allow_non_local_connections = wx.CheckBox( self._booru_options_panel, label = 'allow non-local connections' )
+                self._upnp = ClientGUICommon.NoneableSpinCtrl( self._client_server_options_panel, 'upnp port', none_phrase = 'do not forward port', max = 65535 )
                 
-                self._upnp = ClientGUICommon.NoneableSpinCtrl( self._booru_options_panel, 'upnp port', none_phrase = 'do not forward port', max = 65535 )
+                self._external_scheme_override = ClientGUICommon.NoneableTextCtrl( self._client_server_options_panel, message = 'scheme (http/https) override when copying external links' )
+                self._external_host_override = ClientGUICommon.NoneableTextCtrl( self._client_server_options_panel, message = 'host override when copying external links' )
+                self._external_port_override = ClientGUICommon.NoneableTextCtrl( self._client_server_options_panel, message = 'port override when copying external links' )
                 
-                self._bandwidth_rules = ClientGUIControls.BandwidthRulesCtrl( self._booru_options_panel, dictionary[ 'bandwidth_rules' ] )
+                self._external_port_override.SetToolTip( 'Setting this to a non-none empty string will forego the \':\' in the URL.' )
+
+                if service_type != HC.LOCAL_BOORU:
+
+                    self._external_scheme_override.Hide()
+                    self._external_host_override.Hide()
+                    self._external_port_override.Hide()
+
+
+                self._bandwidth_rules = ClientGUIControls.BandwidthRulesCtrl( self._client_server_options_panel, dictionary[ 'bandwidth_rules' ] )
                 
                 #
                 
@@ -1080,15 +1100,26 @@ class ManageClientServicesPanel( ClientGUIScrolledPanels.ManagePanel ):
                 self._upnp.SetValue( dictionary[ 'upnp_port' ] )
                 
                 self._allow_non_local_connections.SetValue( dictionary[ 'allow_non_local_connections' ] )
-                
+                self._support_cors.SetValue( dictionary[ 'support_cors' ] )
+                self._log_requests.SetValue( dictionary[ 'log_requests' ] )
+
+                self._external_scheme_override.SetValue( dictionary[ 'external_scheme_override' ] )
+                self._external_host_override.SetValue( dictionary[ 'external_host_override' ] )
+                self._external_port_override.SetValue( dictionary[ 'external_port_override' ] )
+
                 #
                 
-                self._booru_options_panel.Add( self._port, CC.FLAGS_EXPAND_PERPENDICULAR )
-                self._booru_options_panel.Add( self._allow_non_local_connections, CC.FLAGS_EXPAND_PERPENDICULAR )
-                self._booru_options_panel.Add( self._upnp, CC.FLAGS_EXPAND_PERPENDICULAR )
-                self._booru_options_panel.Add( self._bandwidth_rules, CC.FLAGS_EXPAND_BOTH_WAYS )
+                self._client_server_options_panel.Add( self._port, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self._client_server_options_panel.Add( self._allow_non_local_connections, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self._client_server_options_panel.Add( self._support_cors, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self._client_server_options_panel.Add( self._log_requests, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self._client_server_options_panel.Add( self._upnp, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self._client_server_options_panel.Add( self._external_scheme_override, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self._client_server_options_panel.Add( self._external_host_override, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self._client_server_options_panel.Add( self._external_port_override, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self._client_server_options_panel.Add( self._bandwidth_rules, CC.FLAGS_EXPAND_BOTH_WAYS )
                 
-                self.Add( self._booru_options_panel, CC.FLAGS_EXPAND_BOTH_WAYS )
+                self.Add( self._client_server_options_panel, CC.FLAGS_EXPAND_BOTH_WAYS )
                 
                 self._allow_non_local_connections.Bind( wx.EVT_CHECKBOX, self.EventCheckBox )
                 
@@ -1119,6 +1150,11 @@ class ManageClientServicesPanel( ClientGUIScrolledPanels.ManagePanel ):
                 dictionary_part[ 'port' ] = self._port.GetValue()
                 dictionary_part[ 'upnp_port' ] = self._upnp.GetValue()
                 dictionary_part[ 'allow_non_local_connections' ] = self._allow_non_local_connections.GetValue()
+                dictionary_part[ 'support_cors' ] = self._support_cors.GetValue()
+                dictionary_part[ 'log_requests' ] = self._log_requests.GetValue()
+                dictionary_part[ 'external_scheme_override' ] = self._external_scheme_override.GetValue()
+                dictionary_part[ 'external_host_override' ] = self._external_host_override.GetValue()
+                dictionary_part[ 'external_port_override' ] = self._external_port_override.GetValue()
                 dictionary_part[ 'bandwidth_rules' ] = self._bandwidth_rules.GetValue()
                 
                 return dictionary_part
@@ -1256,7 +1292,7 @@ class ManageClientServicesPanel( ClientGUIScrolledPanels.ManagePanel ):
                 
                 gridbox = ClientGUICommon.WrapInGrid( self, rows )
                 
-                self.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
                 
             
             def GetValue( self ):
@@ -1307,7 +1343,7 @@ class ManageClientServicesPanel( ClientGUIScrolledPanels.ManagePanel ):
                 
                 gridbox = ClientGUICommon.WrapInGrid( self, rows )
                 
-                self.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+                self.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
                 
             
             def GetValue( self ):
@@ -1380,7 +1416,9 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
         self._listbook.AddPage( 'gui', 'gui', self._GUIPanel( self._listbook ) ) # leave this at the top, to make it default page
         self._listbook.AddPage( 'gui pages', 'gui pages', self._GUIPagesPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'connection', 'connection', self._ConnectionPanel( self._listbook ) )
+        self._listbook.AddPage( 'external programs', 'external programs', self._ExternalProgramsPanel( self._listbook ) )
         self._listbook.AddPage( 'files and trash', 'files and trash', self._FilesAndTrashPanel( self._listbook ) )
+        self._listbook.AddPage( 'file viewing statistics', 'file viewing statistics', self._FileViewingStatisticsPanel( self._listbook ) )
         self._listbook.AddPage( 'speed and memory', 'speed and memory', self._SpeedAndMemoryPanel( self._listbook, self._new_options ) )
         self._listbook.AddPage( 'maintenance and processing', 'maintenance and processing', self._MaintenanceAndProcessingPanel( self._listbook ) )
         self._listbook.AddPage( 'media', 'media', self._MediaPanel( self._listbook ) )
@@ -1535,14 +1573,13 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._verify_regular_https = wx.CheckBox( general )
             
-            self._external_host = wx.TextCtrl( self )
-            self._external_host.SetToolTip( 'If you have trouble parsing your external ip using UPnP, you can force it to be this.' )
-            
-            self._network_timeout = wx.SpinCtrl( self, min = 3, max = 300 )
+            self._network_timeout = wx.SpinCtrl( general, min = 3, max = 300 )
             self._network_timeout.SetToolTip( 'If a network connection cannot be made in this duration or, if once started, it experiences uninterrupted inactivity for six times this duration, it will be abandoned.' )
             
-            self._max_network_jobs = wx.SpinCtrl( self, min = 1, max = 3000 )
-            self._max_network_jobs_per_domain = wx.SpinCtrl( self, min = 1, max = 500 )
+            self._max_network_jobs = wx.SpinCtrl( general, min = 1, max = 3000)
+            self._max_network_jobs_per_domain = wx.SpinCtrl( general, min = 1, max = 500 )
+
+            #
             
             proxy_panel = ClientGUICommon.StaticBox( self, 'proxy settings' )
             
@@ -1562,16 +1599,14 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._max_network_jobs.SetValue( self._new_options.GetInteger( 'max_network_jobs' ) )
             self._max_network_jobs_per_domain.SetValue( self._new_options.GetInteger( 'max_network_jobs_per_domain' ) )
-            
-            if HC.options[ 'external_host' ] is not None:
-                
-                self._external_host.SetValue( HC.options[ 'external_host' ] )
-                
-            
+
             #
             
             rows = []
             
+            rows.append( ( 'network timeout (seconds): ', self._network_timeout ) )
+            rows.append( ( 'max number of simultaneous active network jobs: ', self._max_network_jobs ) )
+            rows.append( ( 'max number of simultaneous active network jobs per domain: ', self._max_network_jobs_per_domain ) )
             rows.append( ( 'BUGFIX: verify regular https traffic:', self._verify_regular_https ) )
             
             gridbox = ClientGUICommon.WrapInGrid( general, rows )
@@ -1584,7 +1619,9 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             if ClientNetworkingSessions.SOCKS_PROXY_OK:
                 
                 text += 'It looks like you have socks support! You should also be able to enter (socks4 or) "socks5://ip:port".'
-                
+                text += os.linesep
+                text += 'Use socks4a or socks5h to force remote DNS resolution, on the proxy server.'
+
             else:
                 
                 text += 'It does not look like you have socks support! If you want it, try adding "pysocks" (or "requests[socks]")!'
@@ -1602,20 +1639,10 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             proxy_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_BOTH_WAYS )
             
             #
-            
-            rows = []
-            
-            rows.append( ( 'network timeout (seconds): ', self._network_timeout ) )
-            rows.append( ( 'max number of simultaneous active network jobs: ', self._max_network_jobs ) )
-            rows.append( ( 'max number of simultaneous active network jobs per domain: ', self._max_network_jobs_per_domain ) )
-            rows.append( ( 'external ip/host override: ', self._external_host ) )
-            
-            gridbox = ClientGUICommon.WrapInGrid( self, rows )
-            
+
             vbox = wx.BoxSizer( wx.VERTICAL )
             
             vbox.Add( general, CC.FLAGS_EXPAND_PERPENDICULAR )
-            vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             vbox.Add( proxy_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
             
             self.SetSizer( vbox )
@@ -1627,16 +1654,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._new_options.SetNoneableString( 'http_proxy', self._http_proxy.GetValue() )
             self._new_options.SetNoneableString( 'https_proxy', self._https_proxy.GetValue() )
-            
-            external_host = self._external_host.GetValue()
-            
-            if external_host == '':
-                
-                external_host = None
-                
-            
-            HC.options[ 'external_host' ] = external_host
-            
+
             self._new_options.SetInteger( 'network_timeout', self._network_timeout.GetValue() )
             self._new_options.SetInteger( 'max_network_jobs', self._max_network_jobs.GetValue() )
             self._new_options.SetInteger( 'max_network_jobs_per_domain', self._max_network_jobs_per_domain.GetValue() )
@@ -1846,6 +1864,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             weights_panel = ClientGUICommon.StaticBox( self, 'duplicate filter comparison score weights' )
             
+            self._duplicate_comparison_score_higher_jpeg_quality = wx.SpinCtrl( weights_panel, min = 0, max = 100 )
+            self._duplicate_comparison_score_much_higher_jpeg_quality = wx.SpinCtrl( weights_panel, min = 0, max = 100 )
             self._duplicate_comparison_score_higher_filesize = wx.SpinCtrl( weights_panel, min = 0, max = 100 )
             self._duplicate_comparison_score_much_higher_filesize = wx.SpinCtrl( weights_panel, min = 0, max = 100 )
             self._duplicate_comparison_score_higher_resolution = wx.SpinCtrl( weights_panel, min = 0, max = 100 )
@@ -1854,6 +1874,9 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._duplicate_comparison_score_older = wx.SpinCtrl( weights_panel, min = 0, max = 100 )
             
             #
+
+            self._duplicate_comparison_score_higher_jpeg_quality.SetValue( self._new_options.GetInteger( 'duplicate_comparison_score_higher_jpeg_quality' ) )
+            self._duplicate_comparison_score_much_higher_jpeg_quality.SetValue( self._new_options.GetInteger( 'duplicate_comparison_score_much_higher_jpeg_quality' ) )
             self._duplicate_comparison_score_higher_filesize.SetValue( self._new_options.GetInteger( 'duplicate_comparison_score_higher_filesize' ) )
             self._duplicate_comparison_score_much_higher_filesize.SetValue( self._new_options.GetInteger( 'duplicate_comparison_score_much_higher_filesize' ) )
             self._duplicate_comparison_score_higher_resolution.SetValue( self._new_options.GetInteger( 'duplicate_comparison_score_higher_resolution' ) )
@@ -1865,10 +1888,12 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             rows = []
             
+            rows.append( ( 'Score for jpeg with non-trivially higher jpeg quality:', self._duplicate_comparison_score_higher_jpeg_quality ) )
+            rows.append( ( 'Score for jpeg with significantly higher jpeg quality:', self._duplicate_comparison_score_much_higher_jpeg_quality ) )
             rows.append( ( 'Score for file with non-trivially higher filesize:', self._duplicate_comparison_score_higher_filesize ) )
-            rows.append( ( 'Score for file with more than double the filesize:', self._duplicate_comparison_score_much_higher_filesize ) )
+            rows.append( ( 'Score for file with significantly higher filesize:', self._duplicate_comparison_score_much_higher_filesize ) )
             rows.append( ( 'Score for file with higher resolution (as num pixels):', self._duplicate_comparison_score_higher_resolution ) )
-            rows.append( ( 'Score for file with more than double the resolution (as num pixels):', self._duplicate_comparison_score_much_higher_resolution ) )
+            rows.append( ( 'Score for file with significantly higher resolution (as num pixels):', self._duplicate_comparison_score_much_higher_resolution ) )
             rows.append( ( 'Score for file with more tags:', self._duplicate_comparison_score_more_tags ) )
             rows.append( ( 'Score for file with non-trivially earlier import time:', self._duplicate_comparison_score_older ) )
             
@@ -1894,6 +1919,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         def UpdateOptions( self ):
             
+            self._new_options.SetInteger( 'duplicate_comparison_score_higher_jpeg_quality', self._duplicate_comparison_score_higher_jpeg_quality.GetValue() )
+            self._new_options.SetInteger( 'duplicate_comparison_score_much_higher_jpeg_quality', self._duplicate_comparison_score_much_higher_jpeg_quality.GetValue() )
             self._new_options.SetInteger( 'duplicate_comparison_score_higher_filesize', self._duplicate_comparison_score_higher_filesize.GetValue() )
             self._new_options.SetInteger( 'duplicate_comparison_score_much_higher_filesize', self._duplicate_comparison_score_much_higher_filesize.GetValue() )
             self._new_options.SetInteger( 'duplicate_comparison_score_higher_resolution', self._duplicate_comparison_score_higher_resolution.GetValue() )
@@ -1902,245 +1929,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._new_options.SetInteger( 'duplicate_comparison_score_older', self._duplicate_comparison_score_older.GetValue() )
             
         
-    
-    class _ImportingPanel( wx.Panel ):
-        
-        def __init__( self, parent, new_options ):
-            
-            wx.Panel.__init__( self, parent )
-            
-            self._new_options = new_options
-            
-            #
-            
-            default_fios = ClientGUICommon.StaticBox( self, 'default file import options' )
-            
-            from . import ClientGUIImport
-            
-            show_downloader_options = True
-            
-            quiet_file_import_options = self._new_options.GetDefaultFileImportOptions( 'quiet' )
-            
-            self._quiet_fios = ClientGUIImport.FileImportOptionsButton( default_fios, quiet_file_import_options, show_downloader_options )
-            
-            loud_file_import_options = self._new_options.GetDefaultFileImportOptions( 'loud' )
-            
-            self._loud_fios = ClientGUIImport.FileImportOptionsButton( default_fios, loud_file_import_options, show_downloader_options )
-            
-            #
-            
-            rows = []
-            
-            rows.append( ( 'For \'quiet\' import contexts like import folders and subscriptions:', self._quiet_fios ) )
-            rows.append( ( 'For import contexts that work on pages:', self._loud_fios ) )
-            
-            gridbox = ClientGUICommon.WrapInGrid( default_fios, rows )
-            
-            default_fios.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
-            
-            #
-            
-            vbox = wx.BoxSizer( wx.VERTICAL )
-            
-            vbox.Add( default_fios, CC.FLAGS_EXPAND_PERPENDICULAR )
-            
-            self.SetSizer( vbox )
-            
-        
-        def UpdateOptions( self ):
-            
-            self._new_options.SetDefaultFileImportOptions( 'quiet', self._quiet_fios.GetValue() )
-            self._new_options.SetDefaultFileImportOptions( 'loud', self._loud_fios.GetValue() )
-            
-        
-    
-    class _MaintenanceAndProcessingPanel( wx.Panel ):
-        
-        def __init__( self, parent ):
-            
-            wx.Panel.__init__( self, parent )
-            
-            self._new_options = HG.client_controller.new_options
-            
-            self._jobs_panel = ClientGUICommon.StaticBox( self, 'when to run high cpu jobs' )
-            self._maintenance_panel = ClientGUICommon.StaticBox( self, 'maintenance period' )
-            
-            self._idle_panel = ClientGUICommon.StaticBox( self._jobs_panel, 'idle' )
-            self._shutdown_panel = ClientGUICommon.StaticBox( self._jobs_panel, 'shutdown' )
-            
-            #
-            
-            self._idle_normal = wx.CheckBox( self._idle_panel )
-            self._idle_normal.Bind( wx.EVT_CHECKBOX, self.EventIdleNormal )
-            
-            self._idle_period = ClientGUICommon.NoneableSpinCtrl( self._idle_panel, '', min = 1, max = 1000, multiplier = 60, unit = 'minutes', none_phrase = 'ignore normal browsing' )
-            self._idle_mouse_period = ClientGUICommon.NoneableSpinCtrl( self._idle_panel, '', min = 1, max = 1000, multiplier = 60, unit = 'minutes', none_phrase = 'ignore mouse movements' )
-            self._idle_cpu_max = ClientGUICommon.NoneableSpinCtrl( self._idle_panel, '', min = 5, max = 99, unit = '%', none_phrase = 'ignore cpu usage' )
-            
-            #
-            
-            self._idle_shutdown = ClientGUICommon.BetterChoice( self._shutdown_panel )
-            
-            for idle_id in ( CC.IDLE_NOT_ON_SHUTDOWN, CC.IDLE_ON_SHUTDOWN, CC.IDLE_ON_SHUTDOWN_ASK_FIRST ):
-                
-                self._idle_shutdown.Append( CC.idle_string_lookup[ idle_id ], idle_id )
-                
-            
-            self._idle_shutdown.Bind( wx.EVT_CHOICE, self.EventIdleShutdown )
-            
-            self._idle_shutdown_max_minutes = wx.SpinCtrl( self._shutdown_panel, min = 1, max = 1440 )
-            self._shutdown_work_period = ClientGUITime.TimeDeltaButton( self._shutdown_panel, min = 3600, days = True, hours = True )
-            
-            #
-            
-            self._maintenance_vacuum_period_days = ClientGUICommon.NoneableSpinCtrl( self._maintenance_panel, '', min = 28, max = 365, none_phrase = 'do not automatically vacuum' )
-            
-            tts = 'Vacuuming is a kind of full defrag of the database\'s internal page table. It can take a long time (1MB/s) on a slow drive and does not need to be done often, so feel free to set this at 90 days+.'
-            
-            self._maintenance_vacuum_period_days.SetToolTip( tts )
-            
-            #
-            
-            self._idle_normal.SetValue( HC.options[ 'idle_normal' ] )
-            self._idle_period.SetValue( HC.options[ 'idle_period' ] )
-            self._idle_mouse_period.SetValue( HC.options[ 'idle_mouse_period' ] )
-            self._idle_cpu_max.SetValue( HC.options[ 'idle_cpu_max' ] )
-            
-            self._idle_shutdown.SelectClientData( HC.options[ 'idle_shutdown' ] )
-            self._idle_shutdown_max_minutes.SetValue( HC.options[ 'idle_shutdown_max_minutes' ] )
-            self._shutdown_work_period.SetValue( self._new_options.GetInteger( 'shutdown_work_period' ) )
-            
-            self._maintenance_vacuum_period_days.SetValue( self._new_options.GetNoneableInteger( 'maintenance_vacuum_period_days' ) )
-            
-            #
-            
-            rows = []
-            
-            rows.append( ( 'Run maintenance jobs when the client is idle and the system is not otherwise busy: ', self._idle_normal ) )
-            rows.append( ( 'Assume the client is idle if no general browsing activity has occurred in the past: ', self._idle_period ) )
-            rows.append( ( 'Assume the client is idle if the mouse has not been moved in the past: ', self._idle_mouse_period ) )
-            rows.append( ( 'Assume the system is busy if any CPU core has recent average usage above: ', self._idle_cpu_max ) )
-            
-            gridbox = ClientGUICommon.WrapInGrid( self._idle_panel, rows )
-            
-            self._idle_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
-            
-            #
-            
-            rows = []
-            
-            rows.append( ( 'Run jobs on shutdown: ', self._idle_shutdown ) )
-            rows.append( ( 'Only run shutdown jobs once per: ', self._shutdown_work_period ) )
-            rows.append( ( 'Max number of minutes to run shutdown jobs: ', self._idle_shutdown_max_minutes ) )
-            
-            gridbox = ClientGUICommon.WrapInGrid( self._shutdown_panel, rows )
-            
-            self._shutdown_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
-            
-            #
-            
-            text = '***'
-            text += os.linesep
-            text +='If you are a new user or do not completely understand these options, please do not touch them! Do not set the client to be idle all the time unless you know what you are doing or are testing something and are prepared for potential problems!'
-            text += os.linesep
-            text += '***'
-            text += os.linesep * 2
-            text += 'Sometimes, the client needs to do some heavy maintenance. This could be reformatting the database to keep it running fast or processing a large number of tags from a repository. Typically, these jobs will not allow you to use the gui while they run, and on slower computers--or those with not much memory--they can take a long time to complete.'
-            text += os.linesep * 2
-            text += 'You can set these jobs to run only when the client is idle, or only during shutdown, or neither, or both. If you leave the client on all the time in the background, focusing on \'idle time\' processing is often ideal. If you have a slow computer, relying on \'shutdown\' processing (which you can manually start when convenient), is often better.'
-            text += os.linesep * 2
-            text += 'If the client switches from idle to not idle during a job, it will try to abandon it and give you back control. This is not always possible, and even when it is, it will sometimes take several minutes, particularly on slower machines or those on HDDs rather than SSDs.'
-            text += os.linesep * 2
-            text += 'If the client believes the system is busy, it will generally not start jobs.'
-            
-            st = ClientGUICommon.BetterStaticText( self._jobs_panel, label = text )
-            
-            st.SetWrapWidth( 550 )
-            
-            self._jobs_panel.Add( st, CC.FLAGS_EXPAND_PERPENDICULAR )
-            self._jobs_panel.Add( self._idle_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
-            self._jobs_panel.Add( self._shutdown_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
-            
-            #
-            
-            rows = []
-            
-            rows.append( ( 'Number of days to wait between vacuums: ', self._maintenance_vacuum_period_days ) )
-            
-            gridbox = ClientGUICommon.WrapInGrid( self._maintenance_panel, rows )
-            
-            self._maintenance_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
-            
-            #
-            
-            vbox = wx.BoxSizer( wx.VERTICAL )
-            
-            vbox.Add( self._jobs_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
-            vbox.Add( self._maintenance_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
-            
-            self.SetSizer( vbox )
-            
-            self._EnableDisableIdleNormal()
-            self._EnableDisableIdleShutdown()
-            
-        
-        def _EnableDisableIdleNormal( self ):
-            
-            if self._idle_normal.GetValue() == True:
-                
-                self._idle_period.Enable()
-                self._idle_mouse_period.Enable()
-                self._idle_cpu_max.Enable()
-                
-            else:
-                
-                self._idle_period.Disable()
-                self._idle_mouse_period.Disable()
-                self._idle_cpu_max.Disable()
-                
-            
-        
-        def _EnableDisableIdleShutdown( self ):
-            
-            if self._idle_shutdown.GetChoice() == CC.IDLE_NOT_ON_SHUTDOWN:
-                
-                self._shutdown_work_period.Disable()
-                self._idle_shutdown_max_minutes.Disable()
-                
-            else:
-                
-                self._shutdown_work_period.Enable()
-                self._idle_shutdown_max_minutes.Enable()
-                
-            
-        
-        def EventIdleNormal( self, event ):
-            
-            self._EnableDisableIdleNormal()
-            
-        
-        def EventIdleShutdown( self, event ):
-            
-            self._EnableDisableIdleShutdown()
-            
-        
-        def UpdateOptions( self ):
-            
-            HC.options[ 'idle_normal' ] = self._idle_normal.GetValue()
-            
-            HC.options[ 'idle_period' ] = self._idle_period.GetValue()
-            HC.options[ 'idle_mouse_period' ] = self._idle_mouse_period.GetValue()
-            HC.options[ 'idle_cpu_max' ] = self._idle_cpu_max.GetValue()
-            
-            HC.options[ 'idle_shutdown' ] = self._idle_shutdown.GetChoice()
-            HC.options[ 'idle_shutdown_max_minutes' ] = self._idle_shutdown_max_minutes.GetValue()
-            
-            self._new_options.SetInteger( 'shutdown_work_period', self._shutdown_work_period.GetValue() )
-            
-            self._new_options.SetNoneableInteger( 'maintenance_vacuum_period_days', self._maintenance_vacuum_period_days.GetValue() )
-            
-        
-    
+
     class _DefaultFileSystemPredicatesPanel( wx.Panel ):
         
         def __init__( self, parent, new_options ):
@@ -2217,32 +2006,14 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
         
     
-    class _FilesAndTrashPanel( wx.Panel ):
+    class _ExternalProgramsPanel( wx.Panel ):
         
         def __init__( self, parent ):
             
             wx.Panel.__init__( self, parent )
             
             self._new_options = HG.client_controller.new_options
-            
-            self._export_location = wx.DirPickerCtrl( self, style = wx.DIRP_USE_TEXTCTRL )
-            
-            self._file_system_waits_on_wakeup = wx.CheckBox( self, label = '' )
-            self._file_system_waits_on_wakeup.SetToolTip( 'This is useful if your hydrus is stored on a NAS that takes a few seconds to get going after your machine resumes from sleep.' )
-            
-            self._delete_to_recycle_bin = wx.CheckBox( self, label = '' )
-            
-            self._confirm_trash = wx.CheckBox( self )
-            self._confirm_archive = wx.CheckBox( self )
-            
-            self._remove_filtered_files = wx.CheckBox( self, label = '' )
-            self._remove_trashed_files = wx.CheckBox( self, label = '' )
-            
-            self._trash_max_age = ClientGUICommon.NoneableSpinCtrl( self, '', none_phrase = 'no age limit', min = 0, max = 8640 )
-            self._trash_max_size = ClientGUICommon.NoneableSpinCtrl( self, '', none_phrase = 'no size limit', min = 0, max = 20480 )
-            
-            self._temp_path_override = wx.DirPickerCtrl( self, style = wx.DIRP_USE_TEXTCTRL )
-            
+
             mime_panel = ClientGUICommon.StaticBox( self, '\'open externally\' launch paths' )
             
             self._web_browser_path = wx.TextCtrl( mime_panel )
@@ -2252,37 +2023,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._mime_launch_listctrl = ClientGUIListCtrl.BetterListCtrl( mime_panel, 'mime_launch', 15, 30, columns, self._ConvertMimeToListCtrlTuples, activation_callback = self._EditMimeLaunch )
             
             #
-            
-            if HC.options[ 'export_path' ] is not None:
-                
-                abs_path = HydrusPaths.ConvertPortablePathToAbsPath( HC.options[ 'export_path' ] )
-                
-                if abs_path is not None:
-                    
-                    self._export_location.SetPath( abs_path )
-                    
-                
-            
-            self._file_system_waits_on_wakeup.SetValue( self._new_options.GetBoolean( 'file_system_waits_on_wakeup' ) )
-            
-            self._delete_to_recycle_bin.SetValue( HC.options[ 'delete_to_recycle_bin' ] )
-            
-            self._confirm_trash.SetValue( HC.options[ 'confirm_trash' ] )
-            
-            self._confirm_archive.SetValue( HC.options[ 'confirm_archive' ] )
-            
-            self._remove_filtered_files.SetValue( HC.options[ 'remove_filtered_files' ] )
-            self._remove_trashed_files.SetValue( HC.options[ 'remove_trashed_files' ] )
-            self._trash_max_age.SetValue( HC.options[ 'trash_max_age' ] )
-            self._trash_max_size.SetValue( HC.options[ 'trash_max_size' ] )
-            
-            temp_path_override = self._new_options.GetNoneableString( 'temp_path_override' )
-            
-            if temp_path_override is not None:
-                
-                self._temp_path_override.SetPath( temp_path_override )
-                
-            
+
             web_browser_path = self._new_options.GetNoneableString( 'web_browser_path' )
             
             if web_browser_path is not None:
@@ -2303,28 +2044,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             vbox = wx.BoxSizer( wx.VERTICAL )
             
-            text = 'If you set the default export directory blank, the client will use \'hydrus_export\' under the current user\'s home directory.'
-            
-            vbox.Add( ClientGUICommon.BetterStaticText( self, text ), CC.FLAGS_CENTER )
-            
-            rows = []
-            
-            rows.append( ( 'Confirm sending files to trash: ', self._confirm_trash ) )
-            rows.append( ( 'Confirm sending more than one file to archive or inbox: ', self._confirm_archive ) )
-            rows.append( ( 'Wait 15s after computer resume before accessing files: ', self._file_system_waits_on_wakeup ) )
-            rows.append( ( 'When deleting files or folders, send them to the OS\'s recycle bin: ', self._delete_to_recycle_bin ) )
-            rows.append( ( 'Remove files from view when they are filtered: ', self._remove_filtered_files ) )
-            rows.append( ( 'Remove files from view when they are sent to the trash: ', self._remove_trashed_files ) )
-            rows.append( ( 'Number of hours a file can be in the trash before being deleted: ', self._trash_max_age ) )
-            rows.append( ( 'Maximum size of trash (MB): ', self._trash_max_size ) )
-            rows.append( ( 'Default export directory: ', self._export_location ) )
-            rows.append( ( 'BUGFIX: Temp folder override (set blank for OS default): ', self._temp_path_override ) )
-            
-            gridbox = ClientGUICommon.WrapInGrid( self, rows )
-            
-            vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
-            
-            text = 'Setting a specific web browser path here--like \'C:\\program files\\firefox\\firefox.exe "%path%"\'--can help with the \'share->open->in web browser\' command, which is buggy working with OS defaults, particularly on Windows. It also fixes #anchors, which are dropped in some OSes using default means. Use the same %path% format as the \'open externally\' commands below.'
+            text = 'Setting a specific web browser path here--like \'C:\\program files\\firefox\\firefox.exe "%path%"\'--can help with the \'share->open->in web browser\' command, which is buggy working with OS defaults, particularly on Windows. It also fixes #anchors, which are dropped in some OSes using default means. Use the same %path% format for the \'open externally\' commands below.'
             
             st = ClientGUICommon.BetterStaticText( mime_panel, text )
             
@@ -2338,7 +2058,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             gridbox = ClientGUICommon.WrapInGrid( mime_panel, rows )
             
-            mime_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            mime_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             mime_panel.Add( self._mime_launch_listctrl, CC.FLAGS_EXPAND_BOTH_WAYS )
             
             vbox.Add( mime_panel, CC.FLAGS_EXPAND_BOTH_WAYS )
@@ -2415,6 +2135,167 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
         
         def UpdateOptions( self ):
+
+            web_browser_path = self._web_browser_path.GetValue()
+
+            if web_browser_path == '':
+
+                web_browser_path = None
+
+
+            self._new_options.SetNoneableString( 'web_browser_path', web_browser_path )
+
+            for ( mime, launch_path ) in self._mime_launch_listctrl.GetData():
+
+                self._new_options.SetMimeLaunch( mime, launch_path )
+
+
+
+
+    class _FilesAndTrashPanel( wx.Panel ):
+
+        def __init__( self, parent ):
+
+            wx.Panel.__init__( self, parent )
+
+            self._new_options = HG.client_controller.new_options
+
+            self._export_location = wx.DirPickerCtrl( self, style = wx.DIRP_USE_TEXTCTRL )
+
+            self._file_system_waits_on_wakeup = wx.CheckBox( self )
+            self._file_system_waits_on_wakeup.SetToolTip( 'This is useful if your hydrus is stored on a NAS that takes a few seconds to get going after your machine resumes from sleep.' )
+
+            self._delete_to_recycle_bin = wx.CheckBox( self )
+
+            self._confirm_trash = wx.CheckBox( self )
+            self._confirm_archive = wx.CheckBox( self )
+
+            self._remove_filtered_files = wx.CheckBox( self )
+            self._remove_trashed_files = wx.CheckBox( self )
+
+            self._trash_max_age = ClientGUICommon.NoneableSpinCtrl( self, '', none_phrase = 'no age limit', min = 0, max = 8640 )
+            self._trash_max_size = ClientGUICommon.NoneableSpinCtrl( self, '', none_phrase = 'no size limit', min = 0, max = 20480 )
+
+            advanced_file_deletion_panel = ClientGUICommon.StaticBox( self, 'advanced file deletion and custom reasons' )
+
+            self._use_advanced_file_deletion_dialog = wx.CheckBox( advanced_file_deletion_panel )
+            self._use_advanced_file_deletion_dialog.SetToolTip( 'If this is set, the client will present a more complicated file deletion confirmation dialog that will permit you to set your own deletion reason and perform \'clean\' deletes that leave no deletion record (making later re-import easier).' )
+
+            self._advanced_file_deletion_reasons = ClientGUIListBoxes.QueueListBox( advanced_file_deletion_panel, 5, str, add_callable = self._AddAFDR, edit_callable = self._EditAFDR )
+
+            #
+
+            if HC.options[ 'export_path' ] is not None:
+
+                abs_path = HydrusPaths.ConvertPortablePathToAbsPath( HC.options[ 'export_path' ] )
+
+                if abs_path is not None:
+
+                    self._export_location.SetPath( abs_path )
+
+
+
+            self._file_system_waits_on_wakeup.SetValue( self._new_options.GetBoolean( 'file_system_waits_on_wakeup' ) )
+
+            self._delete_to_recycle_bin.SetValue( HC.options[ 'delete_to_recycle_bin' ] )
+
+            self._confirm_trash.SetValue( HC.options[ 'confirm_trash' ] )
+
+            self._confirm_archive.SetValue( HC.options[ 'confirm_archive' ] )
+
+            self._remove_filtered_files.SetValue( HC.options[ 'remove_filtered_files' ] )
+            self._remove_trashed_files.SetValue( HC.options[ 'remove_trashed_files' ] )
+            self._trash_max_age.SetValue( HC.options[ 'trash_max_age' ] )
+            self._trash_max_size.SetValue( HC.options[ 'trash_max_size' ] )
+
+            self._use_advanced_file_deletion_dialog.SetValue( self._new_options.GetBoolean( 'use_advanced_file_deletion_dialog' ) )
+
+            self._use_advanced_file_deletion_dialog.Bind( wx.EVT_CHECKBOX, self.EventAdvancedCheck )
+
+            self._advanced_file_deletion_reasons.AddDatas( self._new_options.GetStringList( 'advanced_file_deletion_reasons' ) )
+
+            self._UpdateAdvancedControls()
+
+            #
+
+            vbox = wx.BoxSizer( wx.VERTICAL )
+
+            text = 'If you set the default export directory blank, the client will use \'hydrus_export\' under the current user\'s home directory.'
+
+            vbox.Add( ClientGUICommon.BetterStaticText( self, text ), CC.FLAGS_CENTER )
+
+            rows = []
+
+            rows.append( ( 'Confirm sending files to trash: ', self._confirm_trash ) )
+            rows.append( ( 'Confirm sending more than one file to archive or inbox: ', self._confirm_archive ) )
+            rows.append( ( 'Wait 15s after computer resume before accessing files: ', self._file_system_waits_on_wakeup ) )
+            rows.append( ( 'When deleting files or folders, send them to the OS\'s recycle bin: ', self._delete_to_recycle_bin ) )
+            rows.append( ( 'Remove files from view when they are filtered: ', self._remove_filtered_files ) )
+            rows.append( ( 'Remove files from view when they are sent to the trash: ', self._remove_trashed_files ) )
+            rows.append( ( 'Number of hours a file can be in the trash before being deleted: ', self._trash_max_age ) )
+            rows.append( ( 'Maximum size of trash (MB): ', self._trash_max_size ) )
+            rows.append( ( 'Default export directory: ', self._export_location ) )
+
+            gridbox = ClientGUICommon.WrapInGrid( self, rows )
+
+            vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
+
+            rows = []
+
+            rows.append( ( 'Use the advanced file deletion dialog: ', self._use_advanced_file_deletion_dialog ) )
+
+            gridbox = ClientGUICommon.WrapInGrid( advanced_file_deletion_panel, rows )
+
+            advanced_file_deletion_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
+            advanced_file_deletion_panel.Add( self._advanced_file_deletion_reasons, CC.FLAGS_EXPAND_BOTH_WAYS )
+
+            vbox.Add( advanced_file_deletion_panel, CC.FLAGS_EXPAND_BOTH_WAYS )
+
+            self.SetSizer( vbox )
+
+
+        def _AddAFDR( self ):
+
+            reason = 'I do not like the file.'
+
+            return self._EditAFDR( reason )
+
+
+        def _EditAFDR( self, reason ):
+
+            with ClientGUIDialogs.DialogTextEntry( self, 'enter the reason', default = reason, allow_blank = False ) as dlg:
+
+                if dlg.ShowModal() == wx.ID_OK:
+
+                    reason = dlg.GetValue()
+
+                    return reason
+
+                else:
+
+                    raise HydrusExceptions.VetoException()
+
+
+
+
+        def _UpdateAdvancedControls( self ):
+
+            if self._use_advanced_file_deletion_dialog.GetValue():
+
+                self._advanced_file_deletion_reasons.Enable()
+
+            else:
+
+                self._advanced_file_deletion_reasons.Disable()
+
+
+
+        def EventAdvancedCheck( self, event ):
+
+            self._UpdateAdvancedControls()
+
+
+        def UpdateOptions( self ):
             
             HC.options[ 'export_path' ] = HydrusPaths.ConvertAbsPathToPortablePath( self._export_location.GetPath() )
             
@@ -2428,37 +2309,79 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             HC.options[ 'trash_max_age' ] = self._trash_max_age.GetValue()
             HC.options[ 'trash_max_size' ] = self._trash_max_size.GetValue()
             
-            temp_path_override = self._temp_path_override.GetPath()
+            self._new_options.SetBoolean( 'use_advanced_file_deletion_dialog', self._use_advanced_file_deletion_dialog.GetValue() )
+
+            self._new_options.SetStringList( 'advanced_file_deletion_reasons', self._advanced_file_deletion_reasons.GetData() )
+
+
+
+    class _FileViewingStatisticsPanel( wx.Panel ):
+
+        def __init__( self, parent ):
+
+            wx.Panel.__init__( self, parent )
+
+            self._new_options = HG.client_controller.new_options
             
-            if temp_path_override == '':
-                
-                temp_path_override = None
-                
-            else:
-                
-                if not HydrusPaths.DirectoryIsWritable( temp_path_override ):
-                    
-                    raise HydrusExceptions.VetoException( 'The temporary path override either did not exist or was not writeable-to! Please change it or fix its permissions!' )
-                    
-                
+            self._file_viewing_statistics_active = wx.CheckBox( self )
+            self._file_viewing_statistics_active_on_dupe_filter = wx.CheckBox( self )
+            self._file_viewing_statistics_media_min_time = ClientGUICommon.NoneableSpinCtrl( self )
+            self._file_viewing_statistics_media_max_time = ClientGUICommon.NoneableSpinCtrl( self )
+            self._file_viewing_statistics_preview_min_time = ClientGUICommon.NoneableSpinCtrl( self )
+            self._file_viewing_statistics_preview_max_time = ClientGUICommon.NoneableSpinCtrl( self )
+
+            self._file_viewing_stats_menu_display = ClientGUICommon.BetterChoice( self )
+
+            self._file_viewing_stats_menu_display.Append( 'do not show', CC.FILE_VIEWING_STATS_MENU_DISPLAY_NONE )
+            self._file_viewing_stats_menu_display.Append( 'show media', CC.FILE_VIEWING_STATS_MENU_DISPLAY_MEDIA_ONLY )
+            self._file_viewing_stats_menu_display.Append( 'show media, and put preview in a submenu', CC.FILE_VIEWING_STATS_MENU_DISPLAY_MEDIA_AND_PREVIEW_IN_SUBMENU )
+            self._file_viewing_stats_menu_display.Append( 'show media and preview in two lines', CC.FILE_VIEWING_STATS_MENU_DISPLAY_MEDIA_AND_PREVIEW_STACKED )
+            self._file_viewing_stats_menu_display.Append( 'show media and preview combined', CC.FILE_VIEWING_STATS_MENU_DISPLAY_MEDIA_AND_PREVIEW_SUMMED )
+
+            #
+
+            self._file_viewing_statistics_active.SetValue( self._new_options.GetBoolean( 'file_viewing_statistics_active' ) )
+            self._file_viewing_statistics_active_on_dupe_filter.SetValue( self._new_options.GetBoolean( 'file_viewing_statistics_active_on_dupe_filter' ) )
+            self._file_viewing_statistics_media_min_time.SetValue( self._new_options.GetNoneableInteger( 'file_viewing_statistics_media_min_time' ) )
+            self._file_viewing_statistics_media_max_time.SetValue( self._new_options.GetNoneableInteger( 'file_viewing_statistics_media_max_time' ) )
+            self._file_viewing_statistics_preview_min_time.SetValue( self._new_options.GetNoneableInteger( 'file_viewing_statistics_preview_min_time' ) )
+            self._file_viewing_statistics_preview_max_time.SetValue( self._new_options.GetNoneableInteger( 'file_viewing_statistics_preview_max_time' ) )
+
+            self._file_viewing_stats_menu_display.SelectClientData( self._new_options.GetInteger( 'file_viewing_stats_menu_display' ) )
+
+            #
             
-            self._new_options.SetNoneableString( 'temp_path_override', temp_path_override )
+            vbox = wx.BoxSizer( wx.VERTICAL )
             
-            web_browser_path = self._web_browser_path.GetValue()
+            rows = []
             
-            if web_browser_path == '':
-                
-                web_browser_path = None
-                
+            rows.append( ( 'Enable file viewing statistics tracking?:', self._file_viewing_statistics_active ) )
+            rows.append( ( 'Enable file viewing statistics tracking on the duplicate filter?:', self._file_viewing_statistics_active_on_dupe_filter ) )
+            rows.append( ( 'Min time to view on media viewer to count as a view (seconds):', self._file_viewing_statistics_media_min_time ) )
+            rows.append( ( 'Cap any view on the media viewer to this maximum time (seconds):', self._file_viewing_statistics_media_max_time ) )
+            rows.append( ( 'Min time to view on preview viewer to count as a view (seconds):', self._file_viewing_statistics_preview_min_time ) )
+            rows.append( ( 'Cap any view on the preview viewer to this maximum time (seconds):', self._file_viewing_statistics_preview_max_time ) )
+            rows.append( ( 'Show media/preview viewing stats on media right-click menus?:', self._file_viewing_stats_menu_display ) )
+
+            gridbox = ClientGUICommon.WrapInGrid( self, rows )
+
+            vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
-            self._new_options.SetNoneableString( 'web_browser_path', web_browser_path )
+            self.SetSizer( vbox )
             
-            for ( mime, launch_path ) in self._mime_launch_listctrl.GetData():
-                
-                self._new_options.SetMimeLaunch( mime, launch_path )
-                
+
+        def UpdateOptions( self ):
+
+            self._new_options.SetBoolean( 'file_viewing_statistics_active', self._file_viewing_statistics_active.GetValue() )
+            self._new_options.SetBoolean( 'file_viewing_statistics_active_on_dupe_filter', self._file_viewing_statistics_active_on_dupe_filter.GetValue() )
+            self._new_options.SetNoneableInteger( 'file_viewing_statistics_media_min_time', self._file_viewing_statistics_media_min_time.GetValue() )
+            self._new_options.SetNoneableInteger( 'file_viewing_statistics_media_max_time', self._file_viewing_statistics_media_max_time.GetValue() )
+            self._new_options.SetNoneableInteger( 'file_viewing_statistics_preview_min_time', self._file_viewing_statistics_preview_min_time.GetValue() )
+            self._new_options.SetNoneableInteger( 'file_viewing_statistics_preview_max_time', self._file_viewing_statistics_preview_max_time.GetValue() )
             
-        
+            self._new_options.SetInteger( 'file_viewing_stats_menu_display', self._file_viewing_stats_menu_display.GetChoice() )
+
+
     
     class _GUIPanel( wx.Panel ):
         
@@ -2571,7 +2494,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             vbox = wx.BoxSizer( wx.VERTICAL )
             
-            vbox.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             vbox.Add( frame_locations_panel, CC.FLAGS_EXPAND_BOTH_WAYS )
             
             self.SetSizer( vbox )
@@ -2699,6 +2622,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._reverse_page_shift_drag_behaviour = wx.CheckBox( self )
             self._reverse_page_shift_drag_behaviour.SetToolTip( 'By default, holding down shift when you drop off a page tab means the client will not \'chase\' the page tab. This makes this behaviour default, with shift-drop meaning to chase.' )
             
+            self._set_search_focus_on_page_change = wx.CheckBox( self )
+
             #
             
             gui_session_names = HG.client_controller.Read( 'serialisable_names', HydrusSerialisable.SERIALISABLE_TYPE_GUI_SESSION )
@@ -2744,6 +2669,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._reverse_page_shift_drag_behaviour.SetValue( self._new_options.GetBoolean( 'reverse_page_shift_drag_behaviour' ) )
             
+            self._set_search_focus_on_page_change.SetValue( self._new_options.GetBoolean( 'set_search_focus_on_page_change' ) )
+
             #
             
             rows = []
@@ -2753,6 +2680,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             rows.append( ( 'If \'last session\' above, only autosave during idle time?', self._only_save_last_session_during_idle ) )
             rows.append( ( 'Number of session backups to keep: ', self._number_of_gui_session_backups ) )
             rows.append( ( 'By default, put new page tabs on (requires restart): ', self._default_new_page_goes ) )
+            rows.append( ( 'When switching to a page, focus its input field (if any): ', self._set_search_focus_on_page_change ) )
             rows.append( ( 'Line notebook tabs down the left: ', self._notebook_tabs_on_left ) )
             rows.append( ( 'Max characters to display in a page name: ', self._max_page_name_chars ) )
             rows.append( ( 'Show page file count after its name: ', self._page_file_count_display ) )
@@ -2764,7 +2692,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             vbox = wx.BoxSizer( wx.VERTICAL )
             
-            vbox.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             self.SetSizer( vbox )
             
@@ -2792,7 +2720,333 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._new_options.SetBoolean( 'reverse_page_shift_drag_behaviour', self._reverse_page_shift_drag_behaviour.GetValue() )
             
-        
+            self._new_options.SetBoolean( 'set_search_focus_on_page_change', self._set_search_focus_on_page_change.GetValue() )
+
+
+
+    class _ImportingPanel( wx.Panel ):
+
+        def __init__( self, parent, new_options ):
+
+            wx.Panel.__init__( self, parent )
+
+            self._new_options = new_options
+
+            #
+
+            default_fios = ClientGUICommon.StaticBox( self, 'default file import options' )
+
+            from . import ClientGUIImport
+
+            show_downloader_options = True
+
+            quiet_file_import_options = self._new_options.GetDefaultFileImportOptions( 'quiet' )
+
+            self._quiet_fios = ClientGUIImport.FileImportOptionsButton( default_fios, quiet_file_import_options, show_downloader_options )
+
+            loud_file_import_options = self._new_options.GetDefaultFileImportOptions( 'loud' )
+
+            self._loud_fios = ClientGUIImport.FileImportOptionsButton( default_fios, loud_file_import_options, show_downloader_options )
+
+            #
+
+            rows = []
+
+            rows.append( ( 'For \'quiet\' import contexts like import folders and subscriptions:', self._quiet_fios ) )
+            rows.append( ( 'For import contexts that work on pages:', self._loud_fios ) )
+
+            gridbox = ClientGUICommon.WrapInGrid( default_fios, rows )
+
+            default_fios.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
+
+            #
+
+            vbox = wx.BoxSizer( wx.VERTICAL )
+
+            vbox.Add( default_fios, CC.FLAGS_EXPAND_PERPENDICULAR )
+
+            self.SetSizer( vbox )
+
+
+        def UpdateOptions( self ):
+
+            self._new_options.SetDefaultFileImportOptions( 'quiet', self._quiet_fios.GetValue() )
+            self._new_options.SetDefaultFileImportOptions( 'loud', self._loud_fios.GetValue() )
+
+
+
+    class _MaintenanceAndProcessingPanel( wx.Panel ):
+
+        def __init__( self, parent ):
+
+            wx.Panel.__init__( self, parent )
+
+            self._new_options = HG.client_controller.new_options
+
+            self._jobs_panel = ClientGUICommon.StaticBox( self, 'when to run high cpu jobs' )
+            self._file_maintenance_panel = ClientGUICommon.StaticBox( self, 'file maintenance' )
+            self._vacuum_panel = ClientGUICommon.StaticBox( self, 'vacuum' )
+
+            self._idle_panel = ClientGUICommon.StaticBox( self._jobs_panel, 'idle' )
+            self._shutdown_panel = ClientGUICommon.StaticBox( self._jobs_panel, 'shutdown' )
+
+            #
+
+            self._idle_normal = wx.CheckBox( self._idle_panel )
+            self._idle_normal.Bind( wx.EVT_CHECKBOX, self.EventIdleNormal )
+
+            self._idle_period = ClientGUICommon.NoneableSpinCtrl( self._idle_panel, '', min = 1, max = 1000, multiplier = 60, unit = 'minutes', none_phrase = 'ignore normal browsing' )
+            self._idle_mouse_period = ClientGUICommon.NoneableSpinCtrl( self._idle_panel, '', min = 1, max = 1000, multiplier = 60, unit = 'minutes', none_phrase = 'ignore mouse movements' )
+            self._idle_cpu_max = ClientGUICommon.NoneableSpinCtrl( self._idle_panel, '', min = 5, max = 99, unit = '%', none_phrase = 'ignore cpu usage' )
+
+            #
+
+            self._idle_shutdown = ClientGUICommon.BetterChoice( self._shutdown_panel )
+
+            for idle_id in ( CC.IDLE_NOT_ON_SHUTDOWN, CC.IDLE_ON_SHUTDOWN, CC.IDLE_ON_SHUTDOWN_ASK_FIRST ):
+
+                self._idle_shutdown.Append( CC.idle_string_lookup[ idle_id ], idle_id )
+
+
+            self._idle_shutdown.Bind( wx.EVT_CHOICE, self.EventIdleShutdown )
+
+            self._idle_shutdown_max_minutes = wx.SpinCtrl( self._shutdown_panel, min = 1, max = 1440 )
+            self._shutdown_work_period = ClientGUITime.TimeDeltaButton( self._shutdown_panel, min = 60, days = True, hours = True, minutes = True )
+
+            #
+
+            self._file_maintenance_during_idle = wx.CheckBox( self._file_maintenance_panel )
+            self._file_maintenance_on_shutdown = wx.CheckBox( self._file_maintenance_panel )
+            self._file_maintenance_throttle_enable = wx.CheckBox( self._file_maintenance_panel )
+
+            min_unit_value = 10
+            max_unit_value = 100000
+            min_time_delta = 3600
+
+            self._file_maintenance_throttle_velocity = ClientGUITime.VelocityCtrl( self._file_maintenance_panel, min_unit_value, max_unit_value, min_time_delta, days = True, hours = True, per_phrase = 'every', unit = 'files' )
+
+            tt = 'Please note that this throttle is not very rigorous, as file processing history is not currently saved on client restart. If you restart the client, the file manager thinks it has run on 0 files and will be happy to run until the throttle kicks in again.'
+
+            self._file_maintenance_throttle_enable.SetToolTip( tt )
+            self._file_maintenance_throttle_velocity.SetToolTip( tt )
+
+            #
+
+            self._maintenance_vacuum_period_days = ClientGUICommon.NoneableSpinCtrl( self._vacuum_panel, '', min = 28, max = 365, none_phrase = 'do not automatically vacuum' )
+
+            tts = 'Vacuuming is a kind of full defrag of the database\'s internal page table. It can take a long time (1MB/s) on a slow drive and does not need to be done often, so feel free to set this at 90 days+.'
+
+            self._maintenance_vacuum_period_days.SetToolTip( tts )
+
+            #
+
+            self._idle_normal.SetValue( HC.options[ 'idle_normal' ] )
+            self._idle_period.SetValue( HC.options[ 'idle_period' ] )
+            self._idle_mouse_period.SetValue( HC.options[ 'idle_mouse_period' ] )
+            self._idle_cpu_max.SetValue( HC.options[ 'idle_cpu_max' ] )
+
+            self._idle_shutdown.SelectClientData( HC.options[ 'idle_shutdown' ] )
+            self._idle_shutdown_max_minutes.SetValue( HC.options[ 'idle_shutdown_max_minutes' ] )
+            self._shutdown_work_period.SetValue( self._new_options.GetInteger( 'shutdown_work_period' ) )
+
+            self._file_maintenance_during_idle.SetValue( self._new_options.GetBoolean( 'file_maintenance_during_idle' ) )
+            self._file_maintenance_on_shutdown.SetValue( self._new_options.GetBoolean( 'file_maintenance_on_shutdown' ) )
+            self._file_maintenance_throttle_enable.SetValue( self._new_options.GetBoolean( 'file_maintenance_throttle_enable' ) )
+
+            file_maintenance_throttle_files = self._new_options.GetInteger( 'file_maintenance_throttle_files' )
+            file_maintenance_throttle_time_delta = self._new_options.GetInteger( 'file_maintenance_throttle_time_delta' )
+
+            file_maintenance_throttle_velocity = ( file_maintenance_throttle_files, file_maintenance_throttle_time_delta )
+
+            self._file_maintenance_throttle_velocity.SetValue( file_maintenance_throttle_velocity )
+
+            self._maintenance_vacuum_period_days.SetValue( self._new_options.GetNoneableInteger( 'maintenance_vacuum_period_days' ) )
+
+            self._file_maintenance_throttle_enable.Bind( wx.EVT_CHECKBOX, self.EventFileMaintenanceThrottle )
+
+            #
+
+            rows = []
+
+            rows.append( ( 'Run maintenance jobs when the client is idle and the system is not otherwise busy: ', self._idle_normal ) )
+            rows.append( ( 'Assume the client is idle if no general browsing activity has occurred in the past: ', self._idle_period ) )
+            rows.append( ( 'Assume the client is idle if the mouse has not been moved in the past: ', self._idle_mouse_period ) )
+            rows.append( ( 'Assume the system is busy if any CPU core has recent average usage above: ', self._idle_cpu_max ) )
+
+            gridbox = ClientGUICommon.WrapInGrid( self._idle_panel, rows )
+
+            self._idle_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
+
+            #
+
+            rows = []
+
+            rows.append( ( 'Run jobs on shutdown: ', self._idle_shutdown ) )
+            rows.append( ( 'Only run shutdown jobs once per: ', self._shutdown_work_period ) )
+            rows.append( ( 'Max number of minutes to run shutdown jobs: ', self._idle_shutdown_max_minutes ) )
+
+            gridbox = ClientGUICommon.WrapInGrid( self._shutdown_panel, rows )
+
+            self._shutdown_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
+
+            #
+
+            text = '***'
+            text += os.linesep
+            text +='If you are a new user or do not completely understand these options, please do not touch them! Do not set the client to be idle all the time unless you know what you are doing or are testing something and are prepared for potential problems!'
+            text += os.linesep
+            text += '***'
+            text += os.linesep * 2
+            text += 'Sometimes, the client needs to do some heavy maintenance. This could be reformatting the database to keep it running fast or processing a large number of tags from a repository. Typically, these jobs will not allow you to use the gui while they run, and on slower computers--or those with not much memory--they can take a long time to complete.'
+            text += os.linesep * 2
+            text += 'You can set these jobs to run only when the client is idle, or only during shutdown, or neither, or both. If you leave the client on all the time in the background, focusing on \'idle time\' processing is often ideal. If you have a slow computer, relying on \'shutdown\' processing (which you can manually start when convenient), is often better.'
+            text += os.linesep * 2
+            text += 'If the client switches from idle to not idle during a job, it will try to abandon it and give you back control. This is not always possible, and even when it is, it will sometimes take several minutes, particularly on slower machines or those on HDDs rather than SSDs.'
+            text += os.linesep * 2
+            text += 'If the client believes the system is busy, it will generally not start jobs.'
+
+            st = ClientGUICommon.BetterStaticText( self._jobs_panel, label = text )
+
+            st.SetWrapWidth( 550 )
+
+            self._jobs_panel.Add( st, CC.FLAGS_EXPAND_PERPENDICULAR )
+            self._jobs_panel.Add( self._idle_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
+            self._jobs_panel.Add( self._shutdown_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
+
+            #
+
+            message = 'File maintenance jobs include reparsing file metadata and regenerating thumbnails.'
+
+            self._file_maintenance_panel.Add( ClientGUICommon.BetterStaticText( self._file_maintenance_panel, label = message ), CC.FLAGS_EXPAND_PERPENDICULAR )
+
+            rows = []
+
+            rows.append( ( 'Permit file maintenance to run during idle time: ', self._file_maintenance_during_idle ) )
+            rows.append( ( 'Permit file maintenance to run during shutdown: ', self._file_maintenance_on_shutdown ) )
+            rows.append( ( 'Throttle file maintenance: ', self._file_maintenance_throttle_enable ) )
+            rows.append( ( 'Throttle to this value: ', self._file_maintenance_throttle_velocity ) )
+
+            gridbox = ClientGUICommon.WrapInGrid( self._file_maintenance_panel, rows )
+
+            self._file_maintenance_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
+
+            #
+
+            rows = []
+
+            rows.append( ( 'Number of days to wait between vacuums: ', self._maintenance_vacuum_period_days ) )
+
+            gridbox = ClientGUICommon.WrapInGrid( self._vacuum_panel, rows )
+
+            self._vacuum_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
+
+            #
+
+            vbox = wx.BoxSizer( wx.VERTICAL )
+
+            vbox.Add( self._jobs_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
+            vbox.Add( self._file_maintenance_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
+            vbox.Add( self._vacuum_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
+
+            self.SetSizer( vbox )
+
+            self._EnableDisableFileMaintenanceThrottle()
+            self._EnableDisableIdleNormal()
+            self._EnableDisableIdleShutdown()
+
+
+        def _EnableDisableIdleNormal( self ):
+
+            if self._idle_normal.GetValue() == True:
+
+                self._idle_period.Enable()
+                self._idle_mouse_period.Enable()
+                self._idle_cpu_max.Enable()
+
+                self._file_maintenance_during_idle.Enable()
+
+            else:
+
+                self._idle_period.Disable()
+                self._idle_mouse_period.Disable()
+                self._idle_cpu_max.Disable()
+
+                self._file_maintenance_during_idle.Disable()
+
+
+
+        def _EnableDisableIdleShutdown( self ):
+
+            if self._idle_shutdown.GetChoice() == CC.IDLE_NOT_ON_SHUTDOWN:
+
+                self._shutdown_work_period.Disable()
+                self._idle_shutdown_max_minutes.Disable()
+
+                self._file_maintenance_on_shutdown.Disable()
+
+            else:
+
+                self._shutdown_work_period.Enable()
+                self._idle_shutdown_max_minutes.Enable()
+
+                self._file_maintenance_on_shutdown.Enable()
+
+
+
+        def _EnableDisableFileMaintenanceThrottle( self ):
+
+            if self._file_maintenance_throttle_enable.GetValue() == True:
+
+                self._file_maintenance_throttle_velocity.Enable()
+
+            else:
+
+                self._file_maintenance_throttle_velocity.Disable()
+
+
+
+        def EventIdleNormal( self, event ):
+
+            self._EnableDisableIdleNormal()
+
+
+        def EventIdleShutdown( self, event ):
+
+            self._EnableDisableIdleShutdown()
+
+
+        def EventFileMaintenanceThrottle( self, event ):
+
+            self._EnableDisableFileMaintenanceThrottle()
+
+
+        def UpdateOptions( self ):
+
+            HC.options[ 'idle_normal' ] = self._idle_normal.GetValue()
+
+            HC.options[ 'idle_period' ] = self._idle_period.GetValue()
+            HC.options[ 'idle_mouse_period' ] = self._idle_mouse_period.GetValue()
+            HC.options[ 'idle_cpu_max' ] = self._idle_cpu_max.GetValue()
+
+            HC.options[ 'idle_shutdown' ] = self._idle_shutdown.GetChoice()
+            HC.options[ 'idle_shutdown_max_minutes' ] = self._idle_shutdown_max_minutes.GetValue()
+
+            self._new_options.SetInteger( 'shutdown_work_period', self._shutdown_work_period.GetValue() )
+
+            self._new_options.SetBoolean( 'file_maintenance_during_idle', self._file_maintenance_during_idle.GetValue() )
+            self._new_options.SetBoolean( 'file_maintenance_on_shutdown', self._file_maintenance_on_shutdown.GetValue() )
+            self._new_options.SetBoolean( 'file_maintenance_throttle_enable', self._file_maintenance_throttle_enable.GetValue() )
+
+            file_maintenance_throttle_velocity = self._file_maintenance_throttle_velocity.GetValue()
+
+            ( file_maintenance_throttle_files, file_maintenance_throttle_time_delta ) = file_maintenance_throttle_velocity
+
+            self._new_options.SetInteger( 'file_maintenance_throttle_files', file_maintenance_throttle_files )
+            self._new_options.SetInteger( 'file_maintenance_throttle_time_delta', file_maintenance_throttle_time_delta )
+
+            self._new_options.SetNoneableInteger( 'maintenance_vacuum_period_days', self._maintenance_vacuum_period_days.GetValue() )
+
+
     
     class _MediaPanel( wx.Panel ):
         
@@ -2803,7 +3057,6 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._new_options = HG.client_controller.new_options
             
             self._animation_start_position = wx.SpinCtrl( self, min = 0, max = 100 )
-            self._video_thumbnail_percentage_in = wx.SpinCtrl( self, min = 0, max = 100 )
             
             self._disable_cv_for_gifs = wx.CheckBox( self )
             self._disable_cv_for_gifs.SetToolTip( 'OpenCV is good at rendering gifs, but if you have problems with it and your graphics card, check this and the less reliable and slower PIL will be used instead. EDIT: OpenCV is much better these days--this is mostly not needed.' )
@@ -2813,17 +3066,10 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._use_system_ffmpeg = wx.CheckBox( self )
             self._use_system_ffmpeg.SetToolTip( 'Check this to always default to the system ffmpeg in your path, rather than using the static ffmpeg in hydrus\'s bin directory. (requires restart)' )
-            
-            self._file_viewing_stats_menu_display = ClientGUICommon.BetterChoice( self )
-            
-            self._file_viewing_stats_menu_display.Append( 'do not show', CC.FILE_VIEWING_STATS_MENU_DISPLAY_NONE )
-            self._file_viewing_stats_menu_display.Append( 'show media', CC.FILE_VIEWING_STATS_MENU_DISPLAY_MEDIA_ONLY )
-            self._file_viewing_stats_menu_display.Append( 'show media, and put preview in a submenu', CC.FILE_VIEWING_STATS_MENU_DISPLAY_MEDIA_AND_PREVIEW_IN_SUBMENU )
-            self._file_viewing_stats_menu_display.Append( 'show media and preview in two lines', CC.FILE_VIEWING_STATS_MENU_DISPLAY_MEDIA_AND_PREVIEW_STACKED )
-            self._file_viewing_stats_menu_display.Append( 'show media and preview combined', CC.FILE_VIEWING_STATS_MENU_DISPLAY_MEDIA_AND_PREVIEW_SUMMED )
-            
+
             self._anchor_and_hide_canvas_drags = wx.CheckBox( self )
-            
+            self._touchscreen_canvas_drags_unanchor = wx.CheckBox( self )
+
             self._media_zooms = wx.TextCtrl( self )
             self._media_zooms.Bind( wx.EVT_TEXT, self.EventZoomsChanged )
             
@@ -2837,18 +3083,17 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             #
             
             self._animation_start_position.SetValue( int( HC.options[ 'animation_start_position' ] * 100.0 ) )
-            self._video_thumbnail_percentage_in.SetValue( self._new_options.GetInteger( 'video_thumbnail_percentage_in' ) )
             self._disable_cv_for_gifs.SetValue( self._new_options.GetBoolean( 'disable_cv_for_gifs' ) )
             self._load_images_with_pil.SetValue( self._new_options.GetBoolean( 'load_images_with_pil' ) )
             self._use_system_ffmpeg.SetValue( self._new_options.GetBoolean( 'use_system_ffmpeg' ) )
-            self._file_viewing_stats_menu_display.SelectClientData( self._new_options.GetInteger( 'file_viewing_stats_menu_display' ) )
             self._anchor_and_hide_canvas_drags.SetValue( self._new_options.GetBoolean( 'anchor_and_hide_canvas_drags' ) )
-            
+            self._touchscreen_canvas_drags_unanchor.SetValue( self._new_options.GetBoolean( 'touchscreen_canvas_drags_unanchor' ) )
+
             media_zooms = self._new_options.GetMediaZooms()
             
             self._media_zooms.SetValue( ','.join( ( str( media_zoom ) for media_zoom in media_zooms ) ) )
             
-            mimes_in_correct_order = ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_APNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF, HC.APPLICATION_FLASH, HC.APPLICATION_PDF, HC.APPLICATION_PSD, HC.APPLICATION_ZIP, HC.APPLICATION_RAR, HC.APPLICATION_7Z, HC.APPLICATION_HYDRUS_UPDATE_CONTENT, HC.APPLICATION_HYDRUS_UPDATE_DEFINITIONS, HC.VIDEO_AVI, HC.VIDEO_FLV, HC.VIDEO_MOV, HC.VIDEO_MP4, HC.VIDEO_MKV, HC.VIDEO_MPEG, HC.VIDEO_WEBM, HC.VIDEO_WMV, HC.AUDIO_MP3, HC.AUDIO_OGG, HC.AUDIO_FLAC, HC.AUDIO_WMA )
+            mimes_in_correct_order = ( HC.IMAGE_JPEG, HC.IMAGE_PNG, HC.IMAGE_APNG, HC.IMAGE_GIF, HC.IMAGE_WEBP, HC.IMAGE_TIFF, HC.IMAGE_ICON, HC.APPLICATION_FLASH, HC.APPLICATION_PDF, HC.APPLICATION_PSD, HC.APPLICATION_ZIP, HC.APPLICATION_RAR, HC.APPLICATION_7Z, HC.APPLICATION_HYDRUS_UPDATE_CONTENT, HC.APPLICATION_HYDRUS_UPDATE_DEFINITIONS, HC.VIDEO_AVI, HC.VIDEO_FLV, HC.VIDEO_MOV, HC.VIDEO_MP4, HC.VIDEO_MKV, HC.VIDEO_MPEG, HC.VIDEO_WEBM, HC.VIDEO_WMV, HC.AUDIO_MP3, HC.AUDIO_OGG, HC.AUDIO_FLAC, HC.AUDIO_WMA )
             
             for mime in mimes_in_correct_order:
                 
@@ -2869,18 +3114,17 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             rows = []
             
-            rows.append( ( 'Start animations this % in: ', self._animation_start_position ) )
-            rows.append( ( 'Generate video thumbnails this % in: ', self._video_thumbnail_percentage_in ) )
-            rows.append( ( 'Prefer system FFMPEG: ', self._use_system_ffmpeg ) )
-            rows.append( ( 'Media zooms: ', self._media_zooms ) )
-            rows.append( ( 'Show media/preview viewing stats or media right-click menus?: ', self._file_viewing_stats_menu_display ) )
-            rows.append( ( 'WINDOWS ONLY: Hide and anchor mouse cursor on slow canvas drags: ', self._anchor_and_hide_canvas_drags ) )
-            rows.append( ( 'BUGFIX: Load images with PIL (slower): ', self._load_images_with_pil ) )
-            rows.append( ( 'BUGFIX: Load gifs with PIL instead of OpenCV (slower, bad transparency): ', self._disable_cv_for_gifs ) )
+            rows.append( ( 'Start animations this % in:', self._animation_start_position ) )
+            rows.append( ( 'Prefer system FFMPEG:', self._use_system_ffmpeg ) )
+            rows.append( ( 'Media zooms:', self._media_zooms ) )
+            rows.append( ( 'RECOMMEND WINDOWS ONLY: Hide and anchor mouse cursor on media viewer drags:', self._anchor_and_hide_canvas_drags ) )
+            rows.append( ( 'RECOMMEND WINDOWS ONLY: If set to hide and anchor, undo on apparent touchscreen drag:', self._touchscreen_canvas_drags_unanchor ) )
+            rows.append( ( 'BUGFIX: Load images with PIL (slower):', self._load_images_with_pil ) )
+            rows.append( ( 'BUGFIX: Load gifs with PIL instead of OpenCV (slower, bad transparency):', self._disable_cv_for_gifs ) )
             
             gridbox = ClientGUICommon.WrapInGrid( self, rows )
             
-            vbox.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             self._media_viewer_panel.Add( self._media_viewer_options, CC.FLAGS_EXPAND_BOTH_WAYS )
             self._media_viewer_panel.Add( self._media_viewer_edit_button, CC.FLAGS_LONE_BUTTON )
@@ -2968,15 +3212,13 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
         def UpdateOptions( self ):
             
             HC.options[ 'animation_start_position' ] = self._animation_start_position.GetValue() / 100.0
-            
-            self._new_options.SetInteger( 'video_thumbnail_percentage_in', self._video_thumbnail_percentage_in.GetValue() )
-            self._new_options.SetInteger( 'file_viewing_stats_menu_display', self._file_viewing_stats_menu_display.GetChoice() )
-            
+
             self._new_options.SetBoolean( 'disable_cv_for_gifs', self._disable_cv_for_gifs.GetValue() )
             self._new_options.SetBoolean( 'load_images_with_pil', self._load_images_with_pil.GetValue() )
             self._new_options.SetBoolean( 'use_system_ffmpeg', self._use_system_ffmpeg.GetValue() )
             self._new_options.SetBoolean( 'anchor_and_hide_canvas_drags', self._anchor_and_hide_canvas_drags.GetValue() )
-            
+            self._new_options.SetBoolean( 'touchscreen_canvas_drags_unanchor', self._touchscreen_canvas_drags_unanchor.GetValue() )
+
             try:
                 
                 media_zooms = [ float( media_zoom ) for media_zoom in self._media_zooms.GetValue().split( ',' ) ]
@@ -3041,6 +3283,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._fallback_sort = ClientGUICommon.ChoiceSort( self )
             
+            self._save_page_sort_on_change = wx.CheckBox( self )
+
             self._default_collect = ClientGUICommon.CheckboxCollect( self )
             
             self._sort_by = wx.ListBox( self )
@@ -3080,12 +3324,15 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
                 self._sort_by.Append( '-'.join( sort_by ), sort_by )
                 
             
+            self._save_page_sort_on_change.SetValue( self._new_options.GetBoolean( 'save_page_sort_on_change' ) )
+
             #
             
             rows = []
             
             rows.append( ( 'Default sort: ', self._default_sort ) )
             rows.append( ( 'Secondary sort (when primary gives two equal values): ', self._fallback_sort ) )
+            rows.append( ( 'Update default sort every time a new sort is manually chosen: ', self._save_page_sort_on_change ) )
             rows.append( ( 'Default collect: ', self._default_collect ) )
             
             gridbox = ClientGUICommon.WrapInGrid( self, rows )
@@ -3146,6 +3393,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             self._new_options.SetDefaultSort( self._default_sort.GetSort() )
             self._new_options.SetFallbackSort( self._fallback_sort.GetSort() )
+            self._new_options.SetBoolean( 'save_page_sort_on_change', self._save_page_sort_on_change.GetValue() )
             HC.options[ 'default_collect' ] = self._default_collect.GetChoice()
             
             sort_by_choices = []
@@ -3340,7 +3588,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             gridbox = ClientGUICommon.WrapInGrid( media_panel, rows )
             
-            media_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            media_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             vbox.Add( media_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
             
@@ -3362,7 +3610,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             gridbox = ClientGUICommon.WrapInGrid( buffer_panel, rows )
             
-            buffer_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            buffer_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             vbox.Add( buffer_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
             
@@ -3382,7 +3630,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             gridbox = ClientGUICommon.WrapInGrid( ac_panel, rows )
             
-            ac_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            ac_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             vbox.Add( ac_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
             
@@ -3394,7 +3642,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             gridbox = ClientGUICommon.WrapInGrid( misc_panel, rows )
             
-            misc_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            misc_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             vbox.Add( misc_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
             
@@ -3418,9 +3666,9 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             message += os.linesep * 2
             message += 'To get around this, the client populates a pre-boot and ongoing disk cache. By contiguously frontloading the database into memory, the most important functions do not need to wait on your disk for most of their work.'
             message += os.linesep * 2
-            message += 'If you tend to leave your client on in the background and have a slow drive but a lot of ram, you might like to pump these numbers up. 15s boot cache and 2048MB ongoing can really make a difference on, for instance, a slow laptop drive.'
+            message += 'If you tend to leave your client on in the background and have a slow drive but a lot of ram, you might like to pump these numbers up. 10s boot cache and 1024MB ongoing can really make a difference on, for instance, a slow laptop drive.'
             message += os.linesep * 2
-            message += 'If you run the database from an SSD, you can reduce or entirely eliminate these values, as the benefit is not so stark. 2s and 256MB is fine.'
+            message += 'If you run the database from an SSD, you can reduce or entirely eliminate these values, as the benefit is not so stark. 2s and 256MB is plenty.'
             message += os.linesep * 2
             message += 'Unless you are testing, do not go crazy with this stuff. You can set 8192MB if you like, but there are diminishing (and potentially negative) returns.'
             
@@ -3562,7 +3810,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             expand_parents = False
             
             self._favourites = ClientGUIListBoxes.ListBoxTagsStringsAddRemove( favourites_panel )
-            self._favourites_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( favourites_panel, self._favourites.AddTags, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, CC.COMBINED_TAG_SERVICE_KEY, tag_service_key_changed_callable = self._favourites.SetTagServiceKey )
+            self._favourites_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( favourites_panel, self._favourites.AddTags, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, CC.COMBINED_TAG_SERVICE_KEY, tag_service_key_changed_callable = self._favourites.SetTagServiceKey, show_paste_button = True )
             
             #
             
@@ -3618,7 +3866,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             gridbox = ClientGUICommon.WrapInGrid( general_panel, rows )
             
-            general_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            general_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             vbox.Add( general_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
             
@@ -3736,7 +3984,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             gridbox = ClientGUICommon.WrapInGrid( render_panel, rows )
             
             render_panel.Add( render_st, CC.FLAGS_EXPAND_PERPENDICULAR )
-            render_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            render_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             vbox.Add( render_panel, CC.FLAGS_EXPAND_PERPENDICULAR )
             
@@ -3852,7 +4100,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             expand_parents = False
             
-            self._suggested_favourites_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( suggested_tags_favourites_panel, self._suggested_favourites.AddTags, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, CC.LOCAL_TAG_SERVICE_KEY, tag_service_key_changed_callable = self._suggested_favourites.SetTagServiceKey )
+            self._suggested_favourites_input = ClientGUIACDropdown.AutoCompleteDropdownTagsWrite( suggested_tags_favourites_panel, self._suggested_favourites.AddTags, expand_parents, CC.LOCAL_FILE_SERVICE_KEY, CC.LOCAL_TAG_SERVICE_KEY, tag_service_key_changed_callable = self._suggested_favourites.SetTagServiceKey, show_paste_button = True )
             
             #
             
@@ -3933,7 +4181,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             desc = 'This will search the database for statistically related tags based on what your focused file already has.'
             
             panel_vbox.Add( ClientGUICommon.BetterStaticText( suggested_tags_related_panel, desc ), CC.FLAGS_EXPAND_PERPENDICULAR )
-            panel_vbox.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            panel_vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             suggested_tags_related_panel.SetSizer( panel_vbox )
             
@@ -3948,7 +4196,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             gridbox = ClientGUICommon.WrapInGrid( suggested_tags_file_lookup_script_panel, rows )
             
-            panel_vbox.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            panel_vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             suggested_tags_file_lookup_script_panel.SetSizer( panel_vbox )
             
@@ -3979,7 +4227,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             desc = 'The manage tags dialog can provide several kinds of tag suggestions. For simplicity, most are turned off by default.'
             
             suggested_tags_panel.Add( ClientGUICommon.BetterStaticText( suggested_tags_panel, desc ), CC.FLAGS_EXPAND_PERPENDICULAR )
-            suggested_tags_panel.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            suggested_tags_panel.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             suggested_tags_panel.Add( suggest_tags_panel_notebook, CC.FLAGS_EXPAND_BOTH_WAYS )
             
             #
@@ -4064,6 +4312,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._thumbnail_border = wx.SpinCtrl( self, min = 0, max = 20 )
             self._thumbnail_margin = wx.SpinCtrl( self, min = 0, max = 20 )
             
+            self._video_thumbnail_percentage_in = wx.SpinCtrl( self, min = 0, max = 100 )
+
             self._thumbnail_scroll_rate = wx.TextCtrl( self )
             
             self._thumbnail_fill = wx.CheckBox( self )
@@ -4083,6 +4333,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._thumbnail_border.SetValue( self._new_options.GetInteger( 'thumbnail_border' ) )
             self._thumbnail_margin.SetValue( self._new_options.GetInteger( 'thumbnail_margin' ) )
             
+            self._video_thumbnail_percentage_in.SetValue( self._new_options.GetInteger( 'video_thumbnail_percentage_in' ) )
+
             self._thumbnail_scroll_rate.SetValue( self._new_options.GetString( 'thumbnail_scroll_rate' ) )
             
             self._thumbnail_fill.SetValue( self._new_options.GetBoolean( 'thumbnail_fill' ) )
@@ -4106,6 +4358,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             rows.append( ( 'Thumbnail height: ', self._thumbnail_height ) )
             rows.append( ( 'Thumbnail border: ', self._thumbnail_border ) )
             rows.append( ( 'Thumbnail margin: ', self._thumbnail_margin ) )
+            rows.append( ( 'Generate video thumbnails this % in: ', self._video_thumbnail_percentage_in ) )
             rows.append( ( 'Do not scroll down on key navigation if thumbnail at least this % visible: ', self._thumbnail_visibility_scroll_percent ) )
             rows.append( ( 'EXPERIMENTAL: Scroll thumbnails at this rate per scroll tick: ', self._thumbnail_scroll_rate ) )
             rows.append( ( 'EXPERIMENTAL: Zoom thumbnails so they \'fill\' their space: ', self._thumbnail_fill ) )
@@ -4115,7 +4368,7 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
             vbox = wx.BoxSizer( wx.VERTICAL )
             
-            vbox.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+            vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
             
             self.SetSizer( vbox )
             
@@ -4129,6 +4382,8 @@ class ManageOptionsPanel( ClientGUIScrolledPanels.ManagePanel ):
             self._new_options.SetInteger( 'thumbnail_border', self._thumbnail_border.GetValue() )
             self._new_options.SetInteger( 'thumbnail_margin', self._thumbnail_margin.GetValue() )
             
+            self._new_options.SetInteger( 'video_thumbnail_percentage_in', self._video_thumbnail_percentage_in.GetValue() )
+
             try:
                 
                 thumbnail_scroll_rate = self._thumbnail_scroll_rate.GetValue()
@@ -4425,9 +4680,14 @@ class ManageShortcutsPanel( ClientGUIScrolledPanels.ManagePanel ):
         self._edit_custom_button = ClientGUICommon.BetterButton( custom_panel, 'edit', self._EditCustom )
         self._delete_button = ClientGUICommon.BetterButton( custom_panel, 'delete', self._Delete )
         
+        if not HG.client_controller.new_options.GetBoolean( 'advanced_mode' ):
+
+            custom_panel.Hide()
+
+
         #
         
-        all_shortcuts = HG.client_controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_SHORTCUTS )
+        all_shortcuts = HG.client_controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_SHORTCUT_SET )
         
         reserved_shortcuts = [ shortcuts for shortcuts in all_shortcuts if shortcuts.GetName() in CC.SHORTCUTS_RESERVED_NAMES ]
         custom_shortcuts = [ shortcuts for shortcuts in all_shortcuts if shortcuts.GetName() not in CC.SHORTCUTS_RESERVED_NAMES ]
@@ -4463,6 +4723,9 @@ class ManageShortcutsPanel( ClientGUIScrolledPanels.ManagePanel ):
         button_hbox.Add( self._edit_custom_button, CC.FLAGS_VCENTER )
         button_hbox.Add( self._delete_button, CC.FLAGS_VCENTER )
         
+        custom_panel_message = 'Custom shortcuts are advanced. They apply to the media viewer and must be turned on to take effect.'
+
+        custom_panel.Add( ClientGUICommon.BetterStaticText( custom_panel, custom_panel_message ), CC.FLAGS_EXPAND_PERPENDICULAR )
         custom_panel.Add( self._custom_shortcuts, CC.FLAGS_EXPAND_SIZER_BOTH_WAYS )
         custom_panel.Add( button_hbox, CC.FLAGS_BUTTON_SIZER )
         
@@ -4472,12 +4735,6 @@ class ManageShortcutsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         vbox.Add( help_button, CC.FLAGS_LONE_BUTTON )
         vbox.Add( reserved_panel, CC.FLAGS_EXPAND_BOTH_WAYS )
-        
-        if not HG.client_controller.new_options.GetBoolean( 'advanced_mode' ):
-            
-            vbox.Add( ClientGUICommon.BetterStaticText( self, 'Careful--custom sets are advanced!' ), CC.FLAGS_CENTER )
-            
-        
         vbox.Add( custom_panel, CC.FLAGS_EXPAND_BOTH_WAYS )
         
         self.SetSizer( vbox )
@@ -4485,11 +4742,11 @@ class ManageShortcutsPanel( ClientGUIScrolledPanels.ManagePanel ):
     
     def _Add( self ):
         
-        shortcuts = ClientGUIShortcuts.Shortcuts( 'new shortcuts' )
+        shortcut_set = ClientGUIShortcuts.ShortcutSet( 'new shortcuts' )
         
         with ClientGUITopLevelWindows.DialogEdit( self, 'edit shortcuts' ) as dlg:
             
-            panel = self._EditPanel( dlg, shortcuts )
+            panel = self._EditPanel( dlg, shortcut_set )
             
             dlg.SetPanel( panel )
             
@@ -4625,10 +4882,10 @@ class ManageShortcutsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         for name in deletees:
             
-            HG.client_controller.Write( 'delete_serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_SHORTCUTS, name )
+            HG.client_controller.Write( 'delete_serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_SHORTCUT_SET, name )
             
         
-        HG.client_controller.pub( 'new_shortcuts' )
+        HG.client_controller.pub( 'notify_new_shortcuts_data' )
         
     
     class _EditPanel( ClientGUIScrolledPanels.EditPanel ):
@@ -4779,14 +5036,14 @@ class ManageShortcutsPanel( ClientGUIScrolledPanels.ManagePanel ):
                 raise HydrusExceptions.VetoException( 'That name is reserved--please pick another!' )
                 
             
-            shortcuts = ClientGUIShortcuts.Shortcuts( name )
+            shortcut_set = ClientGUIShortcuts.ShortcutSet( name )
             
             for ( shortcut, command ) in self._shortcuts.GetClientData():
                 
-                shortcuts.SetCommand( shortcut, command )
+                shortcut_set.SetCommand( shortcut, command )
                 
             
-            return shortcuts
+            return shortcut_set
             
         
         def RemoveShortcuts( self ):
@@ -5307,12 +5564,23 @@ class ManageURLsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         ClientGUIScrolledPanels.ManagePanel.__init__( self, parent )
         
-        self._media = media
+        media = ClientMedia.FlattenMedia( media )
+
+        self._current_media = [ m.Duplicate() for m in media ]
         
-        self._urls_listbox = wx.ListBox( self, style = wx.LB_SORT | wx.LB_SINGLE )
+        self._multiple_files_warning = ClientGUICommon.BetterStaticText( self, label = 'Warning: you are editing urls for multiple files!\nBe very careful about adding URLs here, as they will apply to everything.\nAdding the same URL to multiple files is only appropriate for gallery-type URLs!' )
+        self._multiple_files_warning.SetForegroundColour( ( 128, 0, 0 ) )
+
+        if len( self._current_media ) == 1:
+
+            self._multiple_files_warning.Hide()
+
+
+        self._urls_listbox = wx.ListBox( self, style = wx.LB_SORT | wx.LB_EXTENDED )
         self._urls_listbox.Bind( wx.EVT_LISTBOX_DCLICK, self.EventListDoubleClick )
-        
-        ( width, height ) = ClientGUICommon.ConvertTextToPixels( self._urls_listbox, ( 120, 10 ) )
+        self._urls_listbox.Bind( wx.EVT_KEY_DOWN, self.EventListKeyDown )
+
+        ( width, height ) = ClientGUIFunctions.ConvertTextToPixels( self._urls_listbox, ( 120, 10 ) )
         
         self._urls_listbox.SetInitialSize( ( width, height ) )
         
@@ -5327,16 +5595,11 @@ class ManageURLsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         #
         
-        locations_manager = self._media.GetLocationsManager()
+        self._pending_content_updates = []
         
-        self._original_urls = set( locations_manager.GetURLs() )
+        self._current_urls_count = collections.Counter()
         
-        for url in self._original_urls:
-            
-            self._urls_listbox.Append( url, url )
-            
-        
-        self._current_urls = set( self._original_urls )
+        self._UpdateList()
         
         #
         
@@ -5347,6 +5610,7 @@ class ManageURLsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         vbox = wx.BoxSizer( wx.VERTICAL )
         
+        vbox.Add( self._multiple_files_warning, CC.FLAGS_EXPAND_PERPENDICULAR )
         vbox.Add( self._urls_listbox, CC.FLAGS_EXPAND_BOTH_WAYS )
         vbox.Add( self._url_input, CC.FLAGS_EXPAND_PERPENDICULAR )
         vbox.Add( hbox, CC.FLAGS_BUTTON_SIZER )
@@ -5360,7 +5624,7 @@ class ManageURLsPanel( ClientGUIScrolledPanels.ManagePanel ):
     
     def _Copy( self ):
         
-        urls = list( self._current_urls )
+        urls = list( self._current_urls_count.keys() )
         
         urls.sort()
         
@@ -5373,47 +5637,49 @@ class ManageURLsPanel( ClientGUIScrolledPanels.ManagePanel ):
         
         normalised_url = HG.client_controller.network_engine.domain_manager.NormaliseURL( url )
         
-        for u in ( url, normalised_url ):
+        addee_media = set()
+
+        for m in self._current_media:
+
+            locations_manager = m.GetLocationsManager()
+
+            if normalised_url not in locations_manager.GetURLs():
+
+                addee_media.add( m )
+                
+
+
+        if len( addee_media ) > 0:
+
+            addee_hashes = { m.GetHash() for m in addee_media }
+
+            content_update = HydrusData.ContentUpdate( HC.CONTENT_TYPE_URLS, HC.CONTENT_UPDATE_ADD, ( ( url, ), addee_hashes ) )
+
+            for m in addee_media:
+
+                m.GetMediaResult().ProcessContentUpdate( CC.COMBINED_LOCAL_FILE_SERVICE_KEY, content_update )
+                
             
-            if u in self._current_urls:
-                
-                if only_add:
-                    
-                    return
-                    
-                
-                for index in range( self._urls_listbox.GetCount() ):
-                    
-                    existing_url = self._urls_listbox.GetClientData( index )
-                    
-                    if existing_url == u:
-                        
-                        self._RemoveURL( index )
-                        
-                        return
-                        
-                    
-                
-            
+            self._pending_content_updates.append( content_update )
+
         
-        u = normalised_url
-        
-        if u not in self._current_urls:
-            
-            self._urls_listbox.Append( u, u )
-            
-            self._current_urls.add( u )
-            
-            if u not in self._original_urls:
-                
-                self._urls_to_add.add( u )
-                
-            
+        #
+
+        self._UpdateList()
         
     
     def _Paste( self ):
         
-        raw_text = HG.client_controller.GetClipboardText()
+        try:
+
+            raw_text = HG.client_controller.GetClipboardText()
+
+        except HydrusExceptions.DataMissing as e:
+
+            wx.MessageBox( str( e ) )
+
+            return
+
         
         try:
             
@@ -5431,41 +5697,111 @@ class ManageURLsPanel( ClientGUIScrolledPanels.ManagePanel ):
             
         
     
-    def _RemoveURL( self, index ):
+    def _RemoveURL( self, url ):
         
-        url = self._urls_listbox.GetClientData( index )
+        removee_media = set()
         
-        self._urls_listbox.Delete( index )
-        
-        self._current_urls.discard( url )
-        
-        self._urls_to_add.discard( url )
-        
-        if url in self._original_urls:
+        for m in self._current_media:
+
+            locations_manager = m.GetLocationsManager()
+
+            if url in locations_manager.GetURLs():
+
+                removee_media.add( m )
+
             
-            self._urls_to_remove.add( url )
-            
         
-    
+        if len( removee_media ) > 0:
+
+            removee_hashes = { m.GetHash() for m in removee_media }
+
+            content_update = HydrusData.ContentUpdate( HC.CONTENT_TYPE_URLS, HC.CONTENT_UPDATE_DELETE, ( ( url, ), removee_hashes ) )
+
+            for m in removee_media:
+
+                m.GetMediaResult().ProcessContentUpdate( CC.COMBINED_LOCAL_FILE_SERVICE_KEY, content_update )
+
+
+            self._pending_content_updates.append( content_update )
+
+
+        #
+
+        self._UpdateList()
+
+
     def _SetSearchFocus( self ):
         
         self._url_input.SetFocus()
         
     
+    def _UpdateList( self ):
+
+        self._urls_listbox.Clear()
+
+        self._current_urls_count = collections.Counter()
+
+        for m in self._current_media:
+
+            locations_manager = m.GetLocationsManager()
+
+            for url in locations_manager.GetURLs():
+
+                self._current_urls_count[ url ] += 1
+
+
+
+        for ( url, count ) in self._current_urls_count.items():
+
+            if len( self._current_media ) == 1:
+
+                label = url
+
+            else:
+
+                label = '{} ({})'.format( url, count )
+
+
+            self._urls_listbox.Append( label, url )
+
+
+
     def EventListDoubleClick( self, event ):
         
-        selection = self._urls_listbox.GetSelection()
+        urls = [ self._urls_listbox.GetClientData( selection ) for selection in list( self._urls_listbox.GetSelections() ) ]
         
-        if selection != wx.NOT_FOUND:
+        for url in urls:
             
-            url = self._urls_listbox.GetClientData( selection )
+            self._RemoveURL( url )
             
-            self._RemoveURL( selection )
+
+        if len( urls ) == 1:
             
+            url = urls[0]
+
             self._url_input.SetValue( url )
             
         
     
+    def EventListKeyDown( self, event ):
+
+        ( modifier, key ) = ClientGUIShortcuts.ConvertKeyEventToSimpleTuple( event )
+
+        if key in CC.DELETE_KEYS:
+
+            urls = [ self._urls_listbox.GetClientData( selection ) for selection in list( self._urls_listbox.GetSelections() ) ]
+
+            for url in urls:
+
+                self._RemoveURL( url )
+
+
+        else:
+
+            event.Skip()
+
+
+
     def EventInputCharHook( self, event ):
         
         ( modifier, key ) = ClientGUIShortcuts.ConvertKeyEventToSimpleTuple( event )
@@ -5502,24 +5838,10 @@ class ManageURLsPanel( ClientGUIScrolledPanels.ManagePanel ):
     
     def CommitChanges( self ):
         
-        hash = self._media.GetHash()
-        
-        content_updates = []
-        
-        if len( self._urls_to_add ) > 0:
+        if len( self._pending_content_updates ) > 0:
             
-            content_updates.append( HydrusData.ContentUpdate( HC.CONTENT_TYPE_URLS, HC.CONTENT_UPDATE_ADD, ( self._urls_to_add, ( hash, ) ) ) )
-            
-        
-        if len( self._urls_to_remove ) > 0:
-            
-            content_updates.append( HydrusData.ContentUpdate( HC.CONTENT_TYPE_URLS, HC.CONTENT_UPDATE_DELETE, ( self._urls_to_remove, ( hash, ) ) ) )
-            
-        
-        if len( content_updates ) > 0:
-            
-            service_keys_to_content_updates = { CC.COMBINED_LOCAL_FILE_SERVICE_KEY : content_updates }
-            
+            service_keys_to_content_updates = { CC.COMBINED_LOCAL_FILE_SERVICE_KEY : self._pending_content_updates }
+
             HG.client_controller.WriteSynchronous( 'content_updates', service_keys_to_content_updates )
             
         

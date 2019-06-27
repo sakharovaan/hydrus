@@ -243,7 +243,7 @@ def GetLighterDarkerColour( colour, intensity = 3 ):
     
 def GetMediasTagCount( pool, tag_service_key = CC.COMBINED_TAG_SERVICE_KEY, collapse_siblings = False ):
     
-    siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
+    siblings_manager = HG.client_controller.tag_siblings_manager
     
     tags_managers = []
     
@@ -502,7 +502,7 @@ class ApplicationCommand( HydrusSerialisable.SerialisableBase ):
     
     SERIALISABLE_TYPE = HydrusSerialisable.SERIALISABLE_TYPE_APPLICATION_COMMAND
     SERIALISABLE_NAME = 'Application Command'
-    SERIALISABLE_VERSION = 1
+    SERIALISABLE_VERSION = 2
     
     def __init__( self, command_type = None, data = None ):
         
@@ -556,6 +556,30 @@ class ApplicationCommand( HydrusSerialisable.SerialisableBase ):
             ( serialisable_service_key, content_type, action, value ) = serialisable_data
             
             self._data = ( bytes.fromhex( serialisable_service_key ), content_type, action, value )
+            
+        
+    
+    def _UpdateSerialisableInfo( self, version, old_serialisable_info ):
+        
+        if version == 1:
+            
+            ( command_type, serialisable_data ) = old_serialisable_info
+            
+            if command_type == CC.APPLICATION_COMMAND_TYPE_SIMPLE:
+                
+                if serialisable_data == 'duplicate_filter_this_is_better':
+                    
+                    serialisable_data = 'duplicate_filter_this_is_better_and_delete_other'
+                    
+                elif serialisable_data == 'duplicate_filter_not_dupes':
+                    
+                    serialisable_data = 'duplicate_filter_false_positive'
+                    
+                
+            
+            new_serialisable_info = ( command_type, serialisable_data )
+            
+            return ( 2, new_serialisable_info )
             
         
     

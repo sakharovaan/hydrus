@@ -2,6 +2,7 @@ from . import ClientCaches
 from . import ClientConstants as CC
 from . import ClientData
 from . import ClientGUICommon
+from . import ClientGUIFunctions
 from . import ClientGUIMenus
 from . import ClientGUIShortcuts
 from . import ClientGUITopLevelWindows
@@ -57,7 +58,7 @@ class AddEditDeleteListBox( wx.Panel ):
         
         #
         
-        ( width, height ) = ClientGUICommon.ConvertTextToPixels( self._listbox, ( 20, height_num_chars ) )
+        ( width, height ) = ClientGUIFunctions.ConvertTextToPixels( self._listbox, ( 20, height_num_chars ) )
         
         self._listbox.SetInitialSize( ( width, height ) )
         
@@ -289,7 +290,16 @@ class AddEditDeleteListBox( wx.Panel ):
     
     def _ImportFromClipboard( self ):
         
-        raw_text = HG.client_controller.GetClipboardText()
+        try:
+            
+            raw_text = HG.client_controller.GetClipboardText()
+            
+        except HydrusExceptions.DataMissing as e:
+            
+            wx.MessageBox( str( e ) )
+            
+            return
+            
         
         try:
             
@@ -583,7 +593,7 @@ class QueueListBox( wx.Panel ):
         
         #
         
-        ( width, height ) = ClientGUICommon.ConvertTextToPixels( self._listbox, ( 20, height_num_chars ) )
+        ( width, height ) = ClientGUIFunctions.ConvertTextToPixels( self._listbox, ( 20, height_num_chars ) )
         
         self._listbox.SetInitialSize( ( width, height ) )
         
@@ -832,7 +842,7 @@ class ListBox( wx.ScrolledWindow ):
         self._last_view_start = None
         self._dirty = True
         
-        self._client_bmp = wx.Bitmap( 20, 20, 24 )
+        self._client_bmp = HG.client_controller.bitmap_manager.GetBitmap( 20, 20, 24 )
         
         dc = wx.MemoryDC( self._client_bmp )
         
@@ -844,7 +854,7 @@ class ListBox( wx.ScrolledWindow ):
         
         self.SetScrollRate( 0, self._text_y )
         
-        ( min_width, min_height ) = ClientGUICommon.ConvertTextToPixels( self, ( 16, height_num_chars ) )
+        ( min_width, min_height ) = ClientGUIFunctions.ConvertTextToPixels( self, ( 16, height_num_chars ) )
         
         self.SetMinClientSize( ( min_width, min_height ) )
         
@@ -992,9 +1002,11 @@ class ListBox( wx.ScrolledWindow ):
         return self._ordered_terms[ index ]
         
     
-    def _GetTextColour( self, term ):
+    def _GetTextsAndColours( self, term ):
         
-        return ( 0, 111, 250 )
+        text = self._terms_to_texts[ term ]
+        
+        return [ ( text, ( 0, 111, 250 ) ) ]
         
     
     def _GetSafeHitIndex( self, hit_index, direction = None ):
@@ -1185,28 +1197,49 @@ class ListBox( wx.ScrolledWindow ):
             
             term = self._GetTerm( current_index )
             
-            text = self._terms_to_texts[ term ]
+            texts_and_colours = self._GetTextsAndColours( term )
             
-            ( r, g, b ) = self._GetTextColour( term )
+            there_is_more_than_one_text = len( texts_and_colours ) > 1
             
-            text_colour = wx.Colour( r, g, b )
+            x_start = self.TEXT_X_PADDING
             
-            if term in self._selected_terms:
+            for ( text, ( r, g, b ) ) in texts_and_colours:
                 
-                dc.SetBrush( wx.Brush( text_colour ) )
+                text_colour = wx.Colour( r, g, b )
                 
-                dc.SetPen( wx.TRANSPARENT_PEN )
+                if term in self._selected_terms:
+                    
+                    dc.SetBrush( wx.Brush( text_colour ) )
+                    
+                    dc.SetPen( wx.TRANSPARENT_PEN )
+                    
+                    if x_start == self.TEXT_X_PADDING:
+                        
+                        background_colour_x = 0
+                        
+                    else:
+                        
+                        background_colour_x = x_start
+                        
+                    
+                    dc.DrawRectangle( background_colour_x, i * self._text_y, my_width, self._text_y )
+                    
+                    text_colour = self._background_colour
+                    
                 
-                dc.DrawRectangle( 0, i * self._text_y, my_width, self._text_y )
+                dc.SetTextForeground( text_colour )
                 
-                text_colour = self._background_colour
+                ( x, y ) = ( x_start, i * self._text_y )
                 
-            
-            dc.SetTextForeground( text_colour )
-            
-            ( x, y ) = ( self.TEXT_X_PADDING, i * self._text_y )
-            
-            dc.DrawText( text, x, y )
+                dc.DrawText( text, x, y )
+                
+                if there_is_more_than_one_text:
+                    
+                    ( text_width, text_height ) = dc.GetTextExtent( text )
+                    
+                    x_start += text_width
+                    
+                
             
         
         self._dirty = False
@@ -1289,7 +1322,7 @@ class ListBox( wx.ScrolledWindow ):
         
         key_code = event.GetKeyCode()
         
-        if ClientGUICommon.WindowHasFocus( self ) and key_code in CC.DELETE_KEYS:
+        if ClientGUIFunctions.WindowHasFocus( self ) and key_code in CC.DELETE_KEYS:
             
             self._DeleteActivate()
             
@@ -1395,7 +1428,7 @@ class ListBox( wx.ScrolledWindow ):
         
         if ( my_x, my_y ) != self._client_bmp.GetSize():
             
-            self._client_bmp = wx.Bitmap( my_x, my_y, 24 )
+            self._client_bmp = HG.client_controller.bitmap_manager.GetBitmap( my_x, my_y, 24 )
             
             self._dirty = True
             
@@ -1454,6 +1487,7 @@ class ListBox( wx.ScrolledWindow ):
     
 class ListBoxTags( ListBox ):
     
+    ors_are_under_construction = False
     has_counts = False
     
     can_spawn_new_windows = True
@@ -1495,22 +1529,40 @@ class ListBoxTags( ListBox ):
         raise NotImplementedError()
         
     
-    def _GetTextColour( self, term ):
+    def _GetTextsAndColours( self, term ):
         
         namespace_colours = self._GetNamespaceColours()
         
-        namespace = self._GetNamespaceFromTerm( term )
-        
-        if namespace in namespace_colours:
+        if isinstance( term, ClientSearch.Predicate ) and term.GetType() == HC.PREDICATE_TYPE_OR_CONTAINER:
             
-            ( r, g, b ) = namespace_colours[ namespace ]
+            texts_and_namespaces = term.GetTextsAndNamespaces( or_under_construction = self.ors_are_under_construction )
             
         else:
             
-            ( r, g, b ) = namespace_colours[ None ]
+            text = self._terms_to_texts[ term ]
+            
+            namespace = self._GetNamespaceFromTerm( term )
+            
+            texts_and_namespaces = [ ( text, namespace ) ]
             
         
-        return ( r, g, b )
+        texts_and_colours = []
+        
+        for ( text, namespace ) in texts_and_namespaces:
+            
+            if namespace in namespace_colours:
+                
+                ( r, g, b ) = namespace_colours[ namespace ]
+                
+            else:
+                
+                ( r, g, b ) = namespace_colours[ None ]
+                
+            
+            texts_and_colours.append( ( text, ( r, g, b ) ) )
+            
+        
+        return texts_and_colours
         
     
     def _NewSearchPage( self ):
@@ -2158,13 +2210,15 @@ class ListBoxTagsAC( ListBoxTagsPredicates ):
     
     def _Activate( self ):
         
+        shift_down = wx.GetKeyState( wx.WXK_SHIFT )
+        
         predicates = [ term for term in self._selected_terms if term.GetType() != HC.PREDICATE_TYPE_PARENT ]
         
         predicates = HG.client_controller.GetGUI().FleshOutPredicates( predicates )
         
         if len( predicates ) > 0:
             
-            self._callable( predicates )
+            self._callable( predicates, shift_down )
             
         
     
@@ -2214,23 +2268,27 @@ class ListBoxTagsAC( ListBoxTagsPredicates ):
                 
                 if len( predicates ) > 1:
                     
-                    if HG.client_controller.new_options.GetBoolean( 'ac_select_first_with_count' ):
+                    skip_ors = True
+                    
+                    skip_countless = HG.client_controller.new_options.GetBoolean( 'ac_select_first_with_count' )
+                    
+                    for ( index, predicate ) in enumerate( predicates ):
                         
-                        for ( index, predicate ) in enumerate( predicates ):
+                        # now only apply this to simple tags, not wildcards and system tags
+                        
+                        if skip_ors and predicate.GetType() == HC.PREDICATE_TYPE_OR_CONTAINER:
                             
-                            # now only apply this to simple tags, not wildcards and system tags
+                            continue
                             
-                            if predicate.GetType() in ( HC.PREDICATE_TYPE_PARENT, HC.PREDICATE_TYPE_TAG ) and predicate.GetCount() == 0:
-                                
-                                continue
-                                
-                            else:
-                                
-                                hit_index = index
-                                
-                                break
-                                
+                        
+                        if skip_countless and predicate.GetType() in ( HC.PREDICATE_TYPE_PARENT, HC.PREDICATE_TYPE_TAG ) and predicate.GetCount() == 0:
                             
+                            continue
+                            
+                        
+                        hit_index = index
+                        
+                        break
                         
                     
                 
@@ -2246,11 +2304,13 @@ class ListBoxTagsAC( ListBoxTagsPredicates ):
     
 class ListBoxTagsACRead( ListBoxTagsAC ):
     
+    ors_are_under_construction = True
+    
     def _GetTextFromTerm( self, term ):
         
         predicate = term
         
-        return predicate.ToString( render_for_user = True )
+        return predicate.ToString( render_for_user = True, or_under_construction = self.ors_are_under_construction )
         
     
 class ListBoxTagsACWrite( ListBoxTagsAC ):
@@ -2260,6 +2320,27 @@ class ListBoxTagsACWrite( ListBoxTagsAC ):
         predicate = term
         
         return predicate.ToString( sibling_service_key = self._service_key )
+        
+    
+class ListBoxTagsPredicatesORPreview( ListBoxTagsPredicates ):
+    
+    has_counts = False
+    
+    def __init__( self, parent ):
+        
+        ListBoxTagsPredicates.__init__( self, parent, height_num_chars = 1 )
+        
+    
+    def SetPredicate( self, predicate ):
+        
+        self._Clear()
+        
+        if predicate is not None:
+            
+            self._AppendTerm( predicate )
+            
+        
+        self._DataHasChanged()
         
     
 class ListBoxTagsCensorship( ListBoxTags ):
@@ -2530,7 +2611,7 @@ class ListBoxTagsStrings( ListBoxTags ):
     
     def _GetTextFromTerm( self, term ):
         
-        siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
+        siblings_manager = HG.client_controller.tag_siblings_manager
         
         tag = term
         
@@ -2765,7 +2846,7 @@ class ListBoxTagsSelection( ListBoxTags ):
         
         if not self._collapse_siblings:
             
-            siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
+            siblings_manager = HG.client_controller.tag_siblings_manager
             
             sibling = siblings_manager.GetSibling( self._tag_service_key, tag )
             
@@ -3071,11 +3152,11 @@ class ListBoxTagsSelectionTagsDialog( ListBoxTagsSelection ):
     
     render_for_user = False
     
-    def __init__( self, parent, add_func, delete_func ):
+    def __init__( self, parent, enter_func, delete_func ):
         
         ListBoxTagsSelection.__init__( self, parent, include_counts = True, collapse_siblings = False )
         
-        self._add_func = add_func
+        self._enter_func = enter_func
         self._delete_func = delete_func
         
     
@@ -3083,7 +3164,7 @@ class ListBoxTagsSelectionTagsDialog( ListBoxTagsSelection ):
         
         if len( self._selected_terms ) > 0:
             
-            self._add_func( set( self._selected_terms ) )
+            self._enter_func( set( self._selected_terms ) )
             
         
     

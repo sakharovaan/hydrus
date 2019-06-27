@@ -3,6 +3,7 @@ from . import ClientConstants as CC
 from . import ClientData
 from . import ClientGUICommon
 from . import ClientGUIDialogs
+from . import ClientGUIFunctions
 from . import ClientGUIListCtrl
 from . import ClientGUIMenus
 from . import ClientGUIScrolledPanels
@@ -236,7 +237,7 @@ class BytesControl( wx.Panel ):
         
         self._spin = wx.SpinCtrl( self, min = 0, max = 1048576 )
         
-        width = ClientGUICommon.ConvertTextToPixelWidth( self._spin, 12 )
+        width = ClientGUIFunctions.ConvertTextToPixelWidth( self._spin, 12 )
         
         self._spin.SetSize( ( width, -1 ) )
         
@@ -365,7 +366,7 @@ class EditStringConverterPanel( ClientGUIScrolledPanels.EditPanel ):
         vbox = wx.BoxSizer( wx.VERTICAL )
         
         vbox.Add( transformations_panel, CC.FLAGS_EXPAND_BOTH_WAYS )
-        vbox.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+        vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         
         self.SetSizer( vbox )
         
@@ -901,7 +902,7 @@ class EditStringMatchPanel( ClientGUIScrolledPanels.EditPanel ):
         
         vbox = wx.BoxSizer( wx.VERTICAL )
         
-        vbox.Add( gridbox, CC.FLAGS_EXPAND_PERPENDICULAR )
+        vbox.Add( gridbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         vbox.Add( self._example_string_matches, CC.FLAGS_EXPAND_PERPENDICULAR )
         
         self.SetSizer( vbox )
@@ -1277,7 +1278,7 @@ class NetworkJobControl( wx.Panel ):
             
             self._right_text.SetLabelText( speed_text )
             
-            right_width = ClientGUICommon.ConvertTextToPixelWidth( self._right_text, len( speed_text ) )
+            right_width = ClientGUIFunctions.ConvertTextToPixelWidth( self._right_text, len( speed_text ) )
             
             right_min_size = ( right_width, -1 )
             
@@ -1967,7 +1968,16 @@ class TextAndPasteCtrl( wx.Panel ):
     
     def _Paste( self ):
         
-        raw_text = HG.client_controller.GetClipboardText()
+        try:
+            
+            raw_text = HG.client_controller.GetClipboardText()
+            
+        except HydrusExceptions.DataMissing as e:
+            
+            wx.MessageBox( str( e ) )
+            
+            return
+            
         
         try:
             

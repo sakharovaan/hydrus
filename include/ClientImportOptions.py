@@ -509,13 +509,12 @@ class FilenameTaggingOptions( HydrusSerialisable.SerialisableBase ):
         
         tags = HydrusTags.CleanTags( tags )
         
-        siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
-        parents_manager = HG.client_controller.GetManager( 'tag_parents' )
-        tag_censorship_manager = HG.client_controller.GetManager( 'tag_censorship' )
+        siblings_manager = HG.client_controller.tag_siblings_manager
+        parents_manager = HG.client_controller.tag_parents_manager
         
         tags = siblings_manager.CollapseTags( service_key, tags )
         tags = parents_manager.ExpandTags( service_key, tags )
-        tags = tag_censorship_manager.FilterTags( service_key, tags )
+        tags = HG.client_controller.tag_censorship_manager.FilterTags( service_key, tags )
         
         return tags
         
@@ -1067,22 +1066,27 @@ class TagImportOptions( HydrusSerialisable.SerialisableBase ):
     
     def CheckBlacklist( self, tags ):
         
-        ok_tags = self._tag_blacklist.Filter( tags )
+        sibling_tags = HG.client_controller.tag_siblings_manager.CollapseTags( CC.COMBINED_TAG_SERVICE_KEY, tags )
         
-        if len( ok_tags ) < len( tags ):
+        for test_tags in ( tags, sibling_tags ):
             
-            bad_tags = set( tags ).difference( ok_tags )
+            ok_tags = self._tag_blacklist.Filter( test_tags )
             
-            bad_tags = HydrusTags.SortNumericTags( bad_tags )
-            
-            raise HydrusExceptions.VetoException( ', '.join( bad_tags ) + ' is blacklisted!' )
+            if len( ok_tags ) < len( test_tags ):
+                
+                bad_tags = set( test_tags ).difference( ok_tags )
+                
+                bad_tags = HydrusTags.SortNumericTags( bad_tags )
+                
+                raise HydrusExceptions.VetoException( ', '.join( bad_tags ) + ' is blacklisted!' )
+                
             
         
     
     def GetServiceKeysToContentUpdates( self, status, in_inbox, hash, parsed_tags ):
         
-        siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
-        parents_manager = HG.client_controller.GetManager( 'tag_parents' )
+        siblings_manager = HG.client_controller.tag_siblings_manager
+        parents_manager = HG.client_controller.tag_parents_manager
         
         parsed_tags = HydrusTags.CleanTags( parsed_tags )
         

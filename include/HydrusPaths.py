@@ -279,6 +279,10 @@ def FilterFreePaths( paths ):
     
     return free_paths
     
+def GetCurrentTempDir():
+    
+    return tempfile.gettempdir()
+    
 def GetDefaultLaunchPath():
     
     if HC.PLATFORM_WINDOWS:
@@ -326,6 +330,33 @@ def GetFreeSpace( path ):
 def GetTempDir( dir = None ):
     
     return tempfile.mkdtemp( prefix = 'hydrus', dir = dir )
+    
+def SetEnvTempDir( path ):
+    
+    if not os.path.exists( path ):
+        
+        raise Exception( 'The given temp directory, "{}", does not exist!'.format( path ) )
+        
+    
+    if not os.path.isdir( path ):
+        
+        raise Exception( 'The given temp directory, "{}", does not seem to be a directory!'.format( path ) )
+        
+    
+    if not DirectoryIsWritable( path ):
+        
+        raise Exception( 'The given temp directory, "{}", does not seem to be writable-to!'.format( path ) )
+        
+    
+    for tmp_name in ( 'TMPDIR', 'TEMP', 'TMP' ):
+        
+        if tmp_name in os.environ:
+            
+            os.environ[ tmp_name ] = path
+            
+        
+    
+    tempfile.tempdir = path
     
 def GetTempPath( suffix = '', dir = None ):
     
@@ -413,8 +444,6 @@ def LaunchDirectory( path ):
             
             process = subprocess.Popen( cmd, preexec_fn = os.setsid, **sbp_kwargs )
             
-            process.wait()
-            
             process.communicate()
             
         
@@ -442,17 +471,19 @@ def LaunchFile( path, launch_path = None ):
             
             complete_launch_path = launch_path.replace( '%path%', path )
             
+            hide_terminal = False
+            
             if HC.PLATFORM_WINDOWS:
                 
                 cmd = complete_launch_path
+                
                 preexec_fn = None
                 
             else:
                 
-                # setsid call un-childs this new process
-                
                 cmd = shlex.split( complete_launch_path )
                 
+                # un-childs this new process
                 preexec_fn = os.setsid
                 
             
@@ -465,11 +496,9 @@ def LaunchFile( path, launch_path = None ):
             
             try:
                 
-                sbp_kwargs = HydrusData.GetSubprocessKWArgs( text = True )
+                sbp_kwargs = HydrusData.GetSubprocessKWArgs( hide_terminal = hide_terminal, text = True )
                 
                 process = subprocess.Popen( cmd, preexec_fn = preexec_fn, stdin = subprocess.PIPE, stdout = subprocess.PIPE, stderr = subprocess.PIPE, **sbp_kwargs )
-                
-                process.wait()
                 
                 ( stdout, stderr ) = process.communicate()
                 
@@ -508,10 +537,7 @@ def LaunchFile( path, launch_path = None ):
     
 def MakeSureDirectoryExists( path ):
     
-    if not os.path.exists( path ):
-        
-        os.makedirs( path )
-        
+    os.makedirs( path, exist_ok = True )
     
 def MakeFileWritable( path ):
     
@@ -522,24 +548,28 @@ def MakeFileWritable( path ):
     
     try:
         
-        os.chmod( path, stat.S_IWRITE | stat.S_IREAD )
+        stat_result = os.stat( path )
         
-        if os.path.isdir( path ):
+        current_bits = stat_result.st_mode
+        
+        if HC.PLATFORM_WINDOWS:
             
-            for ( root, dirnames, filenames ) in os.walk( path ):
-                
-                for filename in filenames:
-                    
-                    sub_path = os.path.join( root, filename )
-                    
-                    os.chmod( sub_path, stat.S_IWRITE | stat.S_IREAD )
-                    
-                
+            # this is actually the same value as S_IWUSR, but let's not try to second guess ourselves
+            desired_bit = stat.S_IWRITE
+            
+        else:
+            
+            desired_bit = stat.S_IWUSR
+            
+        
+        if not desired_bit & current_bits:
+            
+            os.chmod( path, current_bits | desired_bit )
             
         
     except Exception as e:
         
-        pass
+        HydrusData.Print( 'Wanted to add write permission to "{}", but had an error: {}'.format( path, str( e ) ) )
         
     
 def MergeFile( source, dest ):
@@ -774,8 +804,6 @@ def OpenFileLocation( path ):
         sbp_kwargs = HydrusData.GetSubprocessKWArgs( hide_terminal = False )
         
         process = subprocess.Popen( cmd, **sbp_kwargs )
-        
-        process.wait()
         
         process.communicate()
         

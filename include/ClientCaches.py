@@ -1,3 +1,4 @@
+from . import ClientFiles
 from . import ClientImageHandling
 from . import ClientParsing
 from . import ClientPaths
@@ -27,36 +28,40 @@ from . import HydrusTags
 import traceback
 import weakref
 
-# important thing here, and reason why it is recursive, is because we want to preserve the parent-grandparent interleaving
+# now let's fill out grandparents
 def BuildServiceKeysToChildrenToParents( service_keys_to_simple_children_to_parents ):
     
-    def AddParents( simple_children_to_parents, children_to_parents, child, parents ):
+    # important thing here, and reason why it is recursive, is because we want to preserve the parent-grandparent interleaving in list order
+    def AddParentsAndGrandparents( simple_children_to_parents, this_childs_parents, parents ):
         
         for parent in parents:
             
-            if parent not in children_to_parents[ child ]:
+            if parent not in this_childs_parents:
                 
-                children_to_parents[ child ].append( parent )
+                this_childs_parents.append( parent )
                 
             
+            # this parent has its own parents, so the child should get those as well
             if parent in simple_children_to_parents:
                 
                 grandparents = simple_children_to_parents[ parent ]
                 
-                AddParents( simple_children_to_parents, children_to_parents, child, grandparents )
+                AddParentsAndGrandparents( simple_children_to_parents, this_childs_parents, grandparents )
                 
             
         
     
     service_keys_to_children_to_parents = collections.defaultdict( HydrusData.default_dict_list )
     
-    for ( service_key, simple_children_to_parents ) in list(service_keys_to_simple_children_to_parents.items()):
+    for ( service_key, simple_children_to_parents ) in service_keys_to_simple_children_to_parents.items():
         
         children_to_parents = service_keys_to_children_to_parents[ service_key ]
         
         for ( child, parents ) in list(simple_children_to_parents.items()):
             
-            AddParents( simple_children_to_parents, children_to_parents, child, parents )
+            this_childs_parents = children_to_parents[ child ]
+            
+            AddParentsAndGrandparents( simple_children_to_parents, this_childs_parents, parents )
             
         
     
@@ -66,13 +71,15 @@ def BuildServiceKeysToSimpleChildrenToParents( service_keys_to_pairs_flat ):
     
     service_keys_to_simple_children_to_parents = collections.defaultdict( HydrusData.default_dict_set )
     
-    for ( service_key, pairs ) in list(service_keys_to_pairs_flat.items()):
+    for ( service_key, pairs ) in service_keys_to_pairs_flat.items():
         
         service_keys_to_simple_children_to_parents[ service_key ] = BuildSimpleChildrenToParents( pairs )
         
     
     return service_keys_to_simple_children_to_parents
     
+# take pairs, make dict of child -> parents while excluding loops
+# no grandparents here
 def BuildSimpleChildrenToParents( pairs ):
     
     simple_children_to_parents = HydrusData.default_dict_set()
@@ -84,7 +91,10 @@ def BuildSimpleChildrenToParents( pairs ):
             continue
             
         
-        if LoopInSimpleChildrenToParents( simple_children_to_parents, child, parent ): continue
+        if parent in simple_children_to_parents and LoopInSimpleChildrenToParents( simple_children_to_parents, child, parent ):
+            
+            continue
+            
         
         simple_children_to_parents[ child ].add( parent )
         
@@ -185,35 +195,179 @@ def LoopInSimpleChildrenToParents( simple_children_to_parents, child, parent ):
     
     potential_loop_paths = { parent }
     
-    while len( potential_loop_paths.intersection( list(simple_children_to_parents.keys()) ) ) > 0:
+    while True:
         
         new_potential_loop_paths = set()
         
-        for potential_loop_path in potential_loop_paths.intersection( list(simple_children_to_parents.keys()) ):
+        for potential_loop_path in potential_loop_paths:
             
-            new_potential_loop_paths.update( simple_children_to_parents[ potential_loop_path ] )
+            if potential_loop_path in simple_children_to_parents:
+                
+                new_potential_loop_paths.update( simple_children_to_parents[ potential_loop_path ] )
+                
             
         
         potential_loop_paths = new_potential_loop_paths
         
-        if child in potential_loop_paths: return True
+        if child in potential_loop_paths:
+            
+            return True
+            
+        elif len( potential_loop_paths ) == 0:
+            
+            return False
+            
         
     
-    return False
-    
 class BitmapManager( object ):
+    
+    MAX_MEMORY_ALLOWANCE = 512 * 1024 * 1024
     
     def __init__( self, controller ):
         
         self._controller = controller
         
+        self._unusued_bitmaps = collections.defaultdict( list )
+        self._destroyee_bitmaps = []
+        self._total_unused_memory_size = 0
+        
         self._media_background_bmp_path = None
         self._media_background_bmp = None
         
-    
-    def _DestroyBmp( self, bmp ):
+        self._awaiting_destruction = False
         
-        wx.CallAfter( self._media_background_bmp.Destroy )
+        HG.client_controller.sub( self, 'MaintainMemory', 'memory_maintenance_pulse' )
+        
+    
+    def _AdjustTotalMemory( self, direction, key ):
+        
+        ( width, height, depth ) = key
+        
+        amount = width * height * depth / 8
+        
+        self._total_unused_memory_size += direction * amount
+        
+    
+    def _ClearDestroyees( self ):
+        
+        def action_destroyee( item ):
+            
+            ( destroy_timestamp, bitmap ) = item
+            
+            if HydrusData.TimeHasPassedPrecise( destroy_timestamp ) and bitmap:
+                
+                bitmap.Destroy()
+                
+                return False
+                
+            else:
+                
+                return True
+                
+            
+        
+        try:
+            
+            self._destroyee_bitmaps = list( filter( action_destroyee, self._destroyee_bitmaps ) )
+            
+        finally:
+            
+            self._awaiting_destruction = False
+            
+        
+        if len( self._destroyee_bitmaps ) > 0:
+            
+            self._ScheduleDestruction()
+            
+        
+    
+    def _ScheduleDestruction( self ):
+        
+        if not self._awaiting_destruction:
+            
+            self._controller.CallLaterWXSafe( self._controller, 1.0, self._ClearDestroyees )
+            
+            self._awaiting_destruction = True
+            
+        
+    
+    def ReleaseBitmap( self, bitmap ):
+        
+        ( width, height ) = bitmap.GetSize()
+        depth = bitmap.GetDepth()
+        
+        key = ( width, height, depth )
+        
+        if key in self._unusued_bitmaps and len( self._unusued_bitmaps[ key ] ) > 10:
+            
+            self._destroyee_bitmaps.append( ( HydrusData.GetNowPrecise() + 0.5, bitmap ) )
+            
+            self._ScheduleDestruction()
+            
+        else:
+            
+            self._unusued_bitmaps[ key ].append( bitmap )
+            
+            self._AdjustTotalMemory( 1, key )
+            
+            if self._total_unused_memory_size > self.MAX_MEMORY_ALLOWANCE:
+                
+                self._controller.CallLaterWXSafe( self._controller, 1.0, self.MaintainMemory )
+                
+            
+        
+    
+    def GetBitmap( self, width, height, depth = 24 ):
+        
+        if width < 0:
+            
+            width = 20
+            
+        
+        if height < 0:
+            
+            height = 20
+            
+        
+        key = ( width, height, depth )
+        
+        if key in self._unusued_bitmaps:
+            
+            bitmaps = self._unusued_bitmaps[ key ]
+            
+            if len( bitmaps ) > 0:
+                
+                bitmap = bitmaps.pop()
+                
+                self._AdjustTotalMemory( -1, key )
+                
+                return bitmap
+                
+            else:
+                
+                del self._unusued_bitmaps[ key ]
+                
+            
+        
+        bitmap = wx.Bitmap( width, height, depth )
+        
+        return bitmap
+        
+    
+    def GetBitmapFromBuffer( self, width, height, depth, data ):
+        
+        bitmap = self.GetBitmap( width, height, depth = depth )
+        
+        if depth == 24:
+            
+            bitmap.CopyFromBuffer( data, format = wx.BitmapBufferFormat_RGB )
+            
+        elif depth == 32:
+            
+            bitmap.CopyFromBuffer( data, format = wx.BitmapBufferFormat_RGBA )
+            
+        
+        return bitmap
         
     
     def GetMediaBackgroundBitmap( self ):
@@ -226,7 +380,7 @@ class BitmapManager( object ):
             
             if self._media_background_bmp is not None:
                 
-                self._DestroyBmp( self._media_background_bmp )
+                self.ReleaseBitmap( self._media_background_bmp )
                 
             
             try:
@@ -250,1067 +404,20 @@ class BitmapManager( object ):
         return self._media_background_bmp
         
     
-class ClientFilesManager( object ):
-    
-    def __init__( self, controller ):
+    def MaintainMemory( self ):
         
-        self._controller = controller
+        destroy_time = HydrusData.GetNowPrecise() + 0.5
         
-        self._lock = threading.Lock()
-        
-        self._prefixes_to_locations = {}
-        
-        self._bad_error_occurred = False
-        self._missing_locations = set()
-        
-        self._Reinit()
-        
-    
-    def _GenerateExpectedFilePath( self, hash, mime ):
-        
-        self._WaitOnWakeup()
-        
-        hash_encoded = hash.hex()
-        
-        prefix = 'f' + hash_encoded[:2]
-        
-        location = self._prefixes_to_locations[ prefix ]
-        
-        path = os.path.join( location, prefix, hash_encoded + HC.mime_ext_lookup[ mime ] )
-        
-        return path
-        
-    
-    def _GenerateExpectedThumbnailPath( self, hash ):
-        
-        self._WaitOnWakeup()
-        
-        hash_encoded = hash.hex()
-        
-        prefix = 't' + hash_encoded[:2]
-        
-        location = self._prefixes_to_locations[ prefix ]
-        
-        path = os.path.join( location, prefix, hash_encoded ) + '.thumbnail'
-        
-        return path
-        
-    
-    def _GenerateThumbnail( self, hash, mime ):
-        
-        file_path = self._GenerateExpectedFilePath( hash, mime )
-        
-        if not os.path.exists( file_path ):
-            
-            raise HydrusExceptions.FileMissingException( 'The thumbnail for file ' + hash.hex() + ' was missing. It could not be regenerated from the original file because the original file is missing! This event could indicate hard drive corruption. Please check everything is ok.')
-            
-        
-        try:
-            
-            bounding_dimensions = HG.client_controller.options[ 'thumbnail_dimensions' ]
-            
-            percentage_in = self._controller.new_options.GetInteger( 'video_thumbnail_percentage_in' )
-            
-            thumbnail_bytes = HydrusFileHandling.GenerateThumbnailBytes( file_path, bounding_dimensions, mime, percentage_in = percentage_in )
-            
-        except Exception as e:
-            
-            raise HydrusExceptions.FileMissingException( 'The thumbnail for file ' + hash.hex() + ' was missing. It could not be regenerated from the original file for the above reason. This event could indicate hard drive corruption. Please check everything is ok.' )
-            
-        
-        self._SaveThumbnail( hash, thumbnail_bytes )
-        
-    
-    def _GetRecoverTuple( self ):
-        
-        all_locations = { location for location in list(self._prefixes_to_locations.values()) }
-        
-        all_prefixes = list(self._prefixes_to_locations.keys())
-        
-        for possible_location in all_locations:
-            
-            for prefix in all_prefixes:
-                
-                correct_location = self._prefixes_to_locations[ prefix ]
-                
-                if possible_location != correct_location and os.path.exists( os.path.join( possible_location, prefix ) ):
-                    
-                    recoverable_location = possible_location
-                    
-                    return ( prefix, recoverable_location, correct_location )
-                    
-                
-            
-        
-        return None
-        
-    
-    def _GetRebalanceTuple( self ):
-        
-        ( locations_to_ideal_weights, thumbnail_override ) = self._controller.Read( 'ideal_client_files_locations' )
-        
-        total_weight = sum( locations_to_ideal_weights.values() )
-        
-        ideal_locations_to_normalised_weights = { location : weight / total_weight for ( location, weight ) in list(locations_to_ideal_weights.items()) }
-        
-        current_locations_to_normalised_weights = collections.defaultdict( lambda: 0 )
-        
-        file_prefixes = [ prefix for prefix in self._prefixes_to_locations if prefix.startswith( 'f' ) ]
-        
-        for file_prefix in file_prefixes:
-            
-            location = self._prefixes_to_locations[ file_prefix ]
-            
-            current_locations_to_normalised_weights[ location ] += 1.0 / 256
-            
-        
-        for location in list(current_locations_to_normalised_weights.keys()):
-            
-            if location not in ideal_locations_to_normalised_weights:
-                
-                ideal_locations_to_normalised_weights[ location ] = 0.0
-                
-            
-        
-        #
-        
-        overweight_locations = []
-        underweight_locations = []
-        
-        for ( location, ideal_weight ) in list(ideal_locations_to_normalised_weights.items()):
-            
-            if location in current_locations_to_normalised_weights:
-                
-                current_weight = current_locations_to_normalised_weights[ location ]
-                
-                if current_weight < ideal_weight:
-                    
-                    underweight_locations.append( location )
-                    
-                elif current_weight >= ideal_weight + 1.0 / 256:
-                    
-                    overweight_locations.append( location )
-                    
-                
-            else:
-                
-                underweight_locations.append( location )
-                
-            
-        
-        #
-        
-        if len( underweight_locations ) > 0 and len( overweight_locations ) > 0:
-            
-            overweight_location = overweight_locations.pop( 0 )
-            underweight_location = underweight_locations.pop( 0 )
-            
-            random.shuffle( file_prefixes )
-            
-            for file_prefix in file_prefixes:
-                
-                location = self._prefixes_to_locations[ file_prefix ]
-                
-                if location == overweight_location:
-                    
-                    return ( file_prefix, overweight_location, underweight_location )
-                    
-                
-            
-        else:
-            
-            for hex_prefix in HydrusData.IterateHexPrefixes():
-                
-                thumbnail_prefix = 't' + hex_prefix
-                
-                if thumbnail_override is None:
-                    
-                    file_prefix = 'f' + hex_prefix
-                    
-                    correct_location = self._prefixes_to_locations[ file_prefix ]
-                    
-                else:
-                    
-                    correct_location = thumbnail_override
-                    
-                
-                current_thumbnails_location = self._prefixes_to_locations[ thumbnail_prefix ]
-                
-                if current_thumbnails_location != correct_location:
-                    
-                    return ( thumbnail_prefix, current_thumbnails_location, correct_location )
-                    
-                
-            
-        
-        return None
-        
-    
-    def _IterateAllFilePaths( self ):
-        
-        for ( prefix, location ) in list(self._prefixes_to_locations.items()):
-            
-            if prefix.startswith( 'f' ):
-                
-                dir = os.path.join( location, prefix )
-                
-                filenames = os.listdir( dir )
-                
-                for filename in filenames:
-                    
-                    yield os.path.join( dir, filename )
-                    
-                
-            
-        
-    
-    def _IterateAllThumbnailPaths( self ):
-        
-        for ( prefix, location ) in list(self._prefixes_to_locations.items()):
-            
-            if prefix.startswith( 't' ):
-                
-                dir = os.path.join( location, prefix )
-                
-                filenames = os.listdir( dir )
-                
-                for filename in filenames:
-                    
-                    yield os.path.join( dir, filename )
-                    
-                
-            
-        
-    
-    def _LookForFilePath( self, hash ):
-        
-        for potential_mime in HC.ALLOWED_MIMES:
-            
-            potential_path = self._GenerateExpectedFilePath( hash, potential_mime )
-            
-            if os.path.exists( potential_path ):
-                
-                return ( potential_path, potential_mime )
-                
-            
-        
-        raise HydrusExceptions.FileMissingException( 'File for ' + hash.hex() + ' not found!' )
-        
-    
-    def _Reinit( self ):
-        
-        self._prefixes_to_locations = self._controller.Read( 'client_files_locations' )
-        
-        if HG.client_controller.IsFirstStart():
-            
-            try:
-                
-                for ( prefix, location ) in list(self._prefixes_to_locations.items()):
-                    
-                    HydrusPaths.MakeSureDirectoryExists( location )
-                    
-                    subdir = os.path.join( location, prefix )
-                    
-                    HydrusPaths.MakeSureDirectoryExists( subdir )
-                    
-                
-            except:
-                
-                text = 'Attempting to create the database\'s client_files folder structure failed!'
-                
-                wx.SafeShowMessage( 'unable to create file structure', text )
-                
-                raise
-                
-            
-        else:
-            
-            self._missing_locations = set()
-            
-            for ( prefix, location ) in list(self._prefixes_to_locations.items()):
-                
-                if os.path.exists( location ):
-                    
-                    subdir = os.path.join( location, prefix )
-                    
-                    if not os.path.exists( subdir ):
-                        
-                        self._missing_locations.add( ( location, prefix ) )
-                        
-                    
-                else:
-                    
-                    self._missing_locations.add( ( location, prefix ) )
-                    
-                
-            
-            if len( self._missing_locations ) > 0:
-                
-                self._bad_error_occurred = True
-                
-                #
-                
-                missing_dict = HydrusData.BuildKeyToListDict( self._missing_locations )
-                
-                missing_locations = list( missing_dict.keys() )
-                
-                missing_locations.sort()
-                
-                missing_string = ''
-                
-                for l in missing_locations:
-                    
-                    missing_prefixes = list( missing_dict[ l ] )
-                    
-                    missing_prefixes.sort()
-                    
-                    missing_prefixes_string = '    ' + os.linesep.join( ( ', '.join( block ) for block in HydrusData.SplitListIntoChunks( missing_prefixes, 32 ) ) )
-                    
-                    missing_string += os.linesep
-                    missing_string += l
-                    missing_string += os.linesep
-                    missing_string += missing_prefixes_string
-                    
-                
-                #
-                
-                if len( self._missing_locations ) > 4:
-                    
-                    text = 'When initialising the client files manager, some file locations did not exist! They have all been written to the log!'
-                    text += os.linesep * 2
-                    text += 'If this is happening on client boot, you should now be presented with a dialog to correct this manually!'
-                    
-                    wx.SafeShowMessage( 'missing locations', text )
-                    
-                    HydrusData.DebugPrint( text )
-                    HydrusData.DebugPrint( 'Missing locations follow:' )
-                    HydrusData.DebugPrint( missing_string )
-                    
-                else:
-                    
-                    text = 'When initialising the client files manager, these file locations did not exist:'
-                    text += os.linesep * 2
-                    text += missing_string
-                    text += os.linesep * 2
-                    text += 'If this is happening on client boot, you should now be presented with a dialog to correct this manually!'
-                    
-                    wx.SafeShowMessage( 'missing locations', text )
-                    HydrusData.DebugPrint( text )
-                    
-                
-            
-        
-    
-    def _SaveThumbnail( self, hash, thumbnail_bytes ):
-        
-        thumbnail_path = self._GenerateExpectedThumbnailPath( hash )
-        
-        try:
-            
-            HydrusPaths.MakeFileWritable( thumbnail_path )
-            
-            with open( thumbnail_path, 'wb' ) as f:
-                
-                f.write( thumbnail_bytes )
-                
-            
-        except Exception as e:
-            
-            raise HydrusExceptions.FileMissingException( 'The thumbnail for file "{}" failed to write to path "{}". This event suggests that hydrus does not have permission to write to its thumbnail folder. Please check everything is ok.'.format( hash.hex(), thumbnail_path ) )
-            
-        
-    
-    def _WaitOnWakeup( self ):
-        
-        if HG.client_controller.new_options.GetBoolean( 'file_system_waits_on_wakeup' ):
-            
-            while HG.client_controller.JustWokeFromSleep():
-                
-                HydrusThreading.CheckIfThreadShuttingDown()
-                
-                time.sleep( 1.0 )
-                
-            
-        
-    
-    def AllLocationsAreDefault( self ):
-        
-        with self._lock:
-            
-            db_dir = self._controller.GetDBDir()
-            
-            client_files_default = os.path.join( db_dir, 'client_files' )
-            
-            all_locations = set( self._prefixes_to_locations.values() )
-            
-            return False not in ( location.startswith( client_files_default ) for location in all_locations )
-            
-        
-    
-    def LocklessAddFileFromBytes( self, hash, mime, file_bytes ):
-        
-        dest_path = self._GenerateExpectedFilePath( hash, mime )
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'Adding file from string: ' + str( ( len( file_bytes ), dest_path ) ) )
-            
-        
-        HydrusPaths.MakeFileWritable( dest_path )
-        
-        with open( dest_path, 'wb' ) as f:
-            
-            f.write( file_bytes )
-            
-        
-    
-    def LocklessAddFile( self, hash, mime, source_path ):
-        
-        dest_path = self._GenerateExpectedFilePath( hash, mime )
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'Adding file from path: ' + str( ( source_path, dest_path ) ) )
-            
-        
-        if not os.path.exists( dest_path ):
-            
-            successful = HydrusPaths.MirrorFile( source_path, dest_path )
-            
-            if not successful:
-                
-                raise Exception( 'There was a problem copying the file from ' + source_path + ' to ' + dest_path + '!' )
-                
-            
-        
-    
-    def AddThumbnailFromBytes( self, hash, thumbnail_bytes ):
-        
-        with self._lock:
-            
-            self.LocklessAddThumbnailFromBytes( hash, thumbnail_bytes )
-            
-        
-    
-    def LocklessAddThumbnailFromBytes( self, hash, thumbnail_bytes ):
-        
-        dest_path = self._GenerateExpectedThumbnailPath( hash )
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'Adding thumbnail: ' + str( ( len( thumbnail_bytes ), dest_path ) ) )
-            
-        
-        HydrusPaths.MakeFileWritable( dest_path )
-        
-        with open( dest_path, 'wb' ) as f:
-            
-            f.write( thumbnail_bytes )
-            
-        
-        self._controller.pub( 'clear_thumbnails', { hash } )
-        self._controller.pub( 'new_thumbnails', { hash } )
-        
-    
-    def CheckFileIntegrity( self, *args, **kwargs ):
-        
-        with self._lock:
-            
-            self._controller.WriteSynchronous( 'file_integrity', *args, **kwargs )
-            
-        
-    
-    def ClearOrphans( self, move_location = None ):
-        
-        with self._lock:
-            
-            job_key = ClientThreading.JobKey( cancellable = True )
-            
-            job_key.SetVariable( 'popup_title', 'clearing orphans' )
-            job_key.SetVariable( 'popup_text_1', 'preparing' )
-            
-            self._controller.pub( 'message', job_key )
-            
-            orphan_paths = []
-            orphan_thumbnails = []
-            
-            for ( i, path ) in enumerate( self._IterateAllFilePaths() ):
-                
-                ( i_paused, should_quit ) = job_key.WaitIfNeeded()
-                
-                if should_quit:
-                    
-                    return
-                    
-                
-                if i % 100 == 0:
-                    
-                    status = 'reviewed ' + HydrusData.ToHumanInt( i ) + ' files, found ' + HydrusData.ToHumanInt( len( orphan_paths ) ) + ' orphans'
-                    
-                    job_key.SetVariable( 'popup_text_1', status )
-                    
-                
-                try:
-                    
-                    is_an_orphan = False
-                    
-                    ( directory, filename ) = os.path.split( path )
-                    
-                    should_be_a_hex_hash = filename[:64]
-                    
-                    hash = bytes.fromhex( should_be_a_hex_hash )
-                    
-                    is_an_orphan = HG.client_controller.Read( 'is_an_orphan', 'file', hash )
-                    
-                except:
-                    
-                    is_an_orphan = True
-                    
-                
-                if is_an_orphan:
-                    
-                    if move_location is not None:
-                        
-                        ( source_dir, filename ) = os.path.split( path )
-                        
-                        dest = os.path.join( move_location, filename )
-                        
-                        dest = HydrusPaths.AppendPathUntilNoConflicts( dest )
-                        
-                        HydrusData.Print( 'Moving the orphan ' + path + ' to ' + dest )
-                        
-                        HydrusPaths.MergeFile( path, dest )
-                        
-                    
-                    orphan_paths.append( path )
-                    
-                
-            
-            time.sleep( 2 )
-            
-            for ( i, path ) in enumerate( self._IterateAllThumbnailPaths() ):
-                
-                ( i_paused, should_quit ) = job_key.WaitIfNeeded()
-                
-                if should_quit:
-                    
-                    return
-                    
-                
-                if i % 100 == 0:
-                    
-                    status = 'reviewed ' + HydrusData.ToHumanInt( i ) + ' thumbnails, found ' + HydrusData.ToHumanInt( len( orphan_thumbnails ) ) + ' orphans'
-                    
-                    job_key.SetVariable( 'popup_text_1', status )
-                    
-                
-                try:
-                    
-                    is_an_orphan = False
-                    
-                    ( directory, filename ) = os.path.split( path )
-                    
-                    should_be_a_hex_hash = filename[:64]
-                    
-                    hash = bytes.fromhex( should_be_a_hex_hash )
-                    
-                    is_an_orphan = HG.client_controller.Read( 'is_an_orphan', 'thumbnail', hash )
-                    
-                except:
-                    
-                    is_an_orphan = True
-                    
-                
-                if is_an_orphan:
-                    
-                    orphan_thumbnails.append( path )
-                    
-                
-            
-            time.sleep( 2 )
-            
-            if move_location is None and len( orphan_paths ) > 0:
-                
-                status = 'found ' + HydrusData.ToHumanInt( len( orphan_paths ) ) + ' orphans, now deleting'
-                
-                job_key.SetVariable( 'popup_text_1', status )
-                
-                time.sleep( 5 )
-                
-                for path in orphan_paths:
-                    
-                    ( i_paused, should_quit ) = job_key.WaitIfNeeded()
-                    
-                    if should_quit:
-                        
-                        return
-                        
-                    
-                    HydrusData.Print( 'Deleting the orphan ' + path )
-                    
-                    status = 'deleting orphan files: ' + HydrusData.ConvertValueRangeToPrettyString( i + 1, len( orphan_paths ) )
-                    
-                    job_key.SetVariable( 'popup_text_1', status )
-                    
-                    ClientPaths.DeletePath( path )
-                    
-                
-            
-            if len( orphan_thumbnails ) > 0:
-                
-                status = 'found ' + HydrusData.ToHumanInt( len( orphan_thumbnails ) ) + ' orphan thumbnails, now deleting'
-                
-                job_key.SetVariable( 'popup_text_1', status )
-                
-                time.sleep( 5 )
-                
-                for ( i, path ) in enumerate( orphan_thumbnails ):
-                    
-                    ( i_paused, should_quit ) = job_key.WaitIfNeeded()
-                    
-                    if should_quit:
-                        
-                        return
-                        
-                    
-                    status = 'deleting orphan thumbnails: ' + HydrusData.ConvertValueRangeToPrettyString( i + 1, len( orphan_thumbnails ) )
-                    
-                    job_key.SetVariable( 'popup_text_1', status )
-                    
-                    HydrusData.Print( 'Deleting the orphan ' + path )
-                    
-                    ClientPaths.DeletePath( path, always_delete_fully = True )
-                    
-                
-            
-            if len( orphan_paths ) == 0 and len( orphan_thumbnails ) == 0:
-                
-                final_text = 'no orphans found!'
-                
-            else:
-                
-                final_text = HydrusData.ToHumanInt( len( orphan_paths ) ) + ' orphan files and ' + HydrusData.ToHumanInt( len( orphan_thumbnails ) ) + ' orphan thumbnails cleared!'
-                
-            
-            job_key.SetVariable( 'popup_text_1', final_text )
-            
-            HydrusData.Print( job_key.ToString() )
-            
-            job_key.Finish()
-            
-        
-    
-    def DelayedDeleteFiles( self, hashes ):
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'Delayed delete files call: ' + str( len( hashes ) ) )
-            
-        
-        time.sleep( 2 )
-        
-        big_pauser = HydrusData.BigJobPauser( period = 1 )
-        
-        for hashes_chunk in HydrusData.SplitIteratorIntoChunks( hashes, 10 ):
-            
-            with self._lock:
-                
-                for hash in hashes_chunk:
-                    
-                    try:
-                        
-                        ( path, mime ) = self._LookForFilePath( hash )
-                        
-                    except HydrusExceptions.FileMissingException:
-                        
-                        continue
-                        
-                    
-                    ClientPaths.DeletePath( path )
-                    
-                
-            
-            big_pauser.Pause()
-            
-        
-    
-    def DelayedDeleteThumbnails( self, hashes ):
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'Delayed delete thumbs call: ' + str( len( hashes ) ) )
-            
-        
-        time.sleep( 2 )
-        
-        big_pauser = HydrusData.BigJobPauser( period = 1 )
-        
-        for hashes_chunk in HydrusData.SplitIteratorIntoChunks( hashes, 20 ):
-            
-            with self._lock:
-                
-                for hash in hashes_chunk:
-                    
-                    path = self._GenerateExpectedThumbnailPath( hash )
-                    
-                    ClientPaths.DeletePath( path, always_delete_fully = True )
-                    
-                
-            
-            big_pauser.Pause()
-            
-        
-    
-    def GetFilePath( self, hash, mime = None, check_file_exists = True ):
-        
-        with self._lock:
-            
-            return self.LocklessGetFilePath( hash, mime = mime, check_file_exists = check_file_exists )
-            
-        
-    
-    def GetMissing( self ):
-        
-        return self._missing_locations
-        
-    
-    def ImportFile( self, file_import_job ):
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'New file import job!' )
-            
-        
-        ( pre_import_status, hash, note ) = file_import_job.GenerateHashAndStatus()
-        
-        if file_import_job.IsNewToDB():
-            
-            file_import_job.GenerateInfo()
-            
-            file_import_job.CheckIsGoodToImport()
-            
-            ( temp_path, thumbnail ) = file_import_job.GetTempPathAndThumbnail()
-            
-            mime = file_import_job.GetMime()
-            
-            with self._lock:
-                
-                self.LocklessAddFile( hash, mime, temp_path )
-                
-                if thumbnail is not None:
-                    
-                    self.LocklessAddThumbnailFromBytes( hash, thumbnail )
-                    
-                
-                ( import_status, note ) = self._controller.WriteSynchronous( 'import_file', file_import_job )
-                
-            
-        else:
-            
-            import_status = pre_import_status
-            
-        
-        file_import_job.PubsubContentUpdates()
-        
-        return ( import_status, hash, note )
-        
-    
-    def LocklessChangeFileExt( self, hash, old_mime, mime ):
-        
-        old_path = self._GenerateExpectedFilePath( hash, old_mime )
-        new_path = self._GenerateExpectedFilePath( hash, mime )
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'Changing file ext: ' + str( ( old_path, new_path ) ) )
-            
-        
-        if HydrusPaths.PathIsFree( old_path ):
-            
-            try:
-                
-                HydrusPaths.MergeFile( old_path, new_path )
-                
-                needed_to_copy_file = False
-                
-            except:
-                
-                HydrusPaths.MirrorFile( old_path, new_path )
-                
-                needed_to_copy_file = True
-                
-            
-        else:
-            
-            HydrusPaths.MirrorFile( old_path, new_path )
-            
-            needed_to_copy_file = True
-            
-        
-        return needed_to_copy_file
-        
-    
-    def LocklessGetFilePath( self, hash, mime = None, check_file_exists = True ):
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'File path request: ' + str( ( hash, mime ) ) )
-            
-        
-        if mime is None:
-            
-            ( path, mime ) = self._LookForFilePath( hash )
-            
-        else:
-            
-            path = self._GenerateExpectedFilePath( hash, mime )
-            
-            if check_file_exists and not os.path.exists( path ):
-                
-                try:
-                    
-                    # let's see if the file exists, but with the wrong ext!
-                    
-                    ( actual_path, old_mime ) = self._LookForFilePath( hash )
-                    
-                except HydrusExceptions.FileMissingException:
-                    
-                    raise HydrusExceptions.FileMissingException( 'No file found at path + ' + path + '!' )
-                    
-                
-                self.LocklessChangeFileExt( hash, old_mime, mime )
-                
-                # we have now fixed the path, it is good to return
-                
-            
-        
-        return path
-        
-    
-    def GetThumbnailPath( self, hash, mime = None ):
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'Thumbnail path request: ' + str( ( hash, mime ) ) )
-            
-        
-        with self._lock:
-            
-            path = self._GenerateExpectedThumbnailPath( hash )
-            
-            if not os.path.exists( path ):
-                
-                self._GenerateThumbnail( hash, mime )
-                
-                if not self._bad_error_occurred:
-                    
-                    self._bad_error_occurred = True
-                    
-                    HydrusData.ShowText( 'A thumbnail for a file, ' + hash.hex() + ', was missing. It has been regenerated from the original file, but this event could indicate hard drive corruption. Please check everything is ok. This error may be occuring for many files, but this message will only display once per boot. If you are recovering from a fractured database, you may wish to run \'database->regenerate->all thumbnails\'.' )
-                    
-                
-            
-            return path
-            
-        
-    
-    def LocklessHasThumbnail( self, hash ):
-        
-        path = self._GenerateExpectedThumbnailPath( hash )
-        
-        if HG.file_report_mode:
-            
-            HydrusData.ShowText( 'Thumbnail path test: ' + path )
-            
-        
-        return os.path.exists( path )
-        
-    
-    def Rebalance( self, job_key ):
-        
-        try:
-            
-            if self._bad_error_occurred:
-                
-                wx.MessageBox( 'A serious file error has previously occurred during this session, so further file moving will not be reattempted. Please restart the client before trying again.' )
-                
-                return
-                
-            
-            with self._lock:
-                
-                rebalance_tuple = self._GetRebalanceTuple()
-                
-                while rebalance_tuple is not None:
-                    
-                    if job_key.IsCancelled():
-                        
-                        break
-                        
-                    
-                    ( prefix, overweight_location, underweight_location ) = rebalance_tuple
-                    
-                    text = 'Moving \'' + prefix + '\' from ' + overweight_location + ' to ' + underweight_location
-                    
-                    HydrusData.Print( text )
-                    
-                    job_key.SetVariable( 'popup_text_1', text )
-                    
-                    # these two lines can cause a deadlock because the db sometimes calls stuff in here.
-                    self._controller.Write( 'relocate_client_files', prefix, overweight_location, underweight_location )
-                    
-                    self._Reinit()
-                    
-                    rebalance_tuple = self._GetRebalanceTuple()
-                    
-                
-                recover_tuple = self._GetRecoverTuple()
-                
-                while recover_tuple is not None:
-                    
-                    if job_key.IsCancelled():
-                        
-                        break
-                        
-                    
-                    ( prefix, recoverable_location, correct_location ) = recover_tuple
-                    
-                    text = 'Recovering \'' + prefix + '\' from ' + recoverable_location + ' to ' + correct_location
-                    
-                    HydrusData.Print( text )
-                    
-                    job_key.SetVariable( 'popup_text_1', text )
-                    
-                    recoverable_path = os.path.join( recoverable_location, prefix )
-                    correct_path = os.path.join( correct_location, prefix )
-                    
-                    HydrusPaths.MergeTree( recoverable_path, correct_path )
-                    
-                    recover_tuple = self._GetRecoverTuple()
-                    
-                
-            
-        finally:
-            
-            job_key.SetVariable( 'popup_text_1', 'done!' )
-            
-            job_key.Finish()
-            
-            job_key.Delete()
-            
-        
-    
-    def RebalanceWorkToDo( self ):
-        
-        with self._lock:
+        for bitmaps in self._unusued_bitmaps.values():
             
-            return self._GetRebalanceTuple() is not None
+            self._destroyee_bitmaps.extend( ( ( destroy_time, bitmap ) for bitmap in bitmaps ) )
             
         
-    
-    def RegenerateThumbnail( self, hash, mime ):
+        self._unusued_bitmaps = collections.defaultdict( list )
         
-        with self._lock:
-            
-            if HG.file_report_mode:
-                
-                HydrusData.ShowText( 'Thumbnail regen request: ' + str( ( hash, mime ) ) )
-                
-            
-            self._GenerateThumbnail( hash, mime )
-            
-        
-    
-    def RegenerateThumbnails( self, only_do_missing = False ):
-        
-        with self._lock:
-            
-            job_key = ClientThreading.JobKey( cancellable = True )
-            
-            job_key.SetVariable( 'popup_title', 'regenerating thumbnails' )
-            job_key.SetVariable( 'popup_text_1', 'creating directories' )
-            
-            self._controller.pub( 'modal_message', job_key )
-            
-            num_broken = 0
-            
-            for ( i, path ) in enumerate( self._IterateAllFilePaths() ):
-                
-                try:
-                    
-                    while job_key.IsPaused() or job_key.IsCancelled():
-                        
-                        time.sleep( 0.1 )
-                        
-                        if job_key.IsCancelled():
-                            
-                            job_key.SetVariable( 'popup_text_1', 'cancelled' )
-                            
-                            HydrusData.Print( job_key.ToString() )
-                            
-                            return
-                            
-                        
-                    
-                    job_key.SetVariable( 'popup_text_1', HydrusData.ToHumanInt( i ) + ' done' )
-                    
-                    ( base, filename ) = os.path.split( path )
-                    
-                    if '.' in filename:
-                        
-                        ( hash_encoded, ext ) = filename.split( '.', 1 )
-                        
-                    else:
-                        
-                        continue # it is an update file, so let's save us some ffmpeg lag and logspam
-                        
-                    
-                    hash = bytes.fromhex( hash_encoded )
-                    
-                    thumbnail_path = self._GenerateExpectedThumbnailPath( hash )
-                    
-                    if only_do_missing and os.path.exists( thumbnail_path ):
-                        
-                        continue
-                        
-                    
-                    mime = HydrusFileHandling.GetMime( path )
-                    
-                    if mime in HC.MIMES_WITH_THUMBNAILS:
-                        
-                        self._GenerateThumbnail( hash, mime )
-                        
-                    
-                except:
-                    
-                    HydrusData.Print( path )
-                    HydrusData.Print( traceback.format_exc() )
-                    
-                    num_broken += 1
-                    
-                
-            
-            if num_broken > 0:
-                
-                job_key.SetVariable( 'popup_text_1', 'done! ' + HydrusData.ToHumanInt( num_broken ) + ' files caused errors, which have been written to the log.' )
-                
-            else:
-                
-                job_key.SetVariable( 'popup_text_1', 'done!' )
-                
-            
-            HydrusData.Print( job_key.ToString() )
-            
-            job_key.Finish()
-            
+        self._total_unused_memory_size = 0
         
-    
-    def SaveThumbnail( self, hash, thumbnail_bytes ):
-        
-        with self._lock:
-            
-            self._SaveThumbnail( hash, thumbnail_bytes )
-            
+        self._ScheduleDestruction()
         
     
 class DataCache( object ):
@@ -1489,6 +596,75 @@ class FileViewingStatsManager( object ):
         self._my_flush_job = self._controller.CallRepeating( 5, 60, self.REPEATINGFlush )
         
     
+    def _GenerateViewsRow( self, viewtype, viewtime_delta ):
+        
+        new_options = HG.client_controller.new_options
+        
+        preview_views_delta = 0
+        preview_viewtime_delta = 0
+        media_views_delta = 0
+        media_viewtime_delta = 0
+        
+        if viewtype == 'preview':
+            
+            preview_min = new_options.GetNoneableInteger( 'file_viewing_statistics_preview_min_time' )
+            preview_max = new_options.GetNoneableInteger( 'file_viewing_statistics_preview_max_time' )
+            
+            if preview_max is not None:
+                
+                viewtime_delta = min( viewtime_delta, preview_max )
+                
+            
+            if preview_min is None or viewtime_delta >= preview_min:
+                
+                preview_views_delta = 1
+                preview_viewtime_delta = viewtime_delta
+                
+            
+        elif viewtype in ( 'media', 'media_duplicates_filter' ):
+            
+            do_it = True
+            
+            if viewtime_delta == 'media_duplicates_filter' and not new_options.GetBoolean( 'file_viewing_statistics_active_on_dupe_filter' ):
+                
+                do_it = False
+                
+            
+            if do_it:
+                
+                media_min = new_options.GetNoneableInteger( 'file_viewing_statistics_media_min_time' )
+                media_max = new_options.GetNoneableInteger( 'file_viewing_statistics_media_max_time' )
+                
+                if media_max is not None:
+                    
+                    viewtime_delta = min( viewtime_delta, media_max )
+                    
+                
+                if media_min is None or viewtime_delta >= media_min:
+                    
+                    media_views_delta = 1
+                    media_viewtime_delta = min( viewtime_delta, media_max )
+                    
+                
+            
+        
+        return ( preview_views_delta, preview_viewtime_delta, media_views_delta, media_viewtime_delta )
+        
+    
+    def _PubSubRow( self, hash, row ):
+        
+        ( preview_views_delta, preview_viewtime_delta, media_views_delta, media_viewtime_delta ) = row
+        
+        pubsub_row = ( hash, preview_views_delta, preview_viewtime_delta, media_views_delta, media_viewtime_delta )
+        
+        content_update = HydrusData.ContentUpdate( HC.CONTENT_TYPE_FILE_VIEWING_STATS, HC.CONTENT_UPDATE_ADD, pubsub_row )
+        
+        service_keys_to_content_updates = { CC.COMBINED_LOCAL_FILE_SERVICE_KEY : [ content_update ] }
+        
+        HG.client_controller.pub( 'content_updates_data', service_keys_to_content_updates )
+        HG.client_controller.pub( 'content_updates_gui', service_keys_to_content_updates )
+        
+    
     def REPEATINGFlush( self ):
         
         self.Flush()
@@ -1521,7 +697,7 @@ class FileViewingStatsManager( object ):
             
         
     
-    def Update( self, viewtype, hash, views_delta, viewtime_delta ):
+    def FinishViewing( self, viewtype, hash, viewtime_delta ):
         
         if not HG.client_controller.new_options.GetBoolean( 'file_viewing_statistics_active' ):
             
@@ -1530,27 +706,15 @@ class FileViewingStatsManager( object ):
         
         with self._lock:
             
-            preview_views_delta = 0
-            preview_viewtime_delta = 0
-            media_views_delta = 0
-            media_viewtime_delta = 0
-            
-            if viewtype == 'preview':
-                
-                preview_views_delta = views_delta
-                preview_viewtime_delta = viewtime_delta
-                
-            elif viewtype == 'media':
-                
-                media_views_delta = views_delta
-                media_viewtime_delta = viewtime_delta
-                
+            row = self._GenerateViewsRow( viewtype, viewtime_delta )
             
             if hash not in self._pending_updates:
                 
-                self._pending_updates[ hash ] = ( preview_views_delta, preview_viewtime_delta, media_views_delta, media_viewtime_delta )
+                self._pending_updates[ hash ] = row
                 
             else:
+                
+                ( preview_views_delta, preview_viewtime_delta, media_views_delta, media_viewtime_delta ) = row
                 
                 ( existing_preview_views_delta, existing_preview_viewtime_delta, existing_media_views_delta, existing_media_viewtime_delta ) = self._pending_updates[ hash ]
                 
@@ -1558,14 +722,7 @@ class FileViewingStatsManager( object ):
                 
             
         
-        row = ( hash, preview_views_delta, preview_viewtime_delta, media_views_delta, media_viewtime_delta )
-        
-        content_update = HydrusData.ContentUpdate( HC.CONTENT_TYPE_FILE_VIEWING_STATS, HC.CONTENT_UPDATE_ADD, row )
-        
-        service_keys_to_content_updates = { CC.COMBINED_LOCAL_FILE_SERVICE_KEY : [ content_update ] }
-        
-        HG.client_controller.pub( 'content_updates_data', service_keys_to_content_updates )
-        HG.client_controller.pub( 'content_updates_gui', service_keys_to_content_updates )
+        self._PubSubRow( hash, row )
         
 
 class LocalBooruCache( object ):
@@ -1747,6 +904,22 @@ class MediaResultCache( object ):
                 
                 self._hash_ids_to_media_results[ hash_id ] = media_result
                 self._hashes_to_media_results[ hash ] = media_result
+                
+            
+        
+    
+    def DropMediaResult( self, hash_id, hash ):
+        
+        with self._lock:
+            
+            if hash_id in self._hash_ids_to_media_results:
+                
+                del self._hash_ids_to_media_results[ hash_id ]
+                
+            
+            if hash in self._hashes_to_media_results:
+                
+                del self._hashes_to_media_results[ hash ]
                 
             
         
@@ -2270,54 +1443,6 @@ class ServicesManager( object ):
             
         
     
-class ShortcutsManager( object ):
-    
-    def __init__( self, controller ):
-        
-        self._controller = controller
-        
-        self._shortcuts = {}
-        
-        self.RefreshShortcuts()
-        
-        self._controller.sub( self, 'RefreshShortcuts', 'new_shortcuts' )
-        
-    
-    def GetCommand( self, shortcuts_names, shortcut ):
-        
-        for name in shortcuts_names:
-            
-            if name in self._shortcuts:
-                
-                command = self._shortcuts[ name ].GetCommand( shortcut )
-                
-                if command is not None:
-                    
-                    if HG.gui_report_mode:
-                        
-                        HydrusData.ShowText( 'command matched: ' + repr( command ) )
-                        
-                    
-                    return command
-                    
-                
-            
-        
-        return None
-        
-    
-    def RefreshShortcuts( self ):
-        
-        self._shortcuts = {}
-        
-        all_shortcuts = HG.client_controller.Read( 'serialisable_named', HydrusSerialisable.SERIALISABLE_TYPE_SHORTCUTS )
-        
-        for shortcuts in all_shortcuts:
-            
-            self._shortcuts[ shortcuts.GetName() ] = shortcuts
-            
-        
-    
 class TagCensorshipManager( object ):
     
     def __init__( self, controller ):
@@ -2478,17 +1603,20 @@ class TagParentsManager( object ):
         
         # first collapse siblings
         
-        sibling_manager = self._controller.GetManager( 'tag_siblings' )
+        siblings_manager = self._controller.tag_siblings_manager
         
         collapsed_service_keys_to_statuses_to_pairs = collections.defaultdict( HydrusData.default_dict_set )
         
-        for ( service_key, statuses_to_pairs ) in list(service_keys_to_statuses_to_pairs.items()):
+        for ( service_key, statuses_to_pairs ) in service_keys_to_statuses_to_pairs.items():
             
-            if service_key == CC.COMBINED_TAG_SERVICE_KEY: continue
-            
-            for ( status, pairs ) in list(statuses_to_pairs.items()):
+            if service_key == CC.COMBINED_TAG_SERVICE_KEY:
                 
-                pairs = sibling_manager.CollapsePairs( service_key, pairs )
+                continue
+                
+            
+            for ( status, pairs ) in statuses_to_pairs.items():
+                
+                pairs = siblings_manager.CollapsePairs( service_key, pairs )
                 
                 collapsed_service_keys_to_statuses_to_pairs[ service_key ][ status ] = pairs
                 
@@ -2509,7 +1637,7 @@ class TagParentsManager( object ):
         
         combined_pairs_flat = set()
         
-        for pairs_flat in list(service_keys_to_pairs_flat.values()):
+        for pairs_flat in service_keys_to_pairs_flat.values():
             
             combined_pairs_flat.update( pairs_flat )
             
@@ -2523,9 +1651,9 @@ class TagParentsManager( object ):
         self._service_keys_to_children_to_parents = BuildServiceKeysToChildrenToParents( service_keys_to_simple_children_to_parents )
         
     
-    def ExpandPredicates( self, service_key, predicates ):
+    def ExpandPredicates( self, service_key, predicates, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_parents_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_parents_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2557,9 +1685,9 @@ class TagParentsManager( object ):
             
         
     
-    def ExpandTags( self, service_key, tags ):
+    def ExpandTags( self, service_key, tags, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_parents_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_parents_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2577,9 +1705,9 @@ class TagParentsManager( object ):
             
         
     
-    def GetParents( self, service_key, tag ):
+    def GetParents( self, service_key, tag, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_parents_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_parents_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2698,9 +1826,9 @@ class TagSiblingsManager( object ):
         self._controller.pub( 'new_siblings_gui' )
         
     
-    def CollapsePredicates( self, service_key, predicates ):
+    def CollapsePredicates( self, service_key, predicates, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2755,9 +1883,9 @@ class TagSiblingsManager( object ):
             
         
     
-    def CollapsePairs( self, service_key, pairs ):
+    def CollapsePairs( self, service_key, pairs, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2787,9 +1915,9 @@ class TagSiblingsManager( object ):
             
         
     
-    def CollapseStatusesToTags( self, service_key, statuses_to_tags ):
+    def CollapseStatusesToTags( self, service_key, statuses_to_tags, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2809,9 +1937,9 @@ class TagSiblingsManager( object ):
             
         
     
-    def CollapseTag( self, service_key, tag ):
+    def CollapseTag( self, service_key, tag, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2831,9 +1959,9 @@ class TagSiblingsManager( object ):
             
         
     
-    def CollapseTags( self, service_key, tags ):
+    def CollapseTags( self, service_key, tags, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2844,9 +1972,9 @@ class TagSiblingsManager( object ):
             
         
     
-    def CollapseTagsToCount( self, service_key, tags_to_count ):
+    def CollapseTagsToCount( self, service_key, tags_to_count, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2871,9 +1999,9 @@ class TagSiblingsManager( object ):
             
         
     
-    def GetSibling( self, service_key, tag ):
+    def GetSibling( self, service_key, tag, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2893,9 +2021,9 @@ class TagSiblingsManager( object ):
             
         
     
-    def GetAllSiblings( self, service_key, tag ):
+    def GetAllSiblings( self, service_key, tag, service_strict = False ):
         
-        if self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
+        if not service_strict and self._controller.new_options.GetBoolean( 'apply_all_siblings_to_all_services' ):
             
             service_key = CC.COMBINED_TAG_SERVICE_KEY
             
@@ -2967,12 +2095,19 @@ class ThumbnailCache( object ):
         
         self._data_cache = DataCache( self._controller, cache_size, timeout = cache_timeout )
         
+        self._magic_mime_thumbnail_ease_score_lookup = {}
+        
+        self._InitialiseMagicMimeScores()
+        
         self._lock = threading.Lock()
         
         self._thumbnail_error_occurred = False
         
         self._waterfall_queue_quick = set()
-        self._waterfall_queue_random = []
+        self._waterfall_queue = []
+        
+        self._delayed_regeneration_queue_quick = set()
+        self._delayed_regeneration_queue = []
         
         self._waterfall_event = threading.Event()
         
@@ -2982,7 +2117,7 @@ class ThumbnailCache( object ):
         
         self._controller.CallToThreadLongRunning( self.DAEMONWaterfall )
         
-        self._controller.sub( self, 'Clear', 'thumbnail_resize' )
+        self._controller.sub( self, 'Clear', 'clear_all_thumbnails' )
         self._controller.sub( self, 'ClearThumbnails', 'clear_thumbnails' )
         
     
@@ -2993,13 +2128,11 @@ class ThumbnailCache( object ):
         hash = display_media.GetHash()
         mime = display_media.GetMime()
         
-        ( media_width, media_height ) = display_media.GetResolution()
-        
         locations_manager = display_media.GetLocationsManager()
         
         try:
             
-            path = self._controller.client_files_manager.GetThumbnailPath( hash, mime )
+            path = self._controller.client_files_manager.GetThumbnailPath( display_media )
             
         except HydrusExceptions.FileMissingException as e:
             
@@ -3015,14 +2148,14 @@ class ThumbnailCache( object ):
         
         try:
             
-            numpy_image = ClientImageHandling.GenerateNumpyImage( path, mime )
+            numpy_image = ClientImageHandling.GenerateNumPyImage( path, mime )
             
         except Exception as e:
             
             try:
                 
                 # file is malformed, let's force a regen
-                self._controller.client_files_manager.RegenerateThumbnail( hash, mime )
+                self._controller.files_maintenance_manager.RunJobImmediately( [ display_media ], ClientFiles.REGENERATE_FILE_DATA_JOB_FORCE_THUMBNAIL, pub_job_key = False )
                 
             except Exception as e:
                 
@@ -3035,7 +2168,7 @@ class ThumbnailCache( object ):
             
             try:
                 
-                numpy_image = ClientImageHandling.GenerateNumpyImage( path, mime )
+                numpy_image = ClientImageHandling.GenerateNumPyImage( path, mime )
                 
             except Exception as e:
                 
@@ -3047,11 +2180,17 @@ class ThumbnailCache( object ):
                 
             
         
-        ( current_width, current_height ) = ClientImageHandling.GetNumPyImageResolution( numpy_image )
+        ( current_width, current_height ) = HydrusImageHandling.GetResolutionNumPy( numpy_image )
+        
+        ( media_width, media_height ) = display_media.GetResolution()
         
         ( expected_width, expected_height ) = HydrusImageHandling.GetThumbnailResolution( ( media_width, media_height ), bounding_dimensions )
         
-        correct_size = current_width == expected_width and current_height == expected_height
+        exactly_as_expected = current_width == expected_width and current_height == expected_height
+        
+        rotation_exception = current_width == expected_height and current_height == expected_width
+        
+        correct_size = exactly_as_expected or rotation_exception
         
         if not correct_size:
             
@@ -3068,7 +2207,7 @@ class ThumbnailCache( object ):
                 
                 # this is _resize_, not _thumbnail_, because we already know the dimensions we want
                 # and in some edge cases, doing getthumbresolution on existing thumb dimensions results in float/int conversion imprecision and you get 90px/91px regen cycles that never get fixed
-                numpy_image = ClientImageHandling.ResizeNumpyImage( numpy_image, ( expected_width, expected_height ) )
+                numpy_image = HydrusImageHandling.ResizeNumPyImage( numpy_image, ( expected_width, expected_height ) )
                 
                 if locations_manager.IsLocal():
                     
@@ -3083,11 +2222,11 @@ class ThumbnailCache( object ):
                         
                         try:
                             
-                            thumbnail_bytes = ClientImageHandling.GenerateBytesFromCV( numpy_image, mime )
+                            thumbnail_bytes = HydrusImageHandling.GenerateThumbnailBytesNumPy( numpy_image, mime )
                             
                         except HydrusExceptions.CantRenderWithCVException:
                             
-                            thumbnail_bytes = HydrusFileHandling.GenerateThumbnailBytesFromStaticImagePathPIL( path, bounding_dimensions, mime )
+                            thumbnail_bytes = HydrusImageHandling.GenerateThumbnailBytesFromStaticImagePath( path, ( expected_width, expected_height ), mime )
                             
                         
                     except:
@@ -3101,7 +2240,9 @@ class ThumbnailCache( object ):
                     
                     try:
                         
-                        self._controller.client_files_manager.SaveThumbnail( hash, thumbnail_bytes )
+                        self._controller.client_files_manager.AddThumbnailFromBytes( hash, thumbnail_bytes, silent = True )
+                        
+                        self._controller.files_maintenance_manager.ClearJobs( { hash }, ClientFiles.REGENERATE_FILE_DATA_JOB_REFIT_THUMBNAIL )
                         
                     except:
                         
@@ -3117,11 +2258,11 @@ class ThumbnailCache( object ):
                 
                 # the thumb we have is either too small or completely messed up due to a previous ratio misparse
                 
-                media_is_same_size_as_thumb = current_width == media_width and current_height == media_height
+                media_is_same_size_as_current_thumb = current_width == media_width and current_height == media_height
                 
-                if media_is_same_size_as_thumb:
+                if media_is_same_size_as_current_thumb:
                     
-                    # the thumb is smaller than desired, but this is a 32x32 pixilart image or whatever, so no need to scale
+                    # the thumb is smaller than expected, but this is a 32x32 pixilart image or whatever, so no need to scale
                     
                     if HG.file_report_mode:
                         
@@ -3131,29 +2272,28 @@ class ThumbnailCache( object ):
                     pass
                     
                 else:
-                
+                    
+                    numpy_image = HydrusImageHandling.ResizeNumPyImage( numpy_image, ( expected_width, expected_height ) )
+                    
                     if locations_manager.IsLocal():
                         
                         # we have the master file, so we should regen the thumb from source
                         
                         if HG.file_report_mode:
                             
-                            HydrusData.ShowText( 'Thumbnail {} too small, regenerating from source.'.format( hash.hex() ) )
+                            HydrusData.ShowText( 'Thumbnail {} too small, scheduling regeneration from source.'.format( hash.hex() ) )
                             
                         
-                        try:
+                        delayed_item = display_media.GetMediaResult()
+                        
+                        with self._lock:
                             
-                            self._controller.client_files_manager.RegenerateThumbnail( hash, mime )
-                            
-                            numpy_image = ClientImageHandling.GenerateNumpyImage( path, mime )
-                            
-                        except:
-                            
-                            summary = 'The thumbnail for file {} was too small, but the attempt to regenerate it or load the new file back failed.'.format( hash.hex() )
-                            
-                            self._HandleThumbnailException( e, summary )
-                            
-                            return self._special_thumbs[ 'hydrus' ]
+                            if delayed_item not in self._delayed_regeneration_queue_quick:
+                                
+                                self._delayed_regeneration_queue_quick.add( delayed_item )
+                                
+                                self._delayed_regeneration_queue.append( delayed_item )
+                                
                             
                         
                     else:
@@ -3162,10 +2302,8 @@ class ThumbnailCache( object ):
                         
                         if HG.file_report_mode:
                             
-                            HydrusData.ShowText( 'Thumbnail {} too small, scaling up due to no local source.'.format( hash.hex() ) )
+                            HydrusData.ShowText( 'Thumbnail {} was too small, only scaling up due to no local source.'.format( hash.hex() ) )
                             
-                        
-                        numpy_image = ClientImageHandling.ResizeNumpyImage( numpy_image, ( expected_width, expected_height ) )
                         
                     
                 
@@ -3196,20 +2334,87 @@ class ThumbnailCache( object ):
             
         
     
-    def _RecalcWaterfallQueueRandom( self ):
+    def _InitialiseMagicMimeScores( self ):
+        
+        # let's render our thumbs in order of ease of regeneration, so we rush what we can to screen as fast as possible and leave big vids until the end
+        
+        for mime in HC.ALLOWED_MIMES:
+            
+            self._magic_mime_thumbnail_ease_score_lookup[ mime ] = 5
+            
+        
+        # default filetype thumbs are easiest
+        
+        self._magic_mime_thumbnail_ease_score_lookup[ None ] = 0
+        self._magic_mime_thumbnail_ease_score_lookup[ HC.APPLICATION_UNKNOWN ] = 0
+        
+        for mime in HC.APPLICATIONS:
+            
+            self._magic_mime_thumbnail_ease_score_lookup[ mime ] = 0
+            
+        
+        for mime in HC.AUDIO:
+            
+            self._magic_mime_thumbnail_ease_score_lookup[ mime ] = 0
+            
+        
+        # images a little trickier
+        
+        for mime in HC.IMAGES:
+            
+            self._magic_mime_thumbnail_ease_score_lookup[ mime ] = 1
+            
+        
+        # override because these are a bit more
+        self._magic_mime_thumbnail_ease_score_lookup[ HC.IMAGE_APNG ] = 2
+        self._magic_mime_thumbnail_ease_score_lookup[ HC.IMAGE_GIF ] = 2
+        
+        # ffmpeg hellzone
+        
+        for mime in HC.VIDEO:
+            
+            self._magic_mime_thumbnail_ease_score_lookup[ mime ] = 3
+            
+        
+    
+    def _RecalcQueues( self ):
         
         # here we sort by the hash since this is both breddy random and more likely to access faster on a well defragged hard drive!
+        # and now with the magic mime order
         
-        def sort_by_hash_key( item ):
+        def sort_waterfall( item ):
             
             ( page_key, media ) = item
             
-            return media.GetDisplayMedia().GetHash()
+            display_media = media.GetDisplayMedia()
+            
+            magic_score = self._magic_mime_thumbnail_ease_score_lookup[ display_media.GetMime() ]
+            hash = display_media.GetHash()
+            
+            return ( magic_score, hash )
             
         
-        self._waterfall_queue_random = list( self._waterfall_queue_quick )
+        self._waterfall_queue = list( self._waterfall_queue_quick )
         
-        self._waterfall_queue_random.sort( key = sort_by_hash_key )
+        # we pop off the end, so reverse
+        self._waterfall_queue.sort( key = sort_waterfall, reverse = True )
+        
+        def sort_regen( item ):
+            
+            media_result = item
+            
+            hash = media_result.GetHash()
+            mime = media_result.GetMime()
+            
+            magic_score = self._magic_mime_thumbnail_ease_score_lookup[ mime ]
+            
+            return ( magic_score, hash )
+            
+        
+        self._delayed_regeneration_queue = list( self._delayed_regeneration_queue_quick )
+        
+        # we pop off the end, so reverse
+        self._delayed_regeneration_queue.sort( key = sort_regen, reverse = True )
         
     
     def CancelWaterfall( self, page_key, medias ):
@@ -3218,7 +2423,18 @@ class ThumbnailCache( object ):
             
             self._waterfall_queue_quick.difference_update( ( ( page_key, media ) for media in medias ) )
             
-            self._RecalcWaterfallQueueRandom()
+            cancelled_media_results = { media.GetDisplayMedia().GetMediaResult() for media in medias }
+            
+            outstanding_delayed_hashes = { media_result.GetHash() for media_result in cancelled_media_results if media_result in self._delayed_regeneration_queue_quick }
+            
+            if len( outstanding_delayed_hashes ) > 0:
+                
+                self._controller.files_maintenance_manager.ScheduleJob( outstanding_delayed_hashes, ClientFiles.REGENERATE_FILE_DATA_JOB_FORCE_THUMBNAIL )
+                
+            
+            self._delayed_regeneration_queue_quick.difference_update( cancelled_media_results )
+            
+            self._RecalcQueues()
             
         
     
@@ -3232,32 +2448,31 @@ class ThumbnailCache( object ):
             
             names = [ 'hydrus', 'pdf', 'psd', 'audio', 'video', 'zip' ]
             
-            ( os_file_handle, temp_path ) = ClientPaths.GetTempPath()
+            bounding_dimensions = self._controller.options[ 'thumbnail_dimensions' ]
             
-            try:
+            for name in names:
                 
-                for name in names:
-                    
-                    path = os.path.join( HC.STATIC_DIR, name + '.png' )
-                    
-                    bounding_dimensions = self._controller.options[ 'thumbnail_dimensions' ]
-                    
-                    thumbnail_bytes = HydrusFileHandling.GenerateThumbnailBytesFromStaticImagePath( path, bounding_dimensions, HC.IMAGE_PNG )
-                    
-                    with open( temp_path, 'wb' ) as f:
-                        
-                        f.write( thumbnail_bytes )
-                        
-                    
-                    hydrus_bitmap = ClientRendering.GenerateHydrusBitmap( temp_path, HC.IMAGE_PNG )
-                    
-                    self._special_thumbs[ name ] = hydrus_bitmap
-                    
+                path = os.path.join( HC.STATIC_DIR, name + '.png' )
                 
-            finally:
+                numpy_image = ClientImageHandling.GenerateNumPyImage( path, HC.IMAGE_PNG )
                 
-                HydrusPaths.CleanUpTempPath( os_file_handle, temp_path )
+                numpy_image_resolution = HydrusImageHandling.GetResolutionNumPy( numpy_image )
                 
+                target_resolution = HydrusImageHandling.GetThumbnailResolution( numpy_image_resolution, bounding_dimensions )
+                
+                numpy_image = HydrusImageHandling.ResizeNumPyImage( numpy_image, target_resolution )
+                
+                hydrus_bitmap = ClientRendering.GenerateHydrusBitmapFromNumPyImage( numpy_image )
+                
+                self._special_thumbs[ name ] = hydrus_bitmap
+                
+            
+            self._controller.pub( 'redraw_all_thumbnails' )
+            
+            self._waterfall_queue_quick = set()
+            self._delayed_regeneration_queue_quick = set()
+            
+            self._RecalcQueues()
             
         
     
@@ -3276,7 +2491,7 @@ class ThumbnailCache( object ):
         
         with self._lock:
             
-            return len( self._waterfall_queue_random ) > 0
+            return len( self._waterfall_queue ) > 0
             
         
     
@@ -3363,7 +2578,7 @@ class ThumbnailCache( object ):
             
             self._waterfall_queue_quick.update( ( ( page_key, media ) for media in medias ) )
             
-            self._RecalcWaterfallQueueRandom()
+            self._RecalcQueues()
             
         
         self._waterfall_event.set()
@@ -3375,9 +2590,11 @@ class ThumbnailCache( object ):
         
         while not HydrusThreading.IsThreadShuttingDown():
             
+            time.sleep( 0.00001 )
+            
             with self._lock:
                 
-                do_wait = len( self._waterfall_queue_random ) == 0
+                do_wait = len( self._waterfall_queue ) == 0 and len( self._delayed_regeneration_queue ) == 0
                 
             
             if do_wait:
@@ -3398,12 +2615,12 @@ class ThumbnailCache( object ):
                 
                 with self._lock:
                     
-                    if len( self._waterfall_queue_random ) == 0:
+                    if len( self._waterfall_queue ) == 0:
                         
                         break
                         
                     
-                    result = self._waterfall_queue_random.pop()
+                    result = self._waterfall_queue.pop()
                     
                     self._waterfall_queue_quick.discard( result )
                     
@@ -3415,12 +2632,54 @@ class ThumbnailCache( object ):
                 page_keys_to_rendered_medias[ page_key ].append( media )
                 
             
-            for ( page_key, rendered_medias ) in page_keys_to_rendered_medias.items():
+            if len( page_keys_to_rendered_medias ) > 0:
                 
-                self._controller.pub( 'waterfall_thumbnails', page_key, rendered_medias )
+                for ( page_key, rendered_medias ) in page_keys_to_rendered_medias.items():
+                    
+                    self._controller.pub( 'waterfall_thumbnails', page_key, rendered_medias )
+                    
+                
+                time.sleep( 0.00001 )
                 
             
-            time.sleep( 0.00001 )
+            # now we will do regen if appropriate
+            
+            with self._lock:
+                
+                # got more important work or no work to do
+                if len( self._waterfall_queue ) > 0 or len( self._delayed_regeneration_queue ) == 0 or HG.client_controller.CurrentlyPubSubbing():
+                    
+                    continue
+                    
+                
+                media_result = self._delayed_regeneration_queue.pop()
+                
+                self._delayed_regeneration_queue_quick.discard( media_result )
+                
+            
+            if HG.file_report_mode:
+                
+                hash = media_result.GetHash()
+                
+                HydrusData.ShowText( 'Thumbnail {} now regenerating from source.'.format( hash.hex() ) )
+                
+            
+            try:
+                
+                self._controller.files_maintenance_manager.RunJobImmediately( [ media_result ], ClientFiles.REGENERATE_FILE_DATA_JOB_FORCE_THUMBNAIL, pub_job_key = False )
+                
+            except HydrusExceptions.FileMissingException:
+                
+                pass
+                
+            except Exception as e:
+                
+                hash = media_result.GetHash()
+                
+                summary = 'The thumbnail for file {} was incorrect, but a later attempt to regenerate it or load the new file back failed.'.format( hash.hex() )
+                
+                self._HandleThumbnailException( e, summary )
+                
             
         
     
@@ -3505,14 +2764,7 @@ class UndoManager( object ):
                     elif action == HC.CONTENT_UPDATE_INBOX: inverted_action = HC.CONTENT_UPDATE_ARCHIVE
                     elif action == HC.CONTENT_UPDATE_PEND: inverted_action = HC.CONTENT_UPDATE_RESCIND_PEND
                     elif action == HC.CONTENT_UPDATE_RESCIND_PEND: inverted_action = HC.CONTENT_UPDATE_PEND
-                    elif action == HC.CONTENT_UPDATE_PETITION:
-                        
-                        inverted_action = HC.CONTENT_UPDATE_RESCIND_PETITION
-                        
-                        ( hashes, reason ) = row
-                        
-                        inverted_row = hashes
-                        
+                    elif action == HC.CONTENT_UPDATE_PETITION: inverted_action = HC.CONTENT_UPDATE_RESCIND_PETITION
                     
                 elif data_type == HC.CONTENT_TYPE_MAPPINGS:
                     
@@ -3520,14 +2772,7 @@ class UndoManager( object ):
                     elif action == HC.CONTENT_UPDATE_DELETE: inverted_action = HC.CONTENT_UPDATE_ADD
                     elif action == HC.CONTENT_UPDATE_PEND: inverted_action = HC.CONTENT_UPDATE_RESCIND_PEND
                     elif action == HC.CONTENT_UPDATE_RESCIND_PEND: inverted_action = HC.CONTENT_UPDATE_PEND
-                    elif action == HC.CONTENT_UPDATE_PETITION:
-                        
-                        inverted_action = HC.CONTENT_UPDATE_RESCIND_PETITION
-                        
-                        ( tag, hashes, reason ) = row
-                        
-                        inverted_row = ( tag, hashes )
-                        
+                    elif action == HC.CONTENT_UPDATE_PETITION: inverted_action = HC.CONTENT_UPDATE_RESCIND_PETITION
                     
                 
                 inverted_content_update = HydrusData.ContentUpdate( data_type, inverted_action, inverted_row )

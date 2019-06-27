@@ -10,6 +10,7 @@ from . import HydrusConstants as HC
 from . import HydrusData
 from . import HydrusExceptions
 from . import HydrusGlobals as HG
+from . import HydrusNATPunch
 from . import HydrusNetwork
 from . import HydrusNetworking
 from . import HydrusSerialisable
@@ -61,6 +62,13 @@ def GenerateDefaultServiceDictionary( service_type ):
         dictionary[ 'upnp_port' ] = None
         dictionary[ 'bandwidth_tracker' ] = HydrusNetworking.BandwidthTracker()
         dictionary[ 'bandwidth_rules' ] = HydrusNetworking.BandwidthRules()
+        
+        dictionary[ 'support_cors' ] = False
+        dictionary[ 'log_requests' ] = False
+        
+        dictionary[ 'external_scheme_override' ] = None
+        dictionary[ 'external_host_override' ] = None
+        dictionary[ 'external_port_override' ] = None
         
         if service_type == HC.LOCAL_BOORU:
             
@@ -332,8 +340,13 @@ class ServiceLocalServerService( Service ):
         dictionary[ 'port' ] = self._port
         dictionary[ 'upnp_port' ] = self._upnp_port
         dictionary[ 'allow_non_local_connections' ] = self._allow_non_local_connections
+        dictionary[ 'support_cors' ] = self._support_cors
+        dictionary[ 'log_requests' ] = self._log_requests
         dictionary[ 'bandwidth_tracker' ] = self._bandwidth_tracker
         dictionary[ 'bandwidth_rules' ] = self._bandwidth_rules
+        dictionary[ 'external_scheme_override' ] = self._external_scheme_override
+        dictionary[ 'external_host_override' ] = self._external_host_override
+        dictionary[ 'external_port_override' ] = self._external_port_override
         
         return dictionary
         
@@ -345,8 +358,13 @@ class ServiceLocalServerService( Service ):
         self._port = dictionary[ 'port' ]
         self._upnp_port = dictionary[ 'upnp_port' ]
         self._allow_non_local_connections = dictionary[ 'allow_non_local_connections' ]
+        self._support_cors = dictionary[ 'support_cors' ]
+        self._log_requests = dictionary[ 'log_requests' ]
         self._bandwidth_tracker = dictionary[ 'bandwidth_tracker' ]
         self._bandwidth_rules = dictionary[ 'bandwidth_rules' ]
+        self._external_scheme_override = dictionary[ 'external_scheme_override' ]
+        self._external_host_override = dictionary[ 'external_host_override' ]
+        self._external_port_override = dictionary[ 'external_port_override' ]
         
         # this should support the same serverservice interface so we can just toss it at the regular serverengine and all the bandwidth will work ok
         
@@ -383,6 +401,14 @@ class ServiceLocalServerService( Service ):
             
         
     
+    def LogsRequests( self ):
+        
+        with self._lock:
+            
+            return self._log_requests
+            
+        
+    
     def ReportDataUsed( self, num_bytes ):
         
         with self._lock:
@@ -399,9 +425,61 @@ class ServiceLocalServerService( Service ):
             
         
     
+    def SupportsCORS( self ):
+        
+        with self._lock:
+            
+            return self._support_cors
+            
+        
+    
 class ServiceLocalBooru( ServiceLocalServerService ):
     
-    pass
+    def GetExternalShareURL( self, share_key ):
+        
+        if self._external_scheme_override is None:
+            
+            scheme = 'http'
+            
+        else:
+            
+            scheme = self._external_scheme_override
+            
+        
+        if self._external_host_override is None:
+            
+            host = HydrusNATPunch.GetExternalIP()
+            
+        else:
+            
+            host = self._external_host_override
+            
+        
+        if self._external_port_override is None:
+            
+            if self._upnp_port is None:
+                
+                port = ':' + self._port
+                
+            else:
+                
+                port = ':' + self._upnp_port
+                
+            
+        else:
+            
+            port = self._external_port_override
+            
+            if port != '':
+                
+                port = ':' + port
+                
+            
+        
+        url = '{}://{}{}/gallery?share_key={}'.format( scheme, host, port, share_key.hex() )
+        
+        return url
+        
     
 class ServiceClientAPI( ServiceLocalServerService ):
     
@@ -872,8 +950,6 @@ class ServiceRestricted( ServiceRemote ):
                 network_job.AddAdditionalHeader( 'Content-Type', HC.mime_string_lookup[ content_type ] )
                 
             
-            network_job.SetDeathTime( HydrusData.GetNow() + 30 ) # we don't want to wait on logins during shutdown and so on
-            
             HG.client_controller.network_engine.AddJob( network_job )
             
             network_job.WaitUntilDone()
@@ -1212,7 +1288,7 @@ class ServiceRepository( ServiceRestricted ):
             
         
     
-    def Sync( self, only_process_when_idle = False, stop_time = None ):
+    def Sync( self, maintenance_mode = HC.MAINTENANCE_IDLE, stop_time = None ):
         
         with self._sync_lock: # to stop sync_now button clicks from stomping over the regular daemon and vice versa
             
@@ -1222,7 +1298,7 @@ class ServiceRepository( ServiceRestricted ):
                 
                 self.SyncDownloadUpdates( stop_time )
                 
-                self.SyncProcessUpdates( only_process_when_idle, stop_time )
+                self.SyncProcessUpdates( maintenance_mode, stop_time )
                 
                 self.SyncThumbnails( stop_time )
                 
@@ -1467,7 +1543,7 @@ class ServiceRepository( ServiceRestricted ):
             
         
     
-    def SyncProcessUpdates( self, only_when_idle = False, stop_time = None ):
+    def SyncProcessUpdates( self, maintenance_mode = HC.MAINTENANCE_IDLE, stop_time = None ):
         
         with self._lock:
             
@@ -1477,14 +1553,14 @@ class ServiceRepository( ServiceRestricted ):
                 
             
         
-        if only_when_idle and not HG.client_controller.CurrentlyIdle():
+        if HG.client_controller.ShouldStopThisWork( maintenance_mode, stop_time = stop_time ):
             
             return
             
         
         try:
             
-            ( did_some_work, did_everything ) = HG.client_controller.WriteSynchronous( 'process_repository', self._service_key, only_when_idle, stop_time )
+            ( did_some_work, did_everything ) = HG.client_controller.WriteSynchronous( 'process_repository', self._service_key, maintenance_mode = maintenance_mode, stop_time = stop_time )
             
             if did_some_work:
                 

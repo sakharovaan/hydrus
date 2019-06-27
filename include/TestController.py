@@ -15,6 +15,7 @@ from . import ClientConstants as CC
 from . import HydrusGlobals as HG
 from . import ClientAPI
 from . import ClientDefaults
+from . import ClientFiles
 from . import ClientNetworking
 from . import ClientNetworkingBandwidth
 from . import ClientNetworkingDomain
@@ -31,13 +32,15 @@ from . import TestClientAPI
 from . import TestClientConstants
 from . import TestClientDaemons
 from . import TestClientData
+from . import TestClientDB
+from . import TestClientDBDuplicates
 from . import TestClientImageHandling
 from . import TestClientImportOptions
 from . import TestClientImportSubscriptions
 from . import TestClientListBoxes
 from . import TestClientNetworking
+from . import TestClientThreading
 from . import TestDialogs
-from . import TestDB
 from . import TestFunctions
 from . import TestHydrusNATPunch
 from . import TestHydrusNetworking
@@ -45,6 +48,7 @@ from . import TestHydrusSerialisable
 from . import TestHydrusServer
 from . import TestHydrusSessions
 from . import TestHydrusTags
+from . import TestServerDB
 from twisted.internet import reactor
 from . import ClientCaches
 from . import ClientData
@@ -252,7 +256,7 @@ class Controller( object ):
         self._managers = {}
         
         self.services_manager = ClientCaches.ServicesManager( self )
-        self.client_files_manager = ClientCaches.ClientFilesManager( self )
+        self.client_files_manager = ClientFiles.ClientFilesManager( self )
         
         self.parsing_cache = ClientCaches.ParsingCache()
         
@@ -268,11 +272,13 @@ class Controller( object ):
         
         self.CallToThreadLongRunning( self.network_engine.MainLoop )
         
-        self._managers[ 'tag_censorship' ] = ClientCaches.TagCensorshipManager( self )
-        self._managers[ 'tag_siblings' ] = ClientCaches.TagSiblingsManager( self )
-        self._managers[ 'tag_parents' ] = ClientCaches.TagParentsManager( self )
+        self.tag_censorship_manager = ClientCaches.TagCensorshipManager( self )
+        self.tag_siblings_manager = ClientCaches.TagSiblingsManager( self )
+        self.tag_parents_manager = ClientCaches.TagParentsManager( self )
         self._managers[ 'undo' ] = ClientCaches.UndoManager( self )
         self.server_session_manager = HydrusSessions.HydrusSessionManagerServer()
+        
+        self.bitmap_manager = ClientCaches.BitmapManager( self )
         
         self.local_booru_manager = ClientCaches.LocalBooruCache( self )
         self.client_api_manager = ClientAPI.APIManager()
@@ -470,6 +476,50 @@ class Controller( object ):
         return False
         
     
+    def GetCurrentSessionPageInfoDict( self ):
+        
+        return {
+            "name" : "top pages notebook",
+            "page_key" : "3b28d8a59ec61834325eb6275d9df012860a1ecfd9e1246423059bc47fb6d5bd",
+            "page_type" : 10,
+            "selected" : True,
+            "pages" : [
+                {
+                    "name" : "files",
+                    "page_key" : "d436ff5109215199913705eb9a7669d8a6b67c52e41c3b42904db083255ca84d",
+                    "page_type" : 6,
+                    "selected" : False
+                },
+                {
+                    "name" : "thread watcher",
+                    "page_key" : "40887fa327edca01e1d69b533dddba4681b2c43e0b4ebee0576177852e8c32e7",
+                    "page_type" : 9,
+                    "selected" : False
+                },
+                {
+                    "name" : "pages",
+                    "page_key" : "2ee7fa4058e1e23f2bd9e915cdf9347ae90902a8622d6559ba019a83a785c4dc",
+                    "page_type" : 10,
+                    "selected" : True,
+                    "pages" : [
+                        {
+                            "name" : "urls",
+                            "page_key" : "9fe22cb760d9ee6de32575ed9f27b76b4c215179cf843d3f9044efeeca98411f",
+                            "page_type" : 7,
+                            "selected" : True
+                        },
+                        {
+                            "name" : "files",
+                            "page_key" : "2977d57fc9c588be783727bcd54225d577b44e8aa2f91e365a3eb3c3f580dc4e",
+                            "page_type" : 6,
+                            "selected" : False
+                        }
+                    ]
+                }	
+            ]
+        }
+        
+    
     def GetFilesDir( self ):
         
         return self._server_files_dir
@@ -494,13 +544,13 @@ class Controller( object ):
         return write
         
     
-    def ImportURLFromAPI( self, url, service_keys_to_tags, destination_page_name, show_destination_page ):
+    def ImportURLFromAPI( self, url, service_keys_to_tags, destination_page_name, destination_page_key, show_destination_page ):
         
         normalised_url = self.network_engine.domain_manager.NormaliseURL( url )
         
         human_result_text = '"{}" URL added successfully.'.format( normalised_url )
         
-        self.Write( 'import_url_test', url, service_keys_to_tags, destination_page_name, show_destination_page )
+        self.Write( 'import_url_test', url, service_keys_to_tags, destination_page_name, destination_page_key, show_destination_page )
         
         return ( normalised_url, human_result_text )
         
@@ -608,6 +658,7 @@ class Controller( object ):
             suites.append( unittest.TestLoader().loadTestsFromModule( TestClientConstants ) )
             suites.append( unittest.TestLoader().loadTestsFromModule( TestClientData ) )
             suites.append( unittest.TestLoader().loadTestsFromModule( TestClientImportOptions ) )
+            suites.append( unittest.TestLoader().loadTestsFromModule( TestClientThreading ) )
             suites.append( unittest.TestLoader().loadTestsFromModule( TestFunctions ) )
             suites.append( unittest.TestLoader().loadTestsFromModule( TestHydrusSerialisable ) )
             suites.append( unittest.TestLoader().loadTestsFromModule( TestHydrusSessions ) )
@@ -615,7 +666,12 @@ class Controller( object ):
             
         if run_all or self.only_run == 'db':
             
-            suites.append( unittest.TestLoader().loadTestsFromModule( TestDB ) )
+            suites.append( unittest.TestLoader().loadTestsFromModule( TestClientDB ) )
+            suites.append( unittest.TestLoader().loadTestsFromModule( TestServerDB ) )
+            
+        if run_all or self.only_run in ( 'db', 'db_duplicates' ):
+            
+            suites.append( unittest.TestLoader().loadTestsFromModule( TestClientDBDuplicates ) )
             
         if run_all or self.only_run == 'networking':
             
@@ -632,7 +688,8 @@ class Controller( object ):
             
         if run_all or self.only_run == 'nat':
             
-            suites.append( unittest.TestLoader().loadTestsFromModule( TestHydrusNATPunch ) )
+            pass
+            #suites.append( unittest.TestLoader().loadTestsFromModule( TestHydrusNATPunch ) )
             
         if run_all or self.only_run == 'server':
             
@@ -651,7 +708,7 @@ class Controller( object ):
                 
             finally:
                 
-                wx.CallAfter( self.win.Destroy )
+                wx.CallAfter( self.win.DestroyLater )
                 
             
         
@@ -675,6 +732,11 @@ class Controller( object ):
     def SetWebCookies( self, name, value ):
         
         self._cookies[ name ] = value
+        
+    
+    def ShouldStopThisWork( self, maintenance_mode, stop_time = None ):
+        
+        return False
         
     
     def TidyUp( self ):

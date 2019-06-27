@@ -2,6 +2,7 @@ from . import ClientCaches
 from . import ClientConstants as CC
 from . import ClientData
 from . import ClientGUICommon
+from . import ClientGUIFunctions
 from . import ClientGUIListBoxes
 from . import ClientGUIMenus
 from . import ClientGUIShortcuts
@@ -13,8 +14,10 @@ from . import HydrusData
 from . import HydrusExceptions
 from . import HydrusGlobals as HG
 from . import HydrusTags
+from . import HydrusText
 import itertools
 import wx
+import wx.lib.scrolledpanel
 
 ID_TIMER_DROPDOWN_HIDE = wx.NewId()
 ID_TIMER_AC_LAG = wx.NewId()
@@ -25,7 +28,7 @@ ID_TIMER_AC_LAG = wx.NewId()
 ( ShowPreviousEvent, EVT_SHOW_PREVIOUS ) = wx.lib.newevent.NewCommandEvent()
 ( ShowNextEvent, EVT_SHOW_NEXT ) = wx.lib.newevent.NewCommandEvent()
 
-def ReadFetch( win, job_key, results_callable, parsed_search_text, wx_media_callable, file_search_context, synchronised, include_unusual_predicate_types, initial_matches_fetched, search_text_for_current_cache, cached_results ):
+def ReadFetch( win, job_key, results_callable, parsed_search_text, wx_media_callable, file_search_context, synchronised, include_unusual_predicate_types, initial_matches_fetched, search_text_for_current_cache, cached_results, under_construction_or_predicate ):
     
     next_search_is_probably_fast = False
     
@@ -75,7 +78,7 @@ def ReadFetch( win, job_key, results_callable, parsed_search_text, wx_media_call
         
         ( namespace, half_complete_subtag ) = HydrusTags.SplitTag( search_text )
         
-        siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
+        siblings_manager = HG.client_controller.tag_siblings_manager
         
         if False and half_complete_subtag == '':
             
@@ -243,6 +246,11 @@ def ReadFetch( win, job_key, results_callable, parsed_search_text, wx_media_call
             
         
     
+    if under_construction_or_predicate is not None:
+        
+        matches.insert( 0, under_construction_or_predicate )
+        
+    
     if job_key.IsCancelled():
         
         return
@@ -320,7 +328,7 @@ def WriteFetch( win, job_key, results_callable, parsed_search_text, file_service
         
         if expand_parents:
             
-            parents_manager = HG.client_controller.GetManager( 'tag_parents' )
+            parents_manager = HG.client_controller.tag_parents_manager
             
             matches = parents_manager.ExpandPredicates( tag_service_key, matches )
             
@@ -355,7 +363,7 @@ class AutoCompleteDropdown( wx.Panel ):
             self._float_mode = True
             
         
-        self._text_ctrl = wx.TextCtrl( self, style=wx.TE_PROCESS_ENTER )
+        self._text_ctrl = wx.TextCtrl( self, style = wx.TE_PROCESS_ENTER )
         
         self._UpdateBackgroundColour()
         
@@ -378,7 +386,11 @@ class AutoCompleteDropdown( wx.Panel ):
         
         vbox = wx.BoxSizer( wx.VERTICAL )
         
-        vbox.Add( self._text_ctrl, CC.FLAGS_EXPAND_PERPENDICULAR )
+        self._text_input_hbox = wx.BoxSizer( wx.HORIZONTAL )
+        
+        self._text_input_hbox.Add( self._text_ctrl, CC.FLAGS_VCENTER_EXPAND_DEPTH_ONLY )
+        
+        vbox.Add( self._text_input_hbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         
         #self._dropdown_window = wx.PopupWindow( self, flags = wx.BORDER_RAISED )
         #self._dropdown_window = wx.PopupTransientWindow( self, style = wx.BORDER_RAISED )
@@ -392,7 +404,7 @@ class AutoCompleteDropdown( wx.Panel ):
             
             self._dropdown_window.SetBackgroundColour( wx.SystemSettings.GetColour( wx.SYS_COLOUR_FRAMEBK ) )
             
-            self._dropdown_window.SetPosition( ClientGUICommon.ClientToScreen( self._text_ctrl, ( 0, 0 ) ) )
+            self._dropdown_window.SetPosition( ClientGUIFunctions.ClientToScreen( self._text_ctrl, ( 0, 0 ) ) )
             
             self._dropdown_window.Bind( wx.EVT_CLOSE, self.EventCloseDropdown )
             
@@ -470,16 +482,24 @@ class AutoCompleteDropdown( wx.Panel ):
         self._ScheduleListRefresh( 0.0 )
         
     
-    def _BroadcastChoices( self, predicates ):
+    def _BroadcastChoices( self, predicates, shift_down ):
         
         raise NotImplementedError()
         
     
-    def _BroadcastCurrentText( self ):
+    def _BroadcastCurrentText( self, shift_down ):
         
         text = self._text_ctrl.GetValue()
         
-        self._BroadcastChoices( { text } )
+        self._BroadcastChoices( { text }, shift_down )
+        
+    
+    def _CancelCurrentResultsFetchJob( self ):
+        
+        if self._current_fetch_job_key is not None:
+            
+            self._current_fetch_job_key.Cancel()
+            
         
     
     def _CancelScheduledListRefresh( self ):
@@ -493,6 +513,8 @@ class AutoCompleteDropdown( wx.Panel ):
     def _ClearInput( self ):
         
         self._text_ctrl.SetValue( '' )
+        
+        self._SetResultsToList( [] )
         
         self._ScheduleListRefresh( 0.0 )
         
@@ -532,6 +554,20 @@ class AutoCompleteDropdown( wx.Panel ):
                 
             
             raise
+            
+        
+    
+    def _HandleEscape( self ):
+        
+        if self._float_mode:
+            
+            self.GetTopLevelParent().SetFocus()
+            
+            return True
+            
+        else:
+            
+            return False
             
         
     
@@ -634,7 +670,7 @@ class AutoCompleteDropdown( wx.Panel ):
                 
                 current_page = gui.GetCurrentPage()
                 
-                visible = ClientGUICommon.IsWXAncestor( self, current_page )
+                visible = ClientGUIFunctions.IsWXAncestor( self, current_page )
                 
             
         else:
@@ -642,7 +678,7 @@ class AutoCompleteDropdown( wx.Panel ):
             visible = self._text_ctrl.IsShownOnScreen()
             
         
-        focus_remains_on_self_or_children = ClientGUICommon.WindowOrAnyTLPChildHasFocus( self )
+        focus_remains_on_self_or_children = ClientGUIFunctions.WindowOrAnyTLPChildHasFocus( self )
         
         return tlp_active and visible and focus_remains_on_self_or_children
         
@@ -658,7 +694,7 @@ class AutoCompleteDropdown( wx.Panel ):
         
         if self._text_ctrl.IsShown():
             
-            desired_dropdown_position = ClientGUICommon.ClientToScreen( self._text_ctrl, ( -2, text_height - 2 ) )
+            desired_dropdown_position = ClientGUIFunctions.ClientToScreen( self._text_ctrl, ( -2, text_height - 2 ) )
             
             if self._last_attempted_dropdown_position != desired_dropdown_position:
                 
@@ -698,7 +734,7 @@ class AutoCompleteDropdown( wx.Panel ):
         raise NotImplementedError()
         
     
-    def _TakeResponsibilityForEnter( self ):
+    def _TakeResponsibilityForEnter( self, shift_down ):
         
         raise NotImplementedError()
         
@@ -721,19 +757,21 @@ class AutoCompleteDropdown( wx.Panel ):
         
         self._refresh_list_job = None
         
-        if self._current_fetch_job_key is not None:
-            
-            self._current_fetch_job_key.Cancel()
-            
+        self._CancelCurrentResultsFetchJob()
         
         self._current_fetch_job_key = ClientThreading.JobKey( cancellable = True )
         
         self._StartResultsFetchJob( self._current_fetch_job_key )
         
     
-    def BroadcastChoices( self, predicates ):
+    def BroadcastChoices( self, predicates, shift_down = False ):
         
-        self._BroadcastChoices( predicates )
+        self._BroadcastChoices( predicates, shift_down )
+        
+    
+    def CancelCurrentResultsFetchJob( self ):
+        
+        self._CancelCurrentResultsFetchJob()
         
     
     def DoDropdownHideShow( self ):
@@ -773,7 +811,9 @@ class AutoCompleteDropdown( wx.Panel ):
                 
             elif key in ( wx.WXK_RETURN, wx.WXK_NUMPAD_ENTER ) and self._ShouldTakeResponsibilityForEnter():
                 
-                self._TakeResponsibilityForEnter()
+                shift_down = modifier == wx.ACCEL_SHIFT
+                
+                self._TakeResponsibilityForEnter( shift_down )
                 
             elif input_is_empty: # maybe we should be sending a 'move' event to a different place
                 
@@ -815,6 +855,15 @@ class AutoCompleteDropdown( wx.Panel ):
                         
                     
                     self.MoveNotebookPageFocus( direction = direction )
+                    
+                elif key == wx.WXK_ESCAPE:
+                    
+                    escape_caught = self._HandleEscape()
+                    
+                    if not escape_caught:
+                        
+                        send_input_to_current_list = True
+                        
                     
                 else:
                     
@@ -1041,6 +1090,8 @@ class AutoCompleteDropdownTags( AutoCompleteDropdown ):
         
         AutoCompleteDropdown.__init__( self, parent )
         
+        self._allow_all_known_files = True
+        
         file_service = HG.client_controller.services_manager.GetService( self._file_service_key )
         
         tag_service = HG.client_controller.services_manager.GetService( self._tag_service_key )
@@ -1120,12 +1171,17 @@ class AutoCompleteDropdownTags( AutoCompleteDropdown ):
         
         services.append( services_manager.GetService( CC.LOCAL_FILE_SERVICE_KEY ) )
         services.append( services_manager.GetService( CC.TRASH_SERVICE_KEY ) )
-        services.append( services_manager.GetService( CC.COMBINED_LOCAL_FILE_SERVICE_KEY ) )
+        
+        if HG.client_controller.new_options.GetBoolean( 'advanced_mode' ):
+            
+            services.append( services_manager.GetService( CC.COMBINED_LOCAL_FILE_SERVICE_KEY ) )
+            
+        
         services.extend( services_manager.GetServices( ( HC.FILE_REPOSITORY, ) ) )
         
         advanced_mode = HG.client_controller.new_options.GetBoolean( 'advanced_mode' )
         
-        if advanced_mode:
+        if advanced_mode and self._allow_all_known_files:
             
             services.append( services_manager.GetService( CC.COMBINED_FILE_SERVICE_KEY ) )
             
@@ -1183,15 +1239,19 @@ class AutoCompleteDropdownTags( AutoCompleteDropdown ):
     
 class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
     
-    def __init__( self, parent, page_key, file_search_context, media_callable = None, synchronised = True, include_unusual_predicate_types = True ):
+    def __init__( self, parent, page_key, file_search_context, media_callable = None, synchronised = True, include_unusual_predicate_types = True, allow_all_known_files = True ):
         
         file_service_key = file_search_context.GetFileServiceKey()
         tag_service_key = file_search_context.GetTagServiceKey()
         
         AutoCompleteDropdownTags.__init__( self, parent, file_service_key, tag_service_key )
         
+        self._allow_all_known_files = allow_all_known_files
+        
         self._media_callable = media_callable
         self._page_key = page_key
+        
+        self._under_construction_or_predicate = None
         
         self._file_search_context = file_search_context
         
@@ -1203,12 +1263,26 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
         self._synchronised = ClientGUICommon.OnOffButton( self._dropdown_window, self._page_key, 'notify_search_immediately', on_label = 'searching immediately', off_label = 'waiting -- tag counts may be inaccurate', start_on = synchronised )
         self._synchronised.SetToolTip( 'select whether to renew the search as soon as a new predicate is entered' )
         
+        self._or_cancel = ClientGUICommon.BetterBitmapButton( self._dropdown_window, CC.GlobalBMPs.delete, self._CancelORConstruction )
+        self._or_cancel.SetToolTip( 'Cancel OR Predicate construction.' )
+        self._or_cancel.Hide()
+        
+        self._or_rewind = ClientGUICommon.BetterBitmapButton( self._dropdown_window, CC.GlobalBMPs.previous, self._RewindORConstruction )
+        self._or_rewind.SetToolTip( 'Rewind OR Predicate construction.' )
+        self._or_rewind.Hide()
+        
         self._include_unusual_predicate_types = include_unusual_predicate_types
         
         button_hbox_1 = wx.BoxSizer( wx.HORIZONTAL )
         
         button_hbox_1.Add( self._include_current_tags, CC.FLAGS_EXPAND_BOTH_WAYS )
         button_hbox_1.Add( self._include_pending_tags, CC.FLAGS_EXPAND_BOTH_WAYS )
+        
+        sync_button_hbox = wx.BoxSizer( wx.HORIZONTAL )
+        
+        sync_button_hbox.Add( self._synchronised, CC.FLAGS_EXPAND_BOTH_WAYS )
+        sync_button_hbox.Add( self._or_cancel, CC.FLAGS_VCENTER )
+        sync_button_hbox.Add( self._or_rewind, CC.FLAGS_VCENTER )
         
         button_hbox_2 = wx.BoxSizer( wx.HORIZONTAL )
         
@@ -1218,7 +1292,7 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
         vbox = wx.BoxSizer( wx.VERTICAL )
         
         vbox.Add( button_hbox_1, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
-        vbox.Add( self._synchronised, CC.FLAGS_EXPAND_PERPENDICULAR )
+        vbox.Add( sync_button_hbox, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         vbox.Add( button_hbox_2, CC.FLAGS_EXPAND_SIZER_PERPENDICULAR )
         vbox.Add( self._dropdown_notebook, CC.FLAGS_EXPAND_BOTH_WAYS )
         
@@ -1230,27 +1304,95 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
         HG.client_controller.sub( self, 'IncludePending', 'notify_include_pending' )
         
     
-    def _BroadcastChoices( self, predicates ):
+    def _BroadcastChoices( self, predicates, shift_down ):
         
-        HG.client_controller.pub( 'enter_predicates', self._page_key, predicates )
+        or_pred_in_broadcast = self._under_construction_or_predicate is not None and self._under_construction_or_predicate in predicates
+        
+        if shift_down:
+            
+            if self._under_construction_or_predicate is None:
+                
+                self._under_construction_or_predicate = ClientSearch.Predicate( HC.PREDICATE_TYPE_OR_CONTAINER, predicates )
+                
+            else:
+                
+                if or_pred_in_broadcast:
+                    
+                    predicates.remove( self._under_construction_or_predicate )
+                    
+                
+                or_preds = list( self._under_construction_or_predicate.GetValue() )
+                
+                or_preds.extend( [ predicate for predicate in predicates if predicate not in or_preds ] )
+                
+                self._under_construction_or_predicate = ClientSearch.Predicate( HC.PREDICATE_TYPE_OR_CONTAINER, or_preds )
+                
+            
+        else:
+            
+            if self._under_construction_or_predicate is not None and not or_pred_in_broadcast:
+                
+                or_preds = list( self._under_construction_or_predicate.GetValue() )
+                
+                or_preds.extend( [ predicate for predicate in predicates if predicate not in or_preds ] )
+                
+                predicates = { ClientSearch.Predicate( HC.PREDICATE_TYPE_OR_CONTAINER, or_preds ) }
+                
+            
+            if or_pred_in_broadcast:
+                
+                or_preds = list( self._under_construction_or_predicate.GetValue() )
+                
+                if len( or_preds ) == 1:
+                    
+                    predicates.remove( self._under_construction_or_predicate )
+                    
+                    predicates.extend( or_preds )
+                    
+                
+            
+            self._under_construction_or_predicate = None
+            
+            HG.client_controller.pub( 'enter_predicates', self._page_key, predicates )
+            
+        
+        self._UpdateORButtons()
         
         self._ClearInput()
         
     
-    def _BroadcastCurrentText( self ):
+    def _BroadcastCurrentText( self, shift_down ):
         
         ( raw_entry, inclusive, search_text, explicit_wildcard, cache_text, entry_predicate ) = self._ParseSearchText()
         
-        try:
+        ( namespace, subtag ) = HydrusTags.SplitTag( search_text )
+        
+        if namespace != '' and subtag in ( '', '*' ):
             
-            HydrusTags.CheckTagNotEmpty( search_text )
+            entry_predicate = ClientSearch.Predicate( HC.PREDICATE_TYPE_NAMESPACE, namespace, inclusive )
             
-        except HydrusExceptions.SizeException:
+        else:
             
-            return
+            try:
+                
+                HydrusTags.CheckTagNotEmpty( search_text )
+                
+            except HydrusExceptions.SizeException:
+                
+                return
+                
             
         
-        self._BroadcastChoices( { entry_predicate } )
+        self._BroadcastChoices( { entry_predicate }, shift_down )
+        
+    
+    def _CancelORConstruction( self ):
+        
+        self._under_construction_or_predicate = None
+        
+        self._UpdateORButtons()
+        
+        self._ClearInput()
         
     
     def _ChangeFileService( self, file_service_key ):
@@ -1273,6 +1415,20 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
         HG.client_controller.pub( 'change_tag_service', self._page_key, tag_service_key )
         
         HG.client_controller.pub( 'refresh_query', self._page_key )
+        
+    
+    def _HandleEscape( self ):
+        
+        if self._under_construction_or_predicate is not None and self._text_ctrl.GetValue() == '':
+            
+            self._CancelORConstruction()
+            
+            return True
+            
+        else:
+            
+            return AutoCompleteDropdown._HandleEscape( self )
+            
         
     
     def _InitFavouritesList( self ):
@@ -1320,7 +1476,7 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
             
             cache_text = search_text[:-1] # take off the trailing '*' for the cache text
             
-            siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
+            siblings_manager = HG.client_controller.tag_siblings_manager
             
             sibling = siblings_manager.GetSibling( self._tag_service_key, tag )
             
@@ -1337,11 +1493,34 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
         return ( raw_entry, inclusive, search_text, explicit_wildcard, cache_text, entry_predicate )
         
     
+    def _RewindORConstruction( self ):
+        
+        if self._under_construction_or_predicate is not None:
+            
+            or_preds = self._under_construction_or_predicate.GetValue()
+            
+            if len( or_preds ) <= 1:
+                
+                self._CancelORConstruction()
+                
+                return
+                
+            
+            or_preds = or_preds[:-1]
+            
+            self._under_construction_or_predicate = ClientSearch.Predicate( HC.PREDICATE_TYPE_OR_CONTAINER, or_preds )
+            
+        
+        self._UpdateORButtons()
+        
+        self._ClearInput()
+        
+    
     def _StartResultsFetchJob( self, job_key ):
         
         parsed_search_text = self._ParseSearchText()
         
-        HG.client_controller.CallToThread( ReadFetch, self, job_key, self.SetFetchedResults, parsed_search_text, self._media_callable, self._file_search_context, self._synchronised.IsOn(), self._include_unusual_predicate_types, self._initial_matches_fetched, self._search_text_for_current_cache, self._cached_results )
+        HG.client_controller.CallToThread( ReadFetch, self, job_key, self.SetFetchedResults, parsed_search_text, self._media_callable, self._file_search_context, self._synchronised.IsOn(), self._include_unusual_predicate_types, self._initial_matches_fetched, self._search_text_for_current_cache, self._cached_results, self._under_construction_or_predicate )
         
     
     def _ShouldTakeResponsibilityForEnter( self ):
@@ -1357,9 +1536,66 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
         return p1
         
     
-    def _TakeResponsibilityForEnter( self ):
+    def _TakeResponsibilityForEnter( self, shift_down ):
         
-        self._BroadcastCurrentText()
+        self._BroadcastCurrentText( shift_down )
+        
+    
+    def _UpdateORButtons( self ):
+        
+        layout_needed = False
+        
+        if self._under_construction_or_predicate is None:
+            
+            if self._or_cancel.IsShown():
+                
+                self._or_cancel.Hide()
+                
+                layout_needed = True
+                
+            
+            if self._or_rewind.IsShown():
+                
+                self._or_rewind.Hide()
+                
+                layout_needed = True
+                
+            
+        else:
+            
+            or_preds = self._under_construction_or_predicate.GetValue()
+            
+            if len( or_preds ) > 1:
+                
+                if not self._or_rewind.IsShown():
+                    
+                    self._or_rewind.Show()
+                    
+                    layout_needed = True
+                    
+                
+            else:
+                
+                if self._or_rewind.IsShown():
+                    
+                    self._or_rewind.Hide()
+                    
+                    layout_needed = True
+                    
+                
+            
+            if not self._or_cancel.IsShown():
+                
+                self._or_cancel.Show()
+                
+                layout_needed = True
+                
+            
+        
+        if layout_needed:
+            
+            self._dropdown_window.Layout()
+            
         
     
     def GetFileSearchContext( self ):
@@ -1391,6 +1627,11 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
             
         
     
+    def IsSynchronised( self ):
+        
+        return self._synchronised.IsOn()
+        
+    
     def SetFetchedResults( self, job_key, search_text, search_text_for_cache, cached_results, results, next_search_is_probably_fast ):
         
         if self._current_fetch_job_key is not None and self._current_fetch_job_key.GetKey() == job_key.GetKey():
@@ -1412,12 +1653,15 @@ class AutoCompleteDropdownTagsRead( AutoCompleteDropdownTags ):
     
     def SetSynchronisedWait( self, page_key ):
         
-        if page_key == self._page_key: self._synchronised.EventButton( None )
+        if page_key == self._page_key:
+            
+            self._synchronised.EventButton( None )
+            
         
     
 class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
     
-    def __init__( self, parent, chosen_tag_callable, expand_parents, file_service_key, tag_service_key, null_entry_callable = None, tag_service_key_changed_callable = None ):
+    def __init__( self, parent, chosen_tag_callable, expand_parents, file_service_key, tag_service_key, null_entry_callable = None, tag_service_key_changed_callable = None, show_paste_button = False ):
         
         self._chosen_tag_callable = chosen_tag_callable
         self._expand_parents = expand_parents
@@ -1436,6 +1680,16 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
         
         AutoCompleteDropdownTags.__init__( self, parent, file_service_key, tag_service_key )
         
+        self._paste_button = ClientGUICommon.BetterBitmapButton( self, CC.GlobalBMPs.paste, self._Paste )
+        self._paste_button.SetToolTip( 'Paste from the clipboard and quick-enter as if you had typed. This can take multiple newline-separated tags.' )
+        
+        if not show_paste_button:
+            
+            self._paste_button.Hide()
+            
+        
+        self._text_input_hbox.Add( self._paste_button, CC.FLAGS_VCENTER )
+        
         vbox = wx.BoxSizer( wx.VERTICAL )
         
         hbox = wx.BoxSizer( wx.HORIZONTAL )
@@ -1449,7 +1703,7 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
         self._dropdown_window.SetSizer( vbox )
         
     
-    def _BroadcastChoices( self, predicates ):
+    def _BroadcastChoices( self, predicates, shift_down ):
         
         tags = { predicate.GetValue() for predicate in predicates }
         
@@ -1480,7 +1734,7 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
         
         entry_predicate = ClientSearch.Predicate( HC.PREDICATE_TYPE_TAG, tag )
         
-        siblings_manager = HG.client_controller.GetManager( 'tag_siblings' )
+        siblings_manager = HG.client_controller.tag_siblings_manager
         
         sibling = siblings_manager.GetSibling( self._tag_service_key, tag )
         
@@ -1496,7 +1750,7 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
         return ( raw_entry, search_text, cache_text, entry_predicate, sibling_predicate )
         
     
-    def _BroadcastCurrentText( self ):
+    def _BroadcastCurrentText( self, shift_down ):
         
         ( raw_entry, search_text, cache_text, entry_predicate, sibling_predicate ) = self._ParseSearchText()
         
@@ -1509,7 +1763,7 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
             return
             
         
-        self._BroadcastChoices( { entry_predicate } )
+        self._BroadcastChoices( { entry_predicate }, shift_down )
         
     
     def _ChangeTagService( self, tag_service_key ):
@@ -1533,6 +1787,41 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
         
         return ClientGUIListBoxes.ListBoxTagsACWrite( self._dropdown_notebook, self.BroadcastChoices, self._tag_service_key, height_num_chars = self._list_height_num_chars )
         
+    
+    def _Paste( self ):
+        
+        try:
+            
+            raw_text = HG.client_controller.GetClipboardText()
+            
+        except HydrusExceptions.DataMissing as e:
+            
+            wx.MessageBox( str( e ) )
+            
+            return
+            
+        
+        try:
+            
+            tags = [ text for text in HydrusText.DeserialiseNewlinedTexts( raw_text ) ]
+            
+            tags = HydrusTags.CleanTags( tags )
+            
+            entry_predicates = [ ClientSearch.Predicate( HC.PREDICATE_TYPE_TAG, tag ) for tag in tags ]
+            
+            if len( entry_predicates ) > 0:
+                
+                shift_down = False
+                
+                self._BroadcastChoices( entry_predicates, shift_down )
+                
+            
+        except:
+            
+            wx.MessageBox( 'I could not understand what was in the clipboard' )
+            raise
+        
+    
     
     def _ShouldTakeResponsibilityForEnter( self ):
         
@@ -1558,7 +1847,7 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
         HG.client_controller.CallToThread( WriteFetch, self, job_key, self.SetFetchedResults, parsed_search_text, self._file_service_key, self._tag_service_key, self._expand_parents, self._search_text_for_current_cache, self._cached_results )
         
     
-    def _TakeResponsibilityForEnter( self ):
+    def _TakeResponsibilityForEnter( self, shift_down ):
         
         if self._text_ctrl.GetValue() == '' and self._dropdown_notebook.GetCurrentPage() == self._search_results_list:
             
@@ -1569,7 +1858,7 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
             
         else:
             
-            self._BroadcastCurrentText()
+            self._BroadcastCurrentText( shift_down )
             
         
     
@@ -1581,7 +1870,7 @@ class AutoCompleteDropdownTagsWrite( AutoCompleteDropdownTags ):
         
         predicates = [ ClientSearch.Predicate( HC.PREDICATE_TYPE_TAG, tag ) for tag in favourite_tags ]
         
-        parents_manager = HG.client_controller.GetManager( 'tag_parents' )
+        parents_manager = HG.client_controller.tag_parents_manager
         
         predicates = parents_manager.ExpandPredicates( CC.COMBINED_TAG_SERVICE_KEY, predicates )
         
