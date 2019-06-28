@@ -7688,7 +7688,7 @@ class DB( HydrusDB.HydrusDB ):
 
                 self._c.execute( 'SELECT phash, radius, inner_id, inner_population, outer_id, outer_population FROM shape_perceptual_hashes NATURAL JOIN shape_vptree WHERE phash_id = %s;', ( ancestor_id, ) ); ( ancestor_phash, ancestor_radius, ancestor_inner_id, ancestor_inner_population, ancestor_outer_id, ancestor_outer_population ) = self._c.fetchone()
 
-                distance_to_ancestor = HydrusData.Get64BitHammingDistance( binascii.a2b_base64(phash), binascii.a2b_base64(ancestor_phash) )
+                distance_to_ancestor = HydrusData.Get64BitHammingDistance( phash, binascii.a2b_hex(ancestor_phash) )
 
                 if ancestor_radius is None or distance_to_ancestor <= ancestor_radius:
 
@@ -8235,7 +8235,7 @@ class DB( HydrusDB.HydrusDB ):
 
         with_clause = 'WITH RECURSIVE ' + cte_table_name + ' AS ( ' + initial_select + ' UNION ALL ' +  recursive_select +  ')'
         self._c.execute(with_clause + ' SELECT branch_phash_id, phash FROM branch, shape_perceptual_hashes ON phash_id = branch_phash_id;', (phash_id,))
-        unbalanced_nodes = [(x[0], binascii.a2b_base64(x[1])) for x in self._c.fetchall()]
+        unbalanced_nodes = [(x[0], binascii.a2b_hex(x[1])) for x in self._c.fetchall()]
 
         # removal of old branch, maintenance schedule, and orphan phashes
 
@@ -8311,7 +8311,7 @@ class DB( HydrusDB.HydrusDB ):
             self._c.execute( 'DELETE FROM shape_vptree;' )
 
             self._c.execute( 'SELECT phash_id, phash FROM shape_perceptual_hashes;' )
-            all_nodes = [ (x[0], binascii.a2b_base64(x[1])) for x in self._c.fetchall() ]
+            all_nodes = [ (x[0], binascii.a2b_hex(x[1])) for x in self._c.fetchall() ]
             job_key.SetVariable( 'popup_text_1', HydrusData.ToHumanInt( len( all_nodes ) ) + ' leaves found, now regenerating' )
 
             ( root_id, root_phash ) = self._PHashesPopBestRootNode( all_nodes ) #HydrusData.RandomPop( all_nodes )
@@ -8444,7 +8444,7 @@ class DB( HydrusDB.HydrusDB ):
 
             ( root_node_phash_id, ) = top_node_result
             self._c.execute('SELECT phash FROM shape_perceptual_hashes NATURAL JOIN shape_perceptual_hash_map WHERE hash_id = %s;',(hash_id,))
-            search_phashes = [ binascii.a2b_base64(x) for ( x, ) in self._c.fetchall() ]
+            search_phashes = [ binascii.a2b_hex(x) for ( x, ) in self._c.fetchall() ]
 
             if len( search_phashes ) == 0:
 
@@ -8482,7 +8482,7 @@ class DB( HydrusDB.HydrusDB ):
 
                             # first check the node itself--is it similar?
 
-                            node_hamming_distance = HydrusData.Get64BitHammingDistance( binascii.a2b_base64(search_phash), binascii.a2b_base64(node_phash) )
+                            node_hamming_distance = HydrusData.Get64BitHammingDistance( search_phash, binascii.a2b_hex(node_phash) )
 
                             if node_hamming_distance <= search_radius:
 
