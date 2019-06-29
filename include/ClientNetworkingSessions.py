@@ -6,6 +6,7 @@ from . import HydrusData
 from . import HydrusSerialisable
 from . import HydrusGlobals as HG
 import requests
+import requests.adapters
 from . import HydrusLocking
 import threading
 
@@ -70,6 +71,8 @@ class NetworkSessionManager( HydrusSerialisable.SerialisableBase ):
     def _GenerateSession( self, network_context ):
         
         session = requests.Session()
+        session.mount('https://', requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100, max_retries=10))
+        session.mount('http://', requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100, max_retries=10))
         
         if network_context.context_type == CC.NETWORK_CONTEXT_HYDRUS:
             

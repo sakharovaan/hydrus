@@ -292,7 +292,8 @@ class HydrusDB( object ):
                 buffered=True,
                 pool_name="hydrus",
                 pool_size=10,
-                charset=charset[0]
+                charset=charset[0],
+                use_pure=False
             )
         elif not self._db:
             self._db = mysql.connector.connect(
@@ -303,7 +304,8 @@ class HydrusDB( object ):
                 buffered=True,
                 pool_name="hydrus",
                 pool_size=10,
-                charset=charset[0]
+                charset=charset[0],
+                use_pure=False
             )
 
         self._db.autocommit = True

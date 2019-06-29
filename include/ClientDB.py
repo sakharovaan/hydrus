@@ -7354,11 +7354,11 @@ class DB( HydrusDB.HydrusDB ):
 
             timestamp = HydrusData.GetNow()
 
-            phashes = file_import_job.GetPHashes()
-
-            if phashes is not None:
-
-                self._PHashesAssociatePHashes( hash_id, phashes )
+            # phashes = file_import_job.GetPHashes()
+            #
+            # if phashes is not None:
+            #
+            #     self._PHashesAssociatePHashes( hash_id, phashes )
 
             self._AddFilesInfo( [ ( hash_id, size, mime, width, height, duration, num_frames, num_words ) ], overwrite = True )
 

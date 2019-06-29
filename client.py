@@ -6,6 +6,10 @@
 # To Public License, Version 2, as published by Sam Hocevar. See
 # http://sam.zoy.org/wtfpl/COPYING for more details.
 
+# import logging
+# logging.basicConfig(filename="/mnt/storage2/logging.log", level=logging.DEBUG)
+
+
 try:
     
     from include import HydrusPy2To3
